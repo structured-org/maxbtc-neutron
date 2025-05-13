@@ -5,8 +5,8 @@ use crate::msg::{
 };
 use crate::state::{
     Batch, Config, ACTIVE_BATCH, BATCH_ID_COUNTER, CONFIG, FINALIZED_BATCHES,
-    LAST_ACTIVE_BATCH_PROCESSED_TIME, LAST_DEPOSIT_FLUSH_TIME,
-    LAST_WITHDRAWING_BATCH_FINALIZED_TIME, WITHDRAWING_BATCH,
+    ACTIVE_BATCH_START_TIME, LAST_DEPOSIT_FLUSH_TIME,
+    WITHDRAWING_BATCH_START_TIME, WITHDRAWING_BATCH,
 };
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
@@ -50,8 +50,8 @@ pub fn instantiate(
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
-    LAST_ACTIVE_BATCH_PROCESSED_TIME.save(deps.storage, &env.block.time.seconds())?;
-    LAST_WITHDRAWING_BATCH_FINALIZED_TIME.save(deps.storage, &env.block.time.seconds())?;
+    ACTIVE_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
+    WITHDRAWING_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
 
     // Create the first active batch
     let new_batch_id = 1u64;
@@ -354,7 +354,7 @@ fn execute_process_active_batch(
     }
 
     let now = env.block.time.seconds();
-    let last_active_time = LAST_ACTIVE_BATCH_PROCESSED_TIME.load(deps.storage)?;
+    let last_active_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
 
     if now < last_active_time + cfg.batch_active_duration {
         return Err(ContractError::CannotProcessActiveBatchYet {});
@@ -375,7 +375,7 @@ fn execute_process_active_batch(
     // If the active batch has no redemption tokens minted,
     // it means no one wants to withdraw, so just reset the timer and do nothing
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
-    let mut active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
+    let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
     let total_redemption_supply = query_token_supply(
         deps.as_ref(),
         cfg.get_redemption_denom(
@@ -386,9 +386,7 @@ fn execute_process_active_batch(
     if total_redemption_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
         ACTIVE_BATCH.save(deps.storage, &Some(active_batch))?;
-
-        // also reset the last_active_batch_processed_time
-        LAST_ACTIVE_BATCH_PROCESSED_TIME.save(deps.storage, &now)?;
+        ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
         return Ok(Response::new()
             .add_attribute("action", "process_active_batch")
@@ -396,13 +394,19 @@ fn execute_process_active_batch(
     }
 
     // Transition to WITHDRAWING
-    active_batch.status = BatchStatus::Withdrawing;
+    let mut withdrawing_batch = Batch {
+        batch_id: active_batch.batch_id,
+        status: BatchStatus::Withdrawing,
+        btc_requested: Uint128::zero(),
+        collected_amount: Uint128::zero(),
+        collector_historical_balance: Uint128::zero(),
+    };
 
     // Record collector_historical_balance
     let collector_balance = deps
         .querier
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
-    active_batch.collector_historical_balance = collector_balance.amount;
+    withdrawing_batch.collector_historical_balance = collector_balance.amount;
 
     // Calculate the exchange rate (no deposit fee)
     let aum = query_aum(deps.as_ref(), &cfg)?;
@@ -416,26 +420,25 @@ fn execute_process_active_batch(
     // Note: all of our tokens have the same number of decimals as the
     // deposit denom.
     let btc_requested = er * Decimal::from_atomics(total_redemption_supply, cfg.deposit_decimals)?;
-    active_batch.btc_requested = btc_requested.atomics();
+    withdrawing_batch.btc_requested = btc_requested.atomics();
 
     // Save it in WITHDRAWING_BATCH
-    WITHDRAWING_BATCH.save(deps.storage, &Some(active_batch.clone()))?;
+    WITHDRAWING_BATCH.save(deps.storage, &Some(withdrawing_batch.clone()))?;
+    WITHDRAWING_BATCH_START_TIME.save(deps.storage, &now)?;
 
     // Create a new ACTIVE batch
     let mut batch_id_counter = BATCH_ID_COUNTER.load(deps.storage)?;
     batch_id_counter += 1;
-    let new_batch = Batch {
+    let new_active_batch = Batch {
         batch_id: batch_id_counter,
         status: BatchStatus::Active,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
-    ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
+    ACTIVE_BATCH.save(deps.storage, &Some(new_active_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &batch_id_counter)?;
-
-    // Update last_active_batch_processed_time
-    LAST_ACTIVE_BATCH_PROCESSED_TIME.save(deps.storage, &now)?;
+    ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
     let resp = Response::new()
         .add_attribute("action", "process_active_batch")
@@ -460,7 +463,7 @@ fn execute_finalize_withdrawing_batch(
     }
 
     let now = env.block.time.seconds();
-    let last_withdrawing_time = LAST_WITHDRAWING_BATCH_FINALIZED_TIME.load(deps.storage)?;
+    let last_withdrawing_time = WITHDRAWING_BATCH_START_TIME.load(deps.storage)?;
 
     if now < last_withdrawing_time + cfg.batch_withdrawing_duration {
         return Err(ContractError::CannotFinalizeWithdrawingBatchYet {});
@@ -539,7 +542,7 @@ fn execute_finalize_withdrawing_batch(
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
 
     // Update the last withdrawing batch finalized time
-    LAST_WITHDRAWING_BATCH_FINALIZED_TIME.save(deps.storage, &now)?;
+    WITHDRAWING_BATCH_START_TIME.save(deps.storage, &now)?;
 
     let resp = Response::new()
         .add_attribute("action", "finalize_withdrawing_batch")

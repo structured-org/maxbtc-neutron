@@ -82,10 +82,10 @@ pub const BATCH_ID_COUNTER: Item<u64> = Item::new("batch_id_counter");
 /// Tracks the last time a deposit flush was done
 pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_time");
 
-/// Tracks the last time an active batch was processed
-pub const LAST_ACTIVE_BATCH_PROCESSED_TIME: Item<u64> =
-    Item::new("last_active_batch_processed_time");
+/// Tracks the time an active batch was initiated
+pub const ACTIVE_BATCH_START_TIME: Item<u64> =
+    Item::new("active_batch_start_time");
 
-/// Tracks the last time a withdrawing batch was finalized
-pub const LAST_WITHDRAWING_BATCH_FINALIZED_TIME: Item<u64> =
-    Item::new("last_withdrawing_batch_finalized_time");
+/// Tracks the time a withdrawing batch was initiated
+pub const WITHDRAWING_BATCH_START_TIME: Item<u64> =
+    Item::new("withdrawing_batch_start_time");
