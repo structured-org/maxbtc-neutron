@@ -354,9 +354,9 @@ fn execute_process_active_batch(
     }
 
     let now = env.block.time.seconds();
-    let last_active_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
+    let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
 
-    if now < last_active_time + cfg.batch_active_duration {
+    if now < active_start_time + cfg.batch_active_duration {
         return Err(ContractError::CannotProcessActiveBatchYet {});
     }
 
@@ -463,9 +463,9 @@ fn execute_finalize_withdrawing_batch(
     }
 
     let now = env.block.time.seconds();
-    let last_withdrawing_time = WITHDRAWING_BATCH_START_TIME.load(deps.storage)?;
+    let withdrawing_start_time = WITHDRAWING_BATCH_START_TIME.load(deps.storage)?;
 
-    if now < last_withdrawing_time + cfg.batch_withdrawing_duration {
+    if now < withdrawing_start_time + cfg.batch_withdrawing_duration {
         return Err(ContractError::CannotFinalizeWithdrawingBatchYet {});
     }
 
@@ -483,25 +483,17 @@ fn execute_finalize_withdrawing_batch(
         return Err(ContractError::BatchStateError {});
     }
 
-    // 1. Calculate the collected amount
+    // Calculate the collected amount
     let current_collector_balance = deps
         .querier
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
-    // collected = historical - current
-    // According to the specification:
-    // "Calculate the collected amount as (collector_historical_balance - current collector balance)"
-    // This is a bit reversed from the code snippet above, but we'll follow the spec:
     let historical = withdrawing_batch.collector_historical_balance;
-    let collected = if historical > current_collector_balance.amount {
-        historical - current_collector_balance.amount
-    } else {
-        Uint128::zero()
-    };
+    let collected = current_collector_balance.amount - historical;
 
-    // 2. If the collecting is less than accepted_withdrawable_percentage of requested => pause
+    // If the collecting is less than accepted_withdrawable_percentage of requested => pause
     let requested = withdrawing_batch.btc_requested;
-    let collected_dec = Decimal::from_atomics(Uint128::from(collected), 0)?;
-    let requested_dec = Decimal::from_atomics(Uint128::from(requested), 0)?;
+    let collected_dec = Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
+    let requested_dec = Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
     let ratio = if requested_dec.is_zero() {
         Decimal::one()
     } else {
@@ -513,7 +505,9 @@ fn execute_finalize_withdrawing_batch(
         cfg.paused = true;
         CONFIG.save(deps.storage, &cfg)?;
 
-        // If it's more than requested, send the extra to treasury
+        return Ok(Response::new()
+            .add_attribute("action", "finalize_withdrawing_batch")
+            .add_attribute("error", "not_enough_to_withdraw"));
     } else if collected > requested {
         let extra = collected - requested;
         // send `extra` to treasury
@@ -525,6 +519,7 @@ fn execute_finalize_withdrawing_batch(
             }],
         });
         // We'll handle that in the response
+        // TODO: response is created in a wrong way, need to fix it
         let mut resp = Response::new().add_attribute("action", "finalize_withdrawing_batch");
         resp = resp.add_message(send_msg);
         // We'll finalize the batch below
