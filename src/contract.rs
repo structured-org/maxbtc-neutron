@@ -58,7 +58,6 @@ pub fn instantiate(
     let new_batch = Batch {
         batch_id: new_batch_id,
         status: BatchStatus::Active,
-        total_redemption_supply: Uint128::zero(),
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
@@ -106,7 +105,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Deposit { recipient } => execute_deposit(deps, env, info, recipient),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
-        ExecuteMsg::Withdraw { amount } => execute_withdraw(deps, env, info, amount),
+        ExecuteMsg::Withdraw { amount } => execute_withdraw(deps, env, info),
         ExecuteMsg::ProcessActiveBatch {} => execute_process_active_batch(deps, env, info),
         ExecuteMsg::FinalizeWithdrawingBatch {} => {
             execute_finalize_withdrawing_batch(deps, env, info)
@@ -277,11 +276,7 @@ fn execute_flush_deposits(
 }
 
 /// User requests to withdraw maxBTC
-fn execute_withdraw(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-) -> Result<Response, ContractError> {
+fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
@@ -377,7 +372,14 @@ fn execute_process_active_batch(
     //    it means no one wants to withdraw, so just reset the timer and do nothing
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
     let mut active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
-    if active_batch.total_redemption_supply.is_zero() {
+    let total_redemption_supply = query_token_supply(
+        deps.as_ref(),
+        cfg.get_redemption_denom(
+            env.contract.address.to_string(),
+            active_batch.batch_id.to_string(),
+        ),
+    )?;
+    if total_redemption_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
         active_batch.start_time = now;
         ACTIVE_BATCH.save(deps.storage, &Some(active_batch))?;
@@ -408,7 +410,7 @@ fn execute_process_active_batch(
         Decimal::from_ratio(aum, maxbtc_supply)
     };
     // 4. The total BTC requested = total_redemption_supply * er
-    let btc_requested = er * Decimal::from_atomics(active_batch.total_redemption_supply, 0)?;
+    let btc_requested = er * Decimal::from_atomics(total_redemption_supply, 0)?;
     active_batch.btc_requested = btc_requested.atomics();
 
     // Save it in WITHDRAWING_BATCH
@@ -420,7 +422,6 @@ fn execute_process_active_batch(
     let new_batch = Batch {
         batch_id: batch_id_counter,
         status: BatchStatus::Active,
-        total_redemption_supply: Uint128::zero(),
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
@@ -671,7 +672,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
                 status: b.status,
-                total_redemption_supply: b.total_redemption_supply.to_string(),
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
@@ -683,7 +683,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
                 status: b.status,
-                total_redemption_supply: b.total_redemption_supply.to_string(),
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
@@ -695,7 +694,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
                 status: b.status,
-                total_redemption_supply: b.total_redemption_supply.to_string(),
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),

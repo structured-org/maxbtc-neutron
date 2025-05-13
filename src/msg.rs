@@ -101,13 +101,8 @@ pub enum BatchStatus {
 pub struct BatchResponse {
     pub batch_id: u64,
     pub status: BatchStatus,
-    /// The total redemption token supply minted for this batch
-    pub total_redemption_supply: String,
-    /// BTC requested for this batch (relevant in WITHDRAWING or FINALIZED states)
     pub btc_requested: String,
-    /// The actually collected amount for this batch (only set after finalization)
     pub collected_amount: String,
-    /// The historical collector balance recorded at the moment of transition to WITHDRAWING
     pub collector_historical_balance: String,
 }
 
