@@ -14,7 +14,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgMint};
+use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
 
 const CONTRACT_NAME: &str = "maxbtc-neutron-minting";
 const CONTRACT_VERSION: &str = "0.1.0";
@@ -65,7 +65,12 @@ pub fn instantiate(
     ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &new_batch_id)?;
 
+    // Create the maxBTC denom
+    let create_maxbtc_denom_msg =
+        create_tokenfactory_create_denom_msg(env.clone(), cfg.maxbtc_denom.clone())?;
+
     Ok(Response::new()
+        .add_message(create_maxbtc_denom_msg)
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
         .add_attribute("aum_contract", cfg.aum_contract.to_string())
@@ -407,8 +412,10 @@ fn execute_process_active_batch(
     } else {
         Decimal::from_ratio(aum, maxbtc_supply)
     };
-    // The total BTC requested = total_redemption_supply * er
-    let btc_requested = er * Decimal::from_atomics(total_redemption_supply, 0)?;
+    // The total BTC requested = total_redemption_supply * er.
+    // Note: all of our tokens have the same number of decimals as the
+    // deposit denom.
+    let btc_requested = er * Decimal::from_atomics(total_redemption_supply, cfg.deposit_decimals)?;
     active_batch.btc_requested = btc_requested.atomics();
 
     // Save it in WITHDRAWING_BATCH
@@ -720,8 +727,7 @@ fn query_token_supply(deps: Deps, denom: String) -> StdResult<Uint128> {
     Ok(resp.amount.amount)
 }
 
-/// Creates a submessage to mint tokenfactory tokens of `denom` and credit them to `recipient`.
-/// This is chain-specific; you'll need real proto messages for your chain (e.g., `cosmos.bank.v1beta1.MsgMint`).
+/// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
 fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> StdResult<CosmosMsg> {
     Ok(Into::<CosmosMsg>::into(MsgMint {
         sender: env.contract.address.to_string(),
@@ -730,7 +736,15 @@ fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> St
     }))
 }
 
-/// Creates a submessage to burn tokenfactory tokens from an address
+/// Creates a message to create a tokenfactory denom.
+fn create_tokenfactory_create_denom_msg(env: Env, denom: String) -> StdResult<CosmosMsg> {
+    Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
+        sender: env.contract.address.to_string(),
+        subdenom: denom,
+    }))
+}
+
+/// Creates a message to burn tokenfactory tokens from an address
 fn create_tokenfactory_burn_msg(
     env: Env,
     amount: Coin,
