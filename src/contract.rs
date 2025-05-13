@@ -61,7 +61,6 @@ pub fn instantiate(
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
-        start_time: env.block.time.seconds(),
     };
     ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &new_batch_id)?;
@@ -338,7 +337,7 @@ fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respon
     Ok(resp)
 }
 
-/// Permissionless call to move ACTIVE batch → WITHDRAWING if time is up
+/// Permissionless call to move batch ACTIVE → WITHDRAWING if time is up
 fn execute_process_active_batch(
     deps: DepsMut,
     env: Env,
@@ -368,8 +367,8 @@ fn execute_process_active_batch(
             ));
     }
 
-    // 1. If the active batch has no redemption tokens minted,
-    //    it means no one wants to withdraw, so just reset the timer and do nothing
+    // If the active batch has no redemption tokens minted,
+    // it means no one wants to withdraw, so just reset the timer and do nothing
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
     let mut active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
     let total_redemption_supply = query_token_supply(
@@ -381,7 +380,6 @@ fn execute_process_active_batch(
     )?;
     if total_redemption_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
-        active_batch.start_time = now;
         ACTIVE_BATCH.save(deps.storage, &Some(active_batch))?;
 
         // also reset the last_active_batch_processed_time
@@ -392,16 +390,16 @@ fn execute_process_active_batch(
             .add_attribute("status", "no_withdraw_requests_found"));
     }
 
-    // 2. Transition to WITHDRAWING
+    // Transition to WITHDRAWING
     active_batch.status = BatchStatus::Withdrawing;
-    active_batch.start_time = now;
+
     // Record collector_historical_balance
     let collector_balance = deps
         .querier
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
     active_batch.collector_historical_balance = collector_balance.amount;
 
-    // 3. Calculate the exchange rate (no deposit fee)
+    // Calculate the exchange rate (no deposit fee)
     let aum = query_aum(deps.as_ref(), &cfg)?;
     let maxbtc_supply = query_token_supply(deps.as_ref(), cfg.maxbtc_denom.clone())?;
     let er = if maxbtc_supply.is_zero() {
@@ -409,7 +407,7 @@ fn execute_process_active_batch(
     } else {
         Decimal::from_ratio(aum, maxbtc_supply)
     };
-    // 4. The total BTC requested = total_redemption_supply * er
+    // The total BTC requested = total_redemption_supply * er
     let btc_requested = er * Decimal::from_atomics(total_redemption_supply, 0)?;
     active_batch.btc_requested = btc_requested.atomics();
 
@@ -425,7 +423,6 @@ fn execute_process_active_batch(
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
-        start_time: now,
     };
     ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &batch_id_counter)?;

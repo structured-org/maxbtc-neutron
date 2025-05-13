@@ -62,9 +62,6 @@ pub struct Batch {
 
     /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
     pub collector_historical_balance: Uint128,
-
-    /// The moment the batch was created or transitioned to the current state
-    pub start_time: u64,
 }
 
 /// The current active batch
