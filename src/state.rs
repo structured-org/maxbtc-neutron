@@ -1,0 +1,90 @@
+use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{Addr, Decimal, Uint128};
+use cw_storage_plus::{Item, Map};
+
+use crate::msg::BatchStatus;
+
+#[cw_serde]
+pub struct Config {
+    pub owner: Addr,
+    pub aum_contract: Addr,
+    pub liquidation_contract: Addr,
+    pub collector_contract: Addr,
+    pub treasury_address: Addr,
+    /// Denom for user deposits (e.g. the IBC-transferred BTC)
+    pub deposit_denom: String,
+    /// Number of decimals in the deposits coin
+    pub deposit_decimals: u32,
+    /// The tokenfactory denom representing the maxBTC token
+    pub maxbtc_denom: String,
+    /// Duration in seconds after which deposit flush can be triggered
+    pub deposit_flush_period: u64,
+    /// Duration in seconds after which an active batch transitions to WITHDRAWING
+    pub batch_active_duration: u64,
+    /// Duration in seconds after which a withdrawing batch transitions to FINALIZED
+    pub batch_withdrawing_duration: u64,
+    /// If the collected amount in the collector account is less than this % of requested,
+    /// the protocol goes into paused state.
+    pub accepted_withdrawable_percentage: Decimal,
+    /// The share (in decimal) of AUM we want to hold in the liquidation contract
+    pub liquidation_buffer_share: Decimal,
+    /// E.g. 0.003 for 0.3% deposit fee
+    pub deposit_fee: Decimal,
+    /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
+    pub paused: bool,
+}
+
+impl Config {
+    pub fn get_maxbtc_denom(&self, contract_addr: String) -> String {
+        format!("factory/{}/{}", contract_addr, self.maxbtc_denom.to_string())
+    }
+
+    pub fn get_redemption_denom(&self, contract_addr: String, batch_id: String) -> String {
+        format!("factory/{}/redemption/batch/{}", contract_addr, batch_id)
+    }
+}
+
+/// Each batch has a batch_id, which increments.
+#[cw_serde]
+pub struct Batch {
+    pub batch_id: u64,
+    pub status: BatchStatus,
+
+    /// If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+    pub btc_requested: Uint128,
+
+    /// If in FINALIZED state, how much BTC was actually collected?
+    pub collected_amount: Uint128,
+
+    /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+    pub collector_historical_balance: Uint128,
+
+    /// The moment the batch was created or transitioned to the current state
+    pub start_time: u64,
+}
+
+/// The current active batch
+pub const ACTIVE_BATCH: Item<Option<Batch>> = Item::new("active_batch");
+
+/// The current withdrawing batch
+pub const WITHDRAWING_BATCH: Item<Option<Batch>> = Item::new("withdrawing_batch");
+
+/// Mapping from batch_id to a Batch (which will be in FINALIZED state)
+pub const FINALIZED_BATCHES: Map<u64, Batch> = Map::new("finalized_batches");
+
+/// A single global config item
+pub const CONFIG: Item<Config> = Item::new("config");
+
+/// A simple incrementing batch counter
+pub const BATCH_ID_COUNTER: Item<u64> = Item::new("batch_id_counter");
+
+/// Tracks the last time a deposit flush was done
+pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_time");
+
+/// Tracks the last time an active batch was processed
+pub const LAST_ACTIVE_BATCH_PROCESSED_TIME: Item<u64> =
+    Item::new("last_active_batch_processed_time");
+
+/// Tracks the last time a withdrawing batch was finalized
+pub const LAST_WITHDRAWING_BATCH_FINALIZED_TIME: Item<u64> =
+    Item::new("last_withdrawing_batch_finalized_time");
