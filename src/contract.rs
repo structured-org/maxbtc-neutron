@@ -4,9 +4,8 @@ use crate::msg::{
     LiquidationExecuteMsg, QueryMsg,
 };
 use crate::state::{
-    Batch, Config, ACTIVE_BATCH, BATCH_ID_COUNTER, CONFIG, FINALIZED_BATCHES,
-    ACTIVE_BATCH_START_TIME, LAST_DEPOSIT_FLUSH_TIME,
-    WITHDRAWING_BATCH_START_TIME, WITHDRAWING_BATCH,
+    Batch, Config, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER, CONFIG,
+    FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, WITHDRAWING_BATCH, WITHDRAWING_BATCH_START_TIME,
 };
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
@@ -32,6 +31,7 @@ pub fn instantiate(
         owner: deps.api.addr_validate(&msg.owner)?,
         aum_contract: deps.api.addr_validate(&msg.aum_contract)?,
         liquidation_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
+        deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
         collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
         treasury_address: deps.api.addr_validate(&msg.treasury_address)?,
         deposit_denom: msg.deposit_denom,
@@ -109,7 +109,7 @@ pub fn execute(
     match msg {
         ExecuteMsg::Deposit { recipient } => execute_deposit(deps, env, info, recipient),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
-        ExecuteMsg::Withdraw { amount } => execute_withdraw(deps, env, info),
+        ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
         ExecuteMsg::ProcessActiveBatch {} => execute_process_active_batch(deps, env, info),
         ExecuteMsg::FinalizeWithdrawingBatch {} => {
             execute_finalize_withdrawing_batch(deps, env, info)
@@ -209,10 +209,21 @@ fn execute_flush_deposits(
     // Update flush timestamp
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
 
+    let mut contract_balance = deps
+        .querier
+        .query_balance(env.contract.address, &cfg.deposit_denom)?;
+
+    if contract_balance.amount.is_zero() {
+        return Ok(Response::new()
+            .add_attribute("action", "flush_deposits")
+            .add_attribute("status", "zero_outstanding_deposits"));
+    }
+
     let aum = query_aum(deps.as_ref(), &cfg)?;
     // The "liquidation buffer" we want is liquidation_buffer_share * aum
-    let required_buffer =
-        (Decimal::from_ratio(aum, 1u128) * cfg.liquidation_buffer_share).atomics();
+    let required_buffer = (Decimal::from_atomics(aum, cfg.deposit_decimals)?
+        * cfg.liquidation_buffer_share)
+        .atomics();
 
     // The actual buffer we have in the liquidation contract?
     let liquidation_current_balance = deps
@@ -221,28 +232,23 @@ fn execute_flush_deposits(
 
     let mut msgs: Vec<CosmosMsg> = vec![];
 
-    let contract_balance = deps
-        .querier
-        .query_balance(env.contract.address, &cfg.deposit_denom)?;
-    let mut to_send = required_buffer - liquidation_current_balance.amount;
-
     // If liquidation contract < required => send the difference
     if liquidation_current_balance.amount < required_buffer {
+        let mut to_send = required_buffer - liquidation_current_balance.amount;
         // We are allowed to exhaust the deposit buffer completely.
         if to_send > contract_balance.amount {
             to_send = contract_balance.amount
         }
-        if to_send > Uint128::zero() {
-            // We do a bank send of the deposit_denom from this contract to the liquidation contract
-            let msg = CosmosMsg::Bank(BankMsg::Send {
-                to_address: cfg.liquidation_contract.to_string(),
-                amount: vec![Coin {
-                    denom: cfg.deposit_denom.clone(),
-                    amount: Uint128::from(to_send),
-                }],
-            });
-            msgs.push(msg);
-        }
+        // We do a bank send of the deposit_denom from this contract to the liquidation contract
+        let msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.liquidation_contract.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom.clone(),
+                amount: Uint128::from(to_send),
+            }],
+        });
+        msgs.push(msg);
+        contract_balance.amount -= to_send;
     } else {
         // If liquidation contract > required => call liquidation contract's method to send back the difference
         let to_recv = Coin {
@@ -251,22 +257,23 @@ fn execute_flush_deposits(
         };
         // The returned funds will be processed next time.
         if to_recv.amount > Uint128::zero() {
-            let msg =
-                create_liquidation_rebalance_msg(cfg.liquidation_contract.to_string(), to_recv)?;
+            let msg = create_liquidation_rebalance_msg(
+                cfg.liquidation_contract.to_string(),
+                to_recv.clone(),
+            )?;
             msgs.push(msg);
+            contract_balance.amount += to_recv.amount;
         }
     }
 
-    // Create a message that initiates an IBC Eureka transfer to the Ethereum deposit address.
-    // TODO: implement.
-    // TODO: Eureka is, obviously, async. Should we handle failures? Are they even possible?
-    if !contract_balance.amount.is_zero() && !(to_send == contract_balance.amount) {
-        let ibc_msg = execute_ibc_transfer(
-            contract_balance.clone(),
-            "ethereum_custody_address".to_string(), // placeholder
-            "channel-XYZ".to_string(),              // placeholder
-        );
-        msgs.push(ibc_msg);
+    // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
+    // Eureka
+    if !contract_balance.amount.is_zero() {
+        let msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.deposit_pump_contract.to_string(),
+            amount: vec![contract_balance.clone()],
+        });
+        msgs.push(msg);
     }
 
     let resp = Response::new()
@@ -310,7 +317,7 @@ fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respon
 
     // Mint redemption tokens for the current active batch
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
-    let mut active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
+    let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
 
     if active_batch.status != BatchStatus::Active {
         return Err(ContractError::BatchStateError {});
@@ -766,13 +773,4 @@ fn create_liquidation_rebalance_msg(
         funds: vec![],
     });
     Ok(msg)
-}
-
-/// Creates an IBC Eureka Transfer message to send `amount` of `denom` to `remote_address` on the channel
-fn execute_ibc_transfer(amount: Coin, remote_address: String, channel_id: String) -> CosmosMsg {
-    // Placeholder
-    CosmosMsg::Bank(BankMsg::Send {
-        to_address: format!("ibc/{}:{}", channel_id, remote_address),
-        amount: vec![amount],
-    })
 }

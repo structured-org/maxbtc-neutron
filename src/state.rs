@@ -9,6 +9,7 @@ pub struct Config {
     pub owner: Addr,
     pub aum_contract: Addr,
     pub liquidation_contract: Addr,
+    pub deposit_pump_contract: Addr,
     pub collector_contract: Addr,
     pub treasury_address: Addr,
     /// Denom for user deposits (e.g. the IBC-transferred BTC)
@@ -83,9 +84,7 @@ pub const BATCH_ID_COUNTER: Item<u64> = Item::new("batch_id_counter");
 pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_time");
 
 /// Tracks the time an active batch was initiated
-pub const ACTIVE_BATCH_START_TIME: Item<u64> =
-    Item::new("active_batch_start_time");
+pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_time");
 
 /// Tracks the time a withdrawing batch was initiated
-pub const WITHDRAWING_BATCH_START_TIME: Item<u64> =
-    Item::new("withdrawing_batch_start_time");
+pub const WITHDRAWING_BATCH_START_TIME: Item<u64> = Item::new("withdrawing_batch_start_time");

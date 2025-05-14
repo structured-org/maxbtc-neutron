@@ -7,6 +7,7 @@ pub struct InstantiateMsg {
     pub owner: String,
     pub aum_contract: String,
     pub liquidation_contract: String,
+    pub deposit_pump_contract: String,
     pub collector_contract: String,
     pub treasury_address: String,
     /// Denom for user deposits (e.g. the IBC-transferred BTC)
@@ -38,9 +39,7 @@ pub enum ExecuteMsg {
     /// Permissionless handler to flush deposits after `deposit_flush_period`
     FlushDeposits {},
     /// User requests a withdrawal of a certain amount of maxBTC
-    Withdraw {
-        amount: Coin, // expected to be the maxBTC denom
-    },
+    Withdraw {},
     /// Permissionless handler to process the ACTIVE batch after `batch_active_duration`
     ProcessActiveBatch {},
     /// Permissionless handler to finalize the WITHDRAWING batch after `batch_withdrawing_duration`
