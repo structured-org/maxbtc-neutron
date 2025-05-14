@@ -31,6 +31,8 @@ pub struct InstantiateMsg {
     pub deposit_fee: Decimal,
     /// TODO
     pub cached_aum_tolerance: Decimal,
+    /// TODO
+    pub cached_aum_ttl: u64,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -44,8 +46,6 @@ pub enum ExecuteMsg {
     Withdraw {},
     /// Permissionless handler to process the ACTIVE batch after `batch_active_duration`
     ProcessActiveBatch {},
-    /// Permissionless handler to finalize the WITHDRAWING batch after `batch_withdrawing_duration`
-    FinalizeWithdrawingBatch {},
     /// User claims their BTC from a finalized batch
     Claim {
         /// The user wants to receive BTC at `recipient` address on Neutron

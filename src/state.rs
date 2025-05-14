@@ -24,7 +24,7 @@ pub struct Config {
     pub batch_withdrawing_duration: u64,
     /// If the collected amount in the collector account is less than this % of requested,
     /// the protocol goes into paused state.
-    pub accepted_withdrawable_percentage: Decimal,
+    pub collected_tolerance: Decimal,
     /// The share (in decimal) of AUM we want to hold in the liquidation contract
     pub liquidation_buffer_share: Decimal,
     /// E.g. 0.003 for 0.3% deposit fee
@@ -33,6 +33,8 @@ pub struct Config {
     pub paused: bool,
     /// TODO
     pub cached_aum_tolerance: Decimal,
+    /// TODO
+    pub cached_aum_ttl: u64,
 }
 
 impl Config {
@@ -100,9 +102,6 @@ pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_tim
 
 /// Tracks the time an active batch was initiated
 pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_time");
-
-/// Tracks the time a withdrawing batch was initiated
-pub const WITHDRAWING_BATCH_START_TIME: Item<u64> = Item::new("withdrawing_batch_start_time");
 
 /// Cached assets under management value. Can be set when we trigger a deposits flush
 /// and when we move a batch to the WITHDRAWING state.
