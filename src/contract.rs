@@ -515,7 +515,10 @@ fn execute_finalize_withdrawing_batch(
         return Ok(Response::new()
             .add_attribute("action", "finalize_withdrawing_batch")
             .add_attribute("error", "not_enough_to_withdraw"));
-    } else if collected > requested {
+    }
+
+    let mut msgs: Vec<CosmosMsg> = vec![];
+    if collected > requested {
         let extra = collected - requested;
         // send `extra` to treasury
         let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
@@ -525,14 +528,10 @@ fn execute_finalize_withdrawing_batch(
                 amount: Uint128::from(extra),
             }],
         });
-        // We'll handle that in the response
-        // TODO: response is created in a wrong way, need to fix it
-        let mut resp = Response::new().add_attribute("action", "finalize_withdrawing_batch");
-        resp = resp.add_message(send_msg);
-        // We'll finalize the batch below
+        msgs.push(send_msg);
     }
 
-    // 3. Mark the batch as FINALIZED
+    // Mark the batch as FINALIZED
     withdrawing_batch.collected_amount = Uint128::from(collected);
     withdrawing_batch.status = BatchStatus::Finalized;
 
@@ -542,11 +541,10 @@ fn execute_finalize_withdrawing_batch(
 
     // Clear the WITHDRAWING_BATCH
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
-
-    // Update the last withdrawing batch finalized time
     WITHDRAWING_BATCH_START_TIME.save(deps.storage, &now)?;
 
     let resp = Response::new()
+        .add_messages(msgs)
         .add_attribute("action", "finalize_withdrawing_batch")
         .add_attribute("sender", info.sender)
         .add_attribute("batch_id", batch_id.to_string())
