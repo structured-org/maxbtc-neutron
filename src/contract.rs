@@ -1,6 +1,6 @@
 use crate::error::ContractError;
 use crate::msg::{
-    AUMQueryMsg, BatchResponse, BatchStatus, ConfigResponse, ExecuteMsg, InstantiateMsg,
+    AUMQueryMsg, BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
     LiquidationExecuteMsg, QueryMsg,
 };
 use crate::state::{
@@ -57,7 +57,6 @@ pub fn instantiate(
     let new_batch_id = 1u64;
     let new_batch = Batch {
         batch_id: new_batch_id,
-        status: BatchStatus::Active,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
@@ -320,10 +319,6 @@ fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respon
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
     let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
 
-    if active_batch.status != BatchStatus::Active {
-        return Err(ContractError::BatchStateError {});
-    }
-
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = amount.amount;
     ACTIVE_BATCH.save(deps.storage, &Some(active_batch.clone()))?;
@@ -404,7 +399,6 @@ fn execute_process_active_batch(
     // Transition to WITHDRAWING
     let mut withdrawing_batch = Batch {
         batch_id: active_batch.batch_id,
-        status: BatchStatus::Withdrawing,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
@@ -440,7 +434,6 @@ fn execute_process_active_batch(
     batch_id_counter += 1;
     let new_active_batch = Batch {
         batch_id: batch_id_counter,
-        status: BatchStatus::Active,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
@@ -489,9 +482,6 @@ fn execute_finalize_withdrawing_batch(
                 .add_attribute("status", "no_withdrawing_batch"));
         }
     };
-    if withdrawing_batch.status != BatchStatus::Withdrawing {
-        return Err(ContractError::BatchStateError {});
-    }
 
     // Calculate the collected amount
     let current_collector_balance = deps
@@ -536,7 +526,6 @@ fn execute_finalize_withdrawing_batch(
 
     let finalized_batch = Batch {
         batch_id: withdrawing_batch.batch_id,
-        status: BatchStatus::Finalized,
         btc_requested: withdrawing_batch.btc_requested,
         collected_amount: collected,
         paid_amount: Uint128::zero(),
@@ -583,9 +572,6 @@ fn execute_claim(
         Some(b) => b,
         None => return Err(ContractError::BatchNotFinalized {}),
     };
-    if batch.status != BatchStatus::Finalized {
-        return Err(ContractError::BatchNotFinalized {});
-    }
 
     // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
     let redemption_supply = query_token_supply(deps.as_ref(), redemption_coin.denom.clone())?;
@@ -661,7 +647,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let batch = ACTIVE_BATCH.load(deps.storage)?;
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
-                status: b.status,
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
@@ -672,7 +657,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let batch = WITHDRAWING_BATCH.load(deps.storage)?;
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
-                status: b.status,
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
@@ -683,7 +667,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let batch = FINALIZED_BATCHES.may_load(deps.storage, batch_id)?;
             let resp = batch.map(|b| BatchResponse {
                 batch_id: b.batch_id,
-                status: b.status,
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),

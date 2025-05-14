@@ -53,7 +53,6 @@ impl Config {
 #[cw_serde]
 pub struct Batch {
     pub batch_id: u64,
-    pub status: BatchStatus,
     /// If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
     pub btc_requested: Uint128,
     /// If in FINALIZED state, how much BTC was actually collected?

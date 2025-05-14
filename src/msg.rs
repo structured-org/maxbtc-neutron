@@ -87,19 +87,10 @@ pub struct ConfigResponse {
     pub deposit_fee: Decimal,
 }
 
-/// Batch status
-#[cw_serde]
-pub enum BatchStatus {
-    Active,
-    Withdrawing,
-    Finalized,
-}
-
 /// Response for batch query
 #[cw_serde]
 pub struct BatchResponse {
     pub batch_id: u64,
-    pub status: BatchStatus,
     pub btc_requested: String,
     pub collected_amount: String,
     pub collector_historical_balance: String,
