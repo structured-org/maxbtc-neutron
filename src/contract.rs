@@ -1,11 +1,12 @@
 use crate::error::ContractError;
 use crate::msg::{
-    AUMQueryMsg, BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg,
-    LiquidationExecuteMsg, QueryMsg,
+    AUMQueryMsg, BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg,
+    QueryMsg,
 };
 use crate::state::{
-    Batch, Config, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER, CONFIG,
-    FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, WITHDRAWING_BATCH, WITHDRAWING_BATCH_START_TIME,
+    Batch, Config, SystemState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER,
+    CACHED_AUM, CONFIG, FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, SYSTEM_STATE,
+    WITHDRAWING_BATCH, WITHDRAWING_BATCH_START_TIME,
 };
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
@@ -44,9 +45,11 @@ pub fn instantiate(
         liquidation_buffer_share: msg.liquidation_buffer_share,
         deposit_fee: msg.deposit_fee,
         paused: false,
+        cached_aum_tolerance: msg.cached_aum_tolerance,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
+    SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
@@ -119,7 +122,7 @@ pub fn execute(
 }
 
 fn execute_deposit(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
     recipient: String,
@@ -128,6 +131,7 @@ fn execute_deposit(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     // Validate funds
     if info.funds.is_empty() {
@@ -147,16 +151,8 @@ fn execute_deposit(
         return Err(ContractError::InvalidDepositAmount {});
     }
 
-    // Calculate exchange rate = AUM / maxBTC_supply
-    // If supply = 0, we treat exchange rate as 1 to avoid division by zero.
-    let aum = query_aum(deps.as_ref(), &cfg)?; // BTC-denominated AUM
-    let maxbtc_supply = query_token_supply(deps.as_ref(), cfg.maxbtc_denom.clone())?; // supply of maxBTC
-
-    let er = if maxbtc_supply.is_zero() {
-        Decimal::one()
-    } else {
-        Decimal::from_ratio(aum, maxbtc_supply)
-    };
+    // Get the exchange rate
+    let er = get_exchange_rate(&deps.as_ref(), &cfg.clone())?;
 
     // Adjust for deposit fee
     let fee_multiplier = Decimal::one() - cfg.deposit_fee;
@@ -189,7 +185,7 @@ fn execute_deposit(
 /// - if liquidation contract holds more, request some back (it will be processed next time)
 /// - then IBC Eureka transfer everything else to the custody
 fn execute_flush_deposits(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
@@ -197,6 +193,8 @@ fn execute_flush_deposits(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
@@ -219,7 +217,7 @@ fn execute_flush_deposits(
             .add_attribute("status", "zero_outstanding_deposits"));
     }
 
-    let aum = query_aum(deps.as_ref(), &cfg)?;
+    let aum = query_aum(&deps.as_ref(), &cfg)?;
     // The "liquidation buffer" we want is liquidation_buffer_share * aum
     let required_buffer = (Decimal::from_atomics(aum, cfg.deposit_decimals)?
         * cfg.liquidation_buffer_share)
@@ -276,6 +274,9 @@ fn execute_flush_deposits(
         msgs.push(msg);
     }
 
+    // Change the system state to Flushing
+    SYSTEM_STATE.save(deps.storage, &SystemState::Flushing)?;
+
     let resp = Response::new()
         .add_messages(msgs)
         .add_attribute("action", "flush_deposits")
@@ -287,11 +288,13 @@ fn execute_flush_deposits(
 }
 
 /// User requests to withdraw maxBTC
-fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+fn execute_withdraw(mut deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     // Validate that we received some MaxBTC
     if info.funds.is_empty() {
@@ -347,7 +350,7 @@ fn execute_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Respon
 
 /// Permissionless call to move batch ACTIVE → WITHDRAWING if time is up
 fn execute_process_active_batch(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
@@ -355,6 +358,8 @@ fn execute_process_active_batch(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     let now = env.block.time.seconds();
     let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
@@ -380,7 +385,7 @@ fn execute_process_active_batch(
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
     let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
     let total_redemption_supply = query_token_supply(
-        deps.as_ref(),
+        &deps.as_ref(),
         cfg.get_redemption_denom(
             env.contract.address.to_string(),
             active_batch.batch_id.to_string(),
@@ -411,14 +416,9 @@ fn execute_process_active_batch(
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
     withdrawing_batch.collector_historical_balance = collector_balance.amount;
 
-    // Calculate the exchange rate (no deposit fee)
-    let aum = query_aum(deps.as_ref(), &cfg)?;
-    let maxbtc_supply = query_token_supply(deps.as_ref(), cfg.maxbtc_denom.clone())?;
-    let er = if maxbtc_supply.is_zero() {
-        Decimal::one()
-    } else {
-        Decimal::from_ratio(aum, maxbtc_supply)
-    };
+    // Get the exchange rate (no deposit fee)
+    let er = get_exchange_rate(&deps.as_ref(), &cfg.clone())?;
+
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
     // deposit denom.
@@ -456,7 +456,7 @@ fn execute_process_active_batch(
 
 /// Permissionless call to move WITHDRAWING → FINALIZED if time is up
 fn execute_finalize_withdrawing_batch(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
@@ -464,6 +464,8 @@ fn execute_finalize_withdrawing_batch(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     let now = env.block.time.seconds();
     let withdrawing_start_time = WITHDRAWING_BATCH_START_TIME.load(deps.storage)?;
@@ -553,12 +555,17 @@ fn execute_finalize_withdrawing_batch(
 
 /// User claims their BTC, providing redemption tokens as input
 fn execute_claim(
-    deps: DepsMut,
+    mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
     recipient: String,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
+    if cfg.paused {
+        return Err(ContractError::ContractPaused {});
+    }
+
+    process_caches(deps.branch(), env.clone(), &cfg)?;
 
     if info.funds.len() != 1 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
@@ -574,7 +581,7 @@ fn execute_claim(
     };
 
     // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
-    let redemption_supply = query_token_supply(deps.as_ref(), redemption_coin.denom.clone())?;
+    let redemption_supply = query_token_supply(&deps.as_ref(), redemption_coin.denom.clone())?;
     if redemption_supply.is_zero() {
         return Err(ContractError::RedemptionSupplyMismatch {});
     }
@@ -676,19 +683,19 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
     }
 }
 
-///////////////////////////////////////////
-// PLACEHOLDER / HELPER FUNCTIONS BELOW //
-///////////////////////////////////////////
+/// -----------------------------------------------------------------------------------------------
+/// HELPER FUNCTIONS BELOW
+/// -----------------------------------------------------------------------------------------------
 
 /// Query the AUM contract for the current BTC-denominated AUM.
 /// In practice, you'd call `AUMContract::GetAumInBtc {}` or something similar.
-fn query_aum(deps: Deps, cfg: &Config) -> StdResult<Uint128> {
+fn query_aum(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
     deps.querier
         .query_wasm_smart(cfg.aum_contract.to_string(), &AUMQueryMsg::GetAUM {})
 }
 
 /// Query the token supply for a given redemption token denom
-fn query_token_supply(deps: Deps, denom: String) -> StdResult<Uint128> {
+fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
     let resp: SupplyResponse = deps
         .querier
         .query(&QueryRequest::Bank(BankQuery::Supply { denom }))?;
@@ -766,4 +773,75 @@ fn get_batch_id_from_redemption_coin(
         .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
 
     Ok(batch_id)
+}
+
+fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
+    let mut aum = query_aum(deps, &cfg)?;
+    match CACHED_AUM.load(deps.storage)? {
+        Some(cached_aum) => {
+            aum = cached_aum.aum
+        }
+        None() => {}
+    }
+
+    let maxbtc_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
+    let er = if maxbtc_supply.is_zero() {
+        Decimal::one()
+    } else {
+        Decimal::from_ratio(aum, maxbtc_supply)
+    };
+
+    Ok(er)
+}
+
+fn process_caches(deps: DepsMut, env: Env, cfg: &Config) -> Result<(), ContractError> {
+    let aum = query_aum(&deps.as_ref(), &cfg)?;
+    let maybe_cached_aum = CACHED_AUM.load(deps.storage)?;
+
+    match maybe_cached_aum {
+        Some(cached_aum) => {
+            if env.block.time.seconds() > cached_aum.timeout {
+                // The cache is stale, we can not perform any operations
+                return Err(ContractError::ProtocolInEmergency {});
+            }
+
+            let current_state = SYSTEM_STATE.load(deps.storage)?;
+            match current_state {
+                SystemState::Idle => {
+                    // If the protocol is in idle state, we can not have a cached AUM
+                    Err(ContractError::ProtocolInEmergency {})
+                }
+                SystemState::Flushing => {
+                    // If the oracle-provided AUM is greater than what we expected, last deposit
+                    // definitely came through, we can make the FLUSHING -> IDLE transition and
+                    // discard the cache.
+                    if aum > cached_aum.aum {
+                        SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+                        CACHED_AUM.save(deps.storage, &None)?;
+                        return Ok(());
+                    }
+
+                    // If the cache is not stale, we need to check whether the AUM from the
+                    // oracle is close enough to the cached AUM (== the previously flushed deposit
+                    // batch came through); if that is the case, we can make the FLUSHING -> IDLE
+                    // transition and discard the cache.
+                    let cached_aum_dec =
+                        Decimal::from_atomics(cached_aum.aum, cfg.deposit_decimals)?;
+                    let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
+                    if cached_aum.aum - aum < allowed_deviation {
+                        SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+                        CACHED_AUM.save(deps.storage, &None)?;
+                    }
+
+                    // The previously flushed deposit didn't come through yet, but the cache is
+                    // not stale either; no issue here, we keep using the cached AUM.
+                    Ok(())
+                }
+                // Nothing to do here, WITHDRAWING -> IDLE transition happens in
+                // execute_finalize_withdrawing_batch()
+                SystemState::Withdrawing => Ok(()),
+            }
+        }
+        None => Ok(()),
+    }
 }

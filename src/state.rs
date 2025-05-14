@@ -2,8 +2,6 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
 
-use crate::msg::BatchStatus;
-
 #[cw_serde]
 pub struct Config {
     pub owner: Addr,
@@ -33,6 +31,8 @@ pub struct Config {
     pub deposit_fee: Decimal,
     /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
     pub paused: bool,
+    /// TODO
+    pub cached_aum_tolerance: Decimal,
 }
 
 impl Config {
@@ -63,6 +63,23 @@ pub struct Batch {
     pub collector_historical_balance: Uint128,
 }
 
+/// Represents the system state.
+#[cw_serde]
+pub enum SystemState {
+    Idle,
+    Flushing,
+    Withdrawing,
+}
+
+#[cw_serde]
+pub struct CachedAUM {
+    pub aum: Uint128,
+    pub timeout: u64,
+}
+
+/// The current status of the system
+pub const SYSTEM_STATE: Item<SystemState> = Item::new("system_status");
+
 /// The current active batch
 pub const ACTIVE_BATCH: Item<Option<Batch>> = Item::new("active_batch");
 
@@ -86,3 +103,7 @@ pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_tim
 
 /// Tracks the time a withdrawing batch was initiated
 pub const WITHDRAWING_BATCH_START_TIME: Item<u64> = Item::new("withdrawing_batch_start_time");
+
+/// Cached assets under management value. Can be set when we trigger a deposits flush
+/// and when we move a batch to the WITHDRAWING state.
+pub const CACHED_AUM: Item<Option<CachedAUM>> = Item::new("cached_aum");

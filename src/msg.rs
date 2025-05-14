@@ -29,6 +29,8 @@ pub struct InstantiateMsg {
     pub liquidation_buffer_share: Decimal,
     /// The deposit fee (applied at the time of deposit)
     pub deposit_fee: Decimal,
+    /// TODO
+    pub cached_aum_tolerance: Decimal,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
