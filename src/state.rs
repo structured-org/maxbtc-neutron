@@ -54,13 +54,12 @@ impl Config {
 pub struct Batch {
     pub batch_id: u64,
     pub status: BatchStatus,
-
     /// If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
     pub btc_requested: Uint128,
-
     /// If in FINALIZED state, how much BTC was actually collected?
     pub collected_amount: Uint128,
-
+    /// If in FINALIZED state, how much BTC was already paid to users?
+    pub paid_amount: Uint128,
     /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
     pub collector_historical_balance: Uint128,
 }

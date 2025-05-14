@@ -60,6 +60,7 @@ pub fn instantiate(
         status: BatchStatus::Active,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
+        paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
     ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
@@ -406,6 +407,7 @@ fn execute_process_active_batch(
         status: BatchStatus::Withdrawing,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
+        paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
 
@@ -441,6 +443,7 @@ fn execute_process_active_batch(
         status: BatchStatus::Active,
         btc_requested: Uint128::zero(),
         collected_amount: Uint128::zero(),
+        paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
     ACTIVE_BATCH.save(deps.storage, &Some(new_active_batch))?;
@@ -477,7 +480,7 @@ fn execute_finalize_withdrawing_batch(
     }
 
     let withdrawing_opt = WITHDRAWING_BATCH.load(deps.storage)?;
-    let mut withdrawing_batch = match withdrawing_opt {
+    let withdrawing_batch = match withdrawing_opt {
         Some(b) => b,
         None => {
             // No WITHDRAWING batch, just skip
@@ -531,13 +534,17 @@ fn execute_finalize_withdrawing_batch(
         msgs.push(send_msg);
     }
 
-    // Mark the batch as FINALIZED
-    withdrawing_batch.collected_amount = Uint128::from(collected);
-    withdrawing_batch.status = BatchStatus::Finalized;
+    let finalized_batch = Batch {
+        batch_id: withdrawing_batch.batch_id,
+        status: BatchStatus::Finalized,
+        btc_requested: withdrawing_batch.btc_requested,
+        collected_amount: collected,
+        paid_amount: Uint128::zero(),
+        collector_historical_balance: withdrawing_batch.collector_historical_balance,
+    };
 
-    // Save to finalized map
-    let batch_id = withdrawing_batch.batch_id;
-    FINALIZED_BATCHES.save(deps.storage, batch_id, &withdrawing_batch)?;
+    // Save the new finalized batch to finalized map
+    FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
 
     // Clear the WITHDRAWING_BATCH
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
@@ -547,7 +554,7 @@ fn execute_finalize_withdrawing_batch(
         .add_messages(msgs)
         .add_attribute("action", "finalize_withdrawing_batch")
         .add_attribute("sender", info.sender)
-        .add_attribute("batch_id", batch_id.to_string())
+        .add_attribute("batch_id", withdrawing_batch.batch_id.to_string())
         .add_attribute("collected_amount", collected.to_string())
         .add_attribute("requested", requested.to_string())
         .add_attribute("pause_state", cfg.paused.to_string());
@@ -564,35 +571,15 @@ fn execute_claim(
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
-    // 1. We parse the redemption token from info.funds or info.???
-    //    Actually, in the spec, the user "attaches" the redemption tokens.
-    //    For tokenfactory tokens, they'd need to do a send or burn. Another approach is
-    //    the user calls "Claim" with a Send or Burn from their wallet.
-    //    A simpler approach (for demonstration) is to rely on message info funds.
-    //    We'll check if the user included exactly one coin with denom "redemption/batch/<id>".
     if info.funds.len() != 1 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
     let redemption_coin = &info.funds[0];
-    if !redemption_coin.denom.starts_with("redemption/batch/") {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    if redemption_coin.amount.is_zero() {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
+    let batch_id = get_batch_id_from_redemption_coin(env.clone(), redemption_coin.clone())?;
 
-    // Extract the batch_id
-    let parts: Vec<&str> = redemption_coin.denom.split('/').collect();
-    if parts.len() != 3 {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    let batch_id: u64 = parts[2]
-        .parse()
-        .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
-
-    // 2. Check the batch is in FINALIZED state
+    // Check the batch is in FINALIZED state
     let finalized_batch = FINALIZED_BATCHES.may_load(deps.storage, batch_id)?;
-    let batch = match finalized_batch {
+    let mut batch = match finalized_batch {
         Some(b) => b,
         None => return Err(ContractError::BatchNotFinalized {}),
     };
@@ -600,55 +587,51 @@ fn execute_claim(
         return Err(ContractError::BatchNotFinalized {});
     }
 
-    // 3. The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
-    //    But we need the total supply of that redemption token. We'll do a placeholder query.
+    // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
     let redemption_supply = query_token_supply(deps.as_ref(), redemption_coin.denom.clone())?;
     if redemption_supply.is_zero() {
         return Err(ContractError::RedemptionSupplyMismatch {});
     }
-    let user_amount_dec = Decimal::from_atomics(redemption_coin.amount, 0)?;
-    let total_supply_dec = Decimal::from_atomics(redemption_supply, 0)?;
+    let user_amount_dec = Decimal::from_atomics(redemption_coin.amount, cfg.deposit_decimals)?;
+    let total_supply_dec = Decimal::from_atomics(redemption_supply, cfg.deposit_decimals)?;
     let fraction = user_amount_dec / total_supply_dec;
 
-    let collected_dec = Decimal::from_atomics(batch.collected_amount, 0)?;
-    let user_btc_dec = collected_dec * fraction;
-    let user_btc = user_btc_dec.atomics().u128();
+    let available_dec = Decimal::from_atomics(
+        batch.collected_amount - batch.paid_amount,
+        cfg.deposit_decimals,
+    )?;
+    let user_btc_dec = available_dec * fraction;
+    let user_btc = user_btc_dec.atomics();
 
-    // 4. Send the user’s BTC to `recipient` address
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
+    // Send the user’s BTC to `recipient` address
     let send_msg = CosmosMsg::Bank(BankMsg::Send {
         to_address: recipient.clone(),
         amount: vec![Coin {
             denom: cfg.deposit_denom.clone(),
-            amount: Uint128::from(user_btc),
+            amount: user_btc,
         }],
     });
+    msgs.push(send_msg);
 
-    // 5. If after this claim, the total redemption tokens = the entire supply, we can consider the batch’s redemption tokens fully claimed
-    //    We'll check if user_amount == redemption_supply or we track the next claims.
-    //    In a typical design, you'd burn the redemption tokens from the contract, but the user "sent" them here as funds.
-    //    The user’s funds are already in the contract?
-    //    We can burn them now.
+    // Burn the amount of redemption tokens that were redeemed
     let burn_msg = create_tokenfactory_burn_msg(
         env.clone(),
         redemption_coin.clone(),
         env.contract.address.to_string(),
     )?;
+    msgs.push(burn_msg);
 
-    let new_total_supply = redemption_supply.checked_sub(redemption_coin.amount)?;
-    // If new_total_supply == 0, we do final cleanup. We'll just keep it simple:
-    // we do the burn every time. If it's the last redemption, all tokens are burned, done.
-    let mut resp = Response::new()
+    // Update the paid out amount in the batch
+    batch.paid_amount += user_btc;
+    FINALIZED_BATCHES.save(deps.storage, batch.batch_id, &batch)?;
+
+    let resp = Response::new()
+        .add_messages(msgs)
         .add_attribute("action", "claim")
         .add_attribute("batch_id", batch_id.to_string())
         .add_attribute("user_claim_btc", user_btc.to_string());
-
-    resp = resp.add_message(send_msg).add_message(burn_msg);
-
-    // Because we do a final check:
-    if new_total_supply.is_zero() {
-        // all redemption tokens claimed for this batch
-        // nothing more to do
-    }
 
     Ok(resp)
 }
@@ -771,4 +754,33 @@ fn create_liquidation_rebalance_msg(
         funds: vec![],
     });
     Ok(msg)
+}
+
+fn get_batch_id_from_redemption_coin(
+    env: Env,
+    redemption_coin: Coin,
+) -> Result<u64, ContractError> {
+    if !redemption_coin.denom.starts_with(
+        format!(
+            "factory/{}/redemption/batch/",
+            env.contract.address.to_string()
+        )
+        .as_str(),
+    ) {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
+    }
+    if redemption_coin.amount.is_zero() {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
+    }
+
+    // Extract the batch_id
+    let parts: Vec<&str> = redemption_coin.denom.split('/').collect();
+    if parts.len() != 5 {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
+    }
+    let batch_id: u64 = parts[4]
+        .parse()
+        .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
+
+    Ok(batch_id)
 }
