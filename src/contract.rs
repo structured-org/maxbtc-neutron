@@ -4,7 +4,7 @@ use crate::msg::{
     QueryMsg,
 };
 use crate::state::{
-    Batch, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
+    Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
     BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
     WITHDRAWING_BATCH,
 };
@@ -45,7 +45,7 @@ pub fn instantiate(
         collected_tolerance: msg.accepted_withdrawable_percentage,
         liquidation_buffer_share: msg.liquidation_buffer_share,
         deposit_fee: msg.deposit_fee,
-        target_aum_tolerance: msg.cached_aum_tolerance,
+        deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_aum_ttl,
     };
     CONFIG.save(deps.storage, &cfg)?;
@@ -239,9 +239,12 @@ fn execute_flush_deposits(
     CACHED_ER.save(
         deps.storage,
         &Some(CachedER {
-            target_aum: Some(oracle_aum + deposit_buffer.amount),
             er,
             timeout: now + cfg.cached_er_ttl,
+            aum: Some(CachedAUM {
+                oracle_aum,
+                deposit_buffer: deposit_buffer.amount,
+            }),
         }),
     )?;
 
@@ -455,7 +458,7 @@ fn execute_process_active_batch(
     CACHED_ER.save(
         deps.storage,
         &Some(CachedER {
-            target_aum: None,
+            aum: None,
             er: er.clone(),
             timeout: now + cfg.cached_er_ttl,
         }),
@@ -756,28 +759,28 @@ fn _process_cache_flushing(
     let oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
 
     // If we are flushing, cached_aum must be present
-    let target_aum = cached_er
-        .target_aum
-        .ok_or(ContractError::ProtocolInEmergency {})?;
+    let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;
 
-    // If the oracle-provided AUM is greater than what we expected, last deposit
-    // definitely came through, we can make the FLUSHING -> IDLE transition and
-    // discard the cache.
-    if oracle_aum > target_aum {
-        FSM.go_to(deps.storage, ContractState::Idle)?;
-        CACHED_ER.save(deps.storage, &None)?;
-        return Ok(vec![]);
+    // TODO: this is, strictly speaking, not an emergency, because it can occur naturally?
+    if oracle_aum < cached_aum.oracle_aum {
+        return Err(ContractError::ProtocolInEmergency {});
     }
 
-    // If the cache is not stale, we need to check whether the AUM from the
-    // oracle is close enough to the cached AUM (== the previously flushed deposit
-    // batch came through); if that is the case, we can make the FLUSHING -> IDLE
-    // transition and discard the cache.
-    let target_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
-    if target_aum - oracle_aum < (target_aum_dec * cfg.target_aum_tolerance).atomics() {
+    // If the cache is not stale, we need to check whether the amount that reached Binance / Solana
+    // is close enough to the previously flushed deposit buffer; if that is the case, we can make
+    // the FLUSHING -> IDLE transition and discard the cache.
+    // Note: if the oracle-provided AUM is greater than what we expected, last deposit
+    // definitely came through, we can make the FLUSHING -> IDLE transition and
+    // discard the cache.
+    let received = oracle_aum - cached_aum.oracle_aum;
+    let cached_deposit_buffer_dec =
+        Decimal::from_atomics(cached_aum.deposit_buffer, cfg.deposit_decimals)?;
+    let accepted_diff = (cached_deposit_buffer_dec * cfg.deposit_buffer_tolerance).atomics();
+    if received > cached_aum.deposit_buffer
+        || (cached_aum.deposit_buffer - received) < accepted_diff
+    {
         FSM.go_to(deps.storage, ContractState::Idle)?;
         CACHED_ER.save(deps.storage, &None)?;
-        return Ok(vec![]);
     }
 
     // The previously flushed deposit didn't come through yet, but the cache is

@@ -40,7 +40,7 @@ pub struct Config {
     pub deposit_fee: Decimal,
     /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
     /// TODO
-    pub target_aum_tolerance: Decimal,
+    pub deposit_buffer_tolerance: Decimal,
     /// TODO
     pub cached_er_ttl: u64,
 }
@@ -77,9 +77,15 @@ pub struct Batch {
 
 #[cw_serde]
 pub struct CachedER {
-    pub target_aum: Option<Uint128>,
     pub er: Decimal,
     pub timeout: u64,
+    pub aum: Option<CachedAUM>,
+}
+
+#[cw_serde]
+pub struct CachedAUM {
+    pub oracle_aum: Uint128,
+    pub deposit_buffer: Uint128,
 }
 
 /// Represents the contract state.
