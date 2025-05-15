@@ -4,8 +4,8 @@ use crate::msg::{
     QueryMsg,
 };
 use crate::state::{
-    Batch, CachedAUM, Config, SystemState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER,
-    CACHED_AUM, CONFIG, FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, SYSTEM_STATE,
+    Batch, CachedAUM, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
+    BATCH_ID_COUNTER, CACHED_AUM, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
     WITHDRAWING_BATCH,
 };
 use cosmwasm_std::{
@@ -49,8 +49,6 @@ pub fn instantiate(
         cached_aum_ttl: msg.cached_aum_ttl,
     };
     CONFIG.save(deps.storage, &cfg)?;
-
-    // TODO: initialise as IDLE
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
@@ -71,6 +69,8 @@ pub fn instantiate(
     // Create the maxBTC denom
     let create_maxbtc_denom_msg =
         create_tokenfactory_create_denom_msg(env.clone(), cfg.maxbtc_denom.clone())?;
+
+    // TODO: initialise as IDLE
 
     Ok(Response::new()
         .add_message(create_maxbtc_denom_msg)
@@ -193,6 +193,8 @@ fn execute_flush_deposits(
     }
     let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
+    // TODO: transition IDLE -> FLUSHING, should not be possible if already in FLUSHING or in WITHDRAWING
+
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
     if now < last_time + cfg.deposit_flush_period {
@@ -215,19 +217,31 @@ fn execute_flush_deposits(
     }
 
     let aum = query_aum(&deps.as_ref(), &cfg)?;
+
     // The "liquidation buffer" we want is liquidation_buffer_share * aum
     let required_buffer = (Decimal::from_atomics(aum, cfg.deposit_decimals)?
         * cfg.liquidation_buffer_share)
         .atomics();
 
-    // The actual buffer we have in the liquidation contract?
-    let liquidation_current_balance = deps
+    // The actual buffer we have in the liquidation contract
+    let liquidation_contract_balance = deps
         .querier
         .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
 
+    // TODO: implement properly, after discussion with Kai. Not clear how to count this.
+    // Cache the full AUM that we know of: AUM from the oracle + the current deposits buffer +
+    // the liquidation contract balance.
+    CACHED_AUM.save(
+        deps.storage,
+        &Some(CachedAUM {
+            aum: aum + contract_balance.amount + liquidation_contract_balance.amount.clone(),
+            timeout: now + cfg.cached_aum_ttl,
+        }),
+    )?;
+
     // If liquidation contract < required => send the difference
-    if liquidation_current_balance.amount < required_buffer {
-        let mut to_send = required_buffer - liquidation_current_balance.amount;
+    if liquidation_contract_balance.amount < required_buffer {
+        let mut to_send = required_buffer - liquidation_contract_balance.amount;
         // We are allowed to exhaust the deposit buffer completely.
         if to_send > contract_balance.amount {
             to_send = contract_balance.amount
@@ -245,8 +259,8 @@ fn execute_flush_deposits(
     } else {
         // If liquidation contract > required => call liquidation contract's method to send back the difference
         let to_recv = Coin {
-            amount: liquidation_current_balance.amount - required_buffer,
-            denom: liquidation_current_balance.denom.clone(),
+            amount: liquidation_contract_balance.amount - required_buffer,
+            denom: liquidation_contract_balance.denom.clone(),
         };
         // The returned funds will be processed next time.
         if to_recv.amount > Uint128::zero() {
@@ -262,22 +276,12 @@ fn execute_flush_deposits(
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
     if !contract_balance.amount.is_zero() {
-        CACHED_AUM.save(
-            deps.storage,
-            &Some(CachedAUM {
-                aum: aum + contract_balance.amount,
-                timeout: now + cfg.cached_aum_ttl,
-            }),
-        )?;
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.deposit_pump_contract.to_string(),
             amount: vec![contract_balance.clone()],
         });
         msgs.push(msg);
     }
-
-    // Change the system state to Flushing
-    // TODO: transition IDLE -> FLUSHING
 
     let resp = Response::new()
         .add_messages(msgs)
@@ -373,22 +377,11 @@ fn execute_process_active_batch(
         return Err(ContractError::CannotProcessActiveBatchYet {});
     }
 
-    // Ensure there is no batch in WITHDRAWING right now
-    let withdrawing_opt = WITHDRAWING_BATCH.load(deps.storage)?;
-    if withdrawing_opt.is_some() {
-        // can't proceed
-        return Ok(Response::new()
-            .add_attribute("action", "process_active_batch")
-            .add_attribute(
-                "status",
-                "cannot_move_to_withdrawing_when_already_withdrawing",
-            ));
-    }
-
     // If the active batch has no redemption tokens minted,
     // it means no one wants to withdraw, so just reset the timer and do nothing
-    let active_opt = ACTIVE_BATCH.load(deps.storage)?;
-    let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
+    let active_batch = ACTIVE_BATCH
+        .load(deps.storage)?
+        .ok_or(ContractError::BatchStateError {})?;
     let total_redemption_supply = query_token_supply(
         &deps.as_ref(),
         cfg.get_redemption_denom(
@@ -402,11 +395,13 @@ fn execute_process_active_batch(
         ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
         return Ok(Response::new()
+            .add_messages(msgs)
             .add_attribute("action", "process_active_batch")
             .add_attribute("status", "no_withdraw_requests_found"));
     }
 
-    // Transition to WITHDRAWING
+    // TODO: transition IDLE -> WITHDRAWING, should not be possible if already in WITHDRAWING or in FLUSHING
+
     let mut withdrawing_batch = Batch {
         batch_id: active_batch.batch_id,
         btc_requested: Uint128::zero(),
@@ -446,6 +441,17 @@ fn execute_process_active_batch(
     ACTIVE_BATCH.save(deps.storage, &Some(new_active_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &batch_id_counter)?;
     ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
+
+    // TODO: implement properly, after discussion with Kai
+    // Cache the full AUM that we know of: AUM from the oracle + the current deposits buffer +
+    // the liquidation contract balance.
+    // CACHED_AUM.save(
+    //     deps.storage,
+    //     &Some(CachedAUM {
+    //         aum: aum + contract_balance.amount + liquidation_contract_balance.amount.clone(),
+    //         timeout: now + cfg.cached_aum_ttl,
+    //     }),
+    // )?;
 
     let resp = Response::new()
         .add_messages(msgs)
@@ -701,19 +707,19 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
 
     match maybe_cached_aum {
         Some(cached_aum) => {
-            let current_state = SYSTEM_STATE.load(deps.storage)?;
+            let fsm_state = FSM.get_current_state(deps.storage)?;
 
             // The cache is stale, we can not perform any operations
             if env.block.time.seconds() > cached_aum.timeout {
                 return Err(ContractError::ProtocolInEmergency {});
             }
 
-            match current_state {
-                SystemState::Idle => {
+            match fsm_state {
+                ContractState::Idle => {
                     // If the protocol is in idle state, we can not have a cached AUM
                     Err(ContractError::ProtocolInEmergency {})
                 }
-                SystemState::Flushing => {
+                ContractState::Flushing => {
                     // If the oracle-provided AUM is greater than what we expected, last deposit
                     // definitely came through, we can make the FLUSHING -> IDLE transition and
                     // discard the cache.
@@ -733,13 +739,14 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     if cached_aum.aum - aum < allowed_deviation {
                         // TODO: transition FLUSHING -> IDLE
                         CACHED_AUM.save(deps.storage, &None)?;
+                        return Ok(vec![]);
                     }
 
                     // The previously flushed deposit didn't come through yet, but the cache is
                     // not stale either; no issue here, we keep using the cached AUM.
                     Ok(vec![])
                 }
-                SystemState::Withdrawing => {
+                ContractState::Withdrawing => {
                     // If we are in a withdrawing state, there has to be a withdrawing batch
                     let withdrawing_batch = WITHDRAWING_BATCH
                         .load(deps.storage)?

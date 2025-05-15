@@ -1,3 +1,4 @@
+use crate::fsm::{Fsm, Transition};
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::{Item, Map};
@@ -65,22 +66,42 @@ pub struct Batch {
     pub collector_historical_balance: Uint128,
 }
 
-/// Represents the system state.
-#[cw_serde]
-pub enum SystemState {
-    Idle,
-    Flushing,
-    Withdrawing,
-}
-
 #[cw_serde]
 pub struct CachedAUM {
     pub aum: Uint128,
     pub timeout: u64,
 }
 
-/// The current status of the system
-pub const SYSTEM_STATE: Item<SystemState> = Item::new("system_status");
+/// Represents the contract state.
+#[cw_serde]
+pub enum ContractState {
+    Idle,
+    Flushing,
+    Withdrawing,
+}
+
+/// Defines the valid state transitions of the contract.
+const TRANSITIONS: &[Transition<ContractState>] = &[
+    Transition {
+        from: ContractState::Idle,
+        to: ContractState::Flushing,
+    },
+    Transition {
+        from: ContractState::Flushing,
+        to: ContractState::Idle,
+    },
+    Transition {
+        from: ContractState::Idle,
+        to: ContractState::Withdrawing,
+    },
+    Transition {
+        from: ContractState::Withdrawing,
+        to: ContractState::Idle,
+    },
+];
+
+/// The current status of the contract
+pub const FSM: Fsm<ContractState> = Fsm::new("contract_state", TRANSITIONS);
 
 /// The current active batch
 pub const ACTIVE_BATCH: Item<Option<Batch>> = Item::new("active_batch");
