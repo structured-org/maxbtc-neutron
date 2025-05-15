@@ -5,11 +5,19 @@ use cw_storage_plus::{Item, Map};
 
 #[cw_serde]
 pub struct Config {
+    /// TODO
+    pub paused: bool,
+    /// TODO
     pub owner: Addr,
+    /// TODO
     pub aum_contract: Addr,
+    /// TODO
     pub liquidation_contract: Addr,
+    /// TODO
     pub deposit_pump_contract: Addr,
+    /// TODO
     pub collector_contract: Addr,
+    /// TODO
     pub treasury_address: Addr,
     /// Denom for user deposits (e.g. the IBC-transferred BTC)
     pub deposit_denom: String,
@@ -31,11 +39,10 @@ pub struct Config {
     /// E.g. 0.003 for 0.3% deposit fee
     pub deposit_fee: Decimal,
     /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
-    pub paused: bool,
     /// TODO
     pub cached_aum_tolerance: Decimal,
     /// TODO
-    pub cached_aum_ttl: u64,
+    pub cached_er_ttl: u64,
 }
 
 impl Config {

@@ -29,6 +29,7 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let cfg = Config {
+        paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
         aum_contract: deps.api.addr_validate(&msg.aum_contract)?,
         liquidation_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
@@ -44,9 +45,8 @@ pub fn instantiate(
         collected_tolerance: msg.accepted_withdrawable_percentage,
         liquidation_buffer_share: msg.liquidation_buffer_share,
         deposit_fee: msg.deposit_fee,
-        paused: false,
         cached_aum_tolerance: msg.cached_aum_tolerance,
-        cached_aum_ttl: msg.cached_aum_ttl,
+        cached_er_ttl: msg.cached_aum_ttl,
     };
     CONFIG.save(deps.storage, &cfg)?;
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
@@ -241,7 +241,7 @@ fn execute_flush_deposits(
         &Some(CachedER {
             target_aum: Some(oracle_aum + deposit_buffer.amount),
             er,
-            timeout: now + cfg.cached_aum_ttl,
+            timeout: now + cfg.cached_er_ttl,
         }),
     )?;
 
@@ -457,7 +457,7 @@ fn execute_process_active_batch(
         &Some(CachedER {
             target_aum: None,
             er: er.clone(),
-            timeout: now + cfg.cached_aum_ttl,
+            timeout: now + cfg.cached_er_ttl,
         }),
     )?;
 
@@ -727,8 +727,6 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
 }
 
 fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
-    let oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
-
     // If there is no cache, there is nothing to do.
     let cached_er = CACHED_ER
         .load(deps.storage)?
@@ -745,100 +743,113 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
             // If the protocol is in idle state, we can not have a cached AUM
             Err(ContractError::ProtocolInEmergency {})
         }
-        ContractState::Flushing => {
-            // If we are flushing, cached_aum must be present
-            let target_aum = cached_er.target_aum.ok_or(ContractError::ProtocolInEmergency {})?;
-
-            // If the oracle-provided AUM is greater than what we expected, last deposit
-            // definitely came through, we can make the FLUSHING -> IDLE transition and
-            // discard the cache.
-            if oracle_aum > target_aum {
-                FSM.go_to(deps.storage, ContractState::Idle)?;
-                CACHED_ER.save(deps.storage, &None)?;
-                return Ok(vec![]);
-            }
-
-            // If the cache is not stale, we need to check whether the AUM from the
-            // oracle is close enough to the cached AUM (== the previously flushed deposit
-            // batch came through); if that is the case, we can make the FLUSHING -> IDLE
-            // transition and discard the cache.
-            let cached_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
-            let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
-            if target_aum - oracle_aum < allowed_deviation {
-                FSM.go_to(deps.storage, ContractState::Idle)?;
-                CACHED_ER.save(deps.storage, &None)?;
-                return Ok(vec![]);
-            }
-
-            // The previously flushed deposit didn't come through yet, but the cache is
-            // not stale either; no issue here, we keep using the cached AUM.
-            Ok(vec![])
-        }
-        ContractState::Withdrawing => {
-            // If we are in a withdrawing state, there has to be a withdrawing batch
-            let withdrawing_batch = WITHDRAWING_BATCH
-                .load(deps.storage)?
-                .ok_or(ContractError::ProtocolInEmergency {})?;
-
-            // Calculate the collected amount
-            let current_collector_balance = deps
-                .querier
-                .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
-            let historical = withdrawing_batch.collector_historical_balance;
-            let collected = current_collector_balance.amount - historical;
-
-            // If the collected amount is less than accepted_withdrawable_percentage of requested => pause
-            let requested = withdrawing_batch.btc_requested;
-            let collected_dec =
-                Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
-            let requested_dec =
-                Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
-            let ratio = if requested_dec.is_zero() {
-                Decimal::one()
-            } else {
-                collected_dec / requested_dec
-            };
-
-            // We didn't collect the required amount yet, but the cache is not stale either;
-            // no issue here, we keep waiting.
-            if ratio < cfg.collected_tolerance {
-                return Ok(vec![]);
-            }
-
-            let mut msgs: Vec<CosmosMsg> = vec![];
-            if collected > requested {
-                let extra = collected - requested;
-                // send `extra` to treasury
-                let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
-                    to_address: cfg.treasury_address.to_string(),
-                    amount: vec![Coin {
-                        denom: cfg.deposit_denom.clone(),
-                        amount: Uint128::from(extra),
-                    }],
-                });
-                msgs.push(send_msg);
-            }
-
-            let finalized_batch = Batch {
-                batch_id: withdrawing_batch.batch_id,
-                btc_requested: withdrawing_batch.btc_requested,
-                maxbtc_burned: withdrawing_batch.maxbtc_burned,
-                collected_amount: collected,
-                paid_amount: Uint128::zero(),
-                collector_historical_balance: withdrawing_batch.collector_historical_balance,
-            };
-
-            // Clear the WITHDRAWING_BATCH, clear cache, transition state
-            CACHED_ER.save(deps.storage, &None)?;
-            WITHDRAWING_BATCH.save(deps.storage, &None)?;
-
-            // Save the new finalized batch to finalized map
-            FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
-            FSM.go_to(deps.storage, ContractState::Idle)?;
-
-            Ok(vec![])
-        }
+        ContractState::Flushing => _process_cache_flushing(deps, cfg, cached_er),
+        ContractState::Withdrawing => _process_cache_withdrawing(deps, cfg),
     }
+}
+
+fn _process_cache_flushing(
+    deps: DepsMut,
+    cfg: &Config,
+    cached_er: CachedER,
+) -> Result<Vec<CosmosMsg>, ContractError> {
+    let oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
+
+    // If we are flushing, cached_aum must be present
+    let target_aum = cached_er
+        .target_aum
+        .ok_or(ContractError::ProtocolInEmergency {})?;
+
+    // If the oracle-provided AUM is greater than what we expected, last deposit
+    // definitely came through, we can make the FLUSHING -> IDLE transition and
+    // discard the cache.
+    if oracle_aum > target_aum {
+        FSM.go_to(deps.storage, ContractState::Idle)?;
+        CACHED_ER.save(deps.storage, &None)?;
+        return Ok(vec![]);
+    }
+
+    // If the cache is not stale, we need to check whether the AUM from the
+    // oracle is close enough to the cached AUM (== the previously flushed deposit
+    // batch came through); if that is the case, we can make the FLUSHING -> IDLE
+    // transition and discard the cache.
+    let cached_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
+    let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
+    if target_aum - oracle_aum < allowed_deviation {
+        FSM.go_to(deps.storage, ContractState::Idle)?;
+        CACHED_ER.save(deps.storage, &None)?;
+        return Ok(vec![]);
+    }
+
+    // The previously flushed deposit didn't come through yet, but the cache is
+    // not stale either; no issue here, we keep using the cached AUM.
+    Ok(vec![])
+}
+
+fn _process_cache_withdrawing(
+    deps: DepsMut,
+    cfg: &Config,
+) -> Result<Vec<CosmosMsg>, ContractError> {
+    // If we are in a withdrawing state, there has to be a withdrawing batch
+    let withdrawing_batch = WITHDRAWING_BATCH
+        .load(deps.storage)?
+        .ok_or(ContractError::ProtocolInEmergency {})?;
+
+    // Calculate the collected amount
+    let current_collector_balance = deps
+        .querier
+        .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
+    let historical = withdrawing_batch.collector_historical_balance;
+    let collected = current_collector_balance.amount - historical;
+
+    // If the collected amount is less than accepted_withdrawable_percentage of requested => pause
+    let requested = withdrawing_batch.btc_requested;
+    let collected_dec = Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
+    let requested_dec = Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
+    let ratio = if requested_dec.is_zero() {
+        Decimal::one()
+    } else {
+        collected_dec / requested_dec
+    };
+
+    // We didn't collect the required amount yet, but the cache is not stale either;
+    // no issue here, we keep waiting.
+    if ratio < cfg.collected_tolerance {
+        return Ok(vec![]);
+    }
+
+    let mut msgs: Vec<CosmosMsg> = vec![];
+    if collected > requested {
+        let extra = collected - requested;
+        // send `extra` to treasury
+        let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.treasury_address.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom.clone(),
+                amount: Uint128::from(extra),
+            }],
+        });
+        msgs.push(send_msg);
+    }
+
+    let finalized_batch = Batch {
+        batch_id: withdrawing_batch.batch_id,
+        btc_requested: withdrawing_batch.btc_requested,
+        maxbtc_burned: withdrawing_batch.maxbtc_burned,
+        collected_amount: collected,
+        paid_amount: Uint128::zero(),
+        collector_historical_balance: withdrawing_batch.collector_historical_balance,
+    };
+
+    // Clear the WITHDRAWING_BATCH, clear cache, transition state
+    CACHED_ER.save(deps.storage, &None)?;
+    WITHDRAWING_BATCH.save(deps.storage, &None)?;
+
+    // Save the new finalized batch to finalized map
+    FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
+    FSM.go_to(deps.storage, ContractState::Idle)?;
+
+    Ok(vec![])
 }
 
 // - Make the collected_tolerance and cached_aum_tolerance logic the same
