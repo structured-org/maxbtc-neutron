@@ -70,7 +70,7 @@ pub struct Batch {
 
 #[cw_serde]
 pub struct CachedER {
-    pub aum: Option<Uint128>,
+    pub target_aum: Option<Uint128>,
     pub er: Decimal,
     pub timeout: u64,
 }

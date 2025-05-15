@@ -239,7 +239,7 @@ fn execute_flush_deposits(
     CACHED_ER.save(
         deps.storage,
         &Some(CachedER {
-            aum: Some(oracle_aum + deposit_buffer.amount),
+            target_aum: Some(oracle_aum + deposit_buffer.amount),
             er,
             timeout: now + cfg.cached_aum_ttl,
         }),
@@ -455,7 +455,7 @@ fn execute_process_active_batch(
     CACHED_ER.save(
         deps.storage,
         &Some(CachedER {
-            aum: None,
+            target_aum: None,
             er: er.clone(),
             timeout: now + cfg.cached_aum_ttl,
         }),
@@ -747,12 +747,12 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
         }
         ContractState::Flushing => {
             // If we are flushing, cached_aum must be present
-            let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;
+            let target_aum = cached_er.target_aum.ok_or(ContractError::ProtocolInEmergency {})?;
 
             // If the oracle-provided AUM is greater than what we expected, last deposit
             // definitely came through, we can make the FLUSHING -> IDLE transition and
             // discard the cache.
-            if oracle_aum > cached_aum {
+            if oracle_aum > target_aum {
                 FSM.go_to(deps.storage, ContractState::Idle)?;
                 CACHED_ER.save(deps.storage, &None)?;
                 return Ok(vec![]);
@@ -762,9 +762,9 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
             // oracle is close enough to the cached AUM (== the previously flushed deposit
             // batch came through); if that is the case, we can make the FLUSHING -> IDLE
             // transition and discard the cache.
-            let cached_aum_dec = Decimal::from_atomics(cached_aum, cfg.deposit_decimals)?;
+            let cached_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
             let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
-            if cached_aum - oracle_aum < allowed_deviation {
+            if target_aum - oracle_aum < allowed_deviation {
                 FSM.go_to(deps.storage, ContractState::Idle)?;
                 CACHED_ER.save(deps.storage, &None)?;
                 return Ok(vec![]);
@@ -841,7 +841,5 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
     }
 }
 
-// - Set the caches
 // - Make the collected_tolerance and cached_aum_tolerance logic the same
 // - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?
-// - aum_from_buffer == ( old_aum_from_buffer + deposit_buffer)
