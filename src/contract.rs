@@ -45,7 +45,7 @@ pub fn instantiate(
         collected_tolerance: msg.accepted_withdrawable_percentage,
         liquidation_buffer_share: msg.liquidation_buffer_share,
         deposit_fee: msg.deposit_fee,
-        cached_aum_tolerance: msg.cached_aum_tolerance,
+        target_aum_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_aum_ttl,
     };
     CONFIG.save(deps.storage, &cfg)?;
@@ -130,7 +130,7 @@ fn execute_deposit(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Validate funds
     if info.funds.is_empty() {
@@ -193,7 +193,7 @@ fn execute_flush_deposits(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
@@ -309,7 +309,7 @@ fn execute_withdraw(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Validate that we received some MaxBTC
     if info.funds.is_empty() {
@@ -375,7 +375,7 @@ fn execute_process_active_batch(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    let msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
+    let msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     let now = env.block.time.seconds();
     let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
@@ -484,7 +484,7 @@ fn execute_claim(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     if info.funds.len() != 1 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
@@ -726,7 +726,7 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     Ok(er)
 }
 
-fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
+fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
     let cached_er = CACHED_ER
         .load(deps.storage)?
@@ -773,9 +773,8 @@ fn _process_cache_flushing(
     // oracle is close enough to the cached AUM (== the previously flushed deposit
     // batch came through); if that is the case, we can make the FLUSHING -> IDLE
     // transition and discard the cache.
-    let cached_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
-    let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
-    if target_aum - oracle_aum < allowed_deviation {
+    let target_aum_dec = Decimal::from_atomics(target_aum, cfg.deposit_decimals)?;
+    if target_aum - oracle_aum < (target_aum_dec * cfg.target_aum_tolerance).atomics() {
         FSM.go_to(deps.storage, ContractState::Idle)?;
         CACHED_ER.save(deps.storage, &None)?;
         return Ok(vec![]);
@@ -800,27 +799,27 @@ fn _process_cache_withdrawing(
         .querier
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
     let historical = withdrawing_batch.collector_historical_balance;
-    let collected = current_collector_balance.amount - historical;
 
-    // If the collected amount is less than accepted_withdrawable_percentage of requested => pause
-    let requested = withdrawing_batch.btc_requested;
-    let collected_dec = Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
-    let requested_dec = Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
-    let ratio = if requested_dec.is_zero() {
-        Decimal::one()
-    } else {
-        collected_dec / requested_dec
-    };
+    // Historical balance can not be greater that current balance
+    if historical > current_collector_balance.amount {
+        return Err(ContractError::ProtocolInEmergency {});
+    }
+
+    let collected = current_collector_balance.amount - historical;
+    let requested_dec =
+        Decimal::from_atomics(withdrawing_batch.btc_requested, cfg.deposit_decimals)?;
 
     // We didn't collect the required amount yet, but the cache is not stale either;
     // no issue here, we keep waiting.
-    if ratio < cfg.collected_tolerance {
+    if withdrawing_batch.btc_requested - collected
+        > (requested_dec * cfg.collected_tolerance).atomics()
+    {
         return Ok(vec![]);
     }
 
     let mut msgs: Vec<CosmosMsg> = vec![];
-    if collected > requested {
-        let extra = collected - requested;
+    if collected > withdrawing_batch.btc_requested {
+        let extra = collected - withdrawing_batch.btc_requested;
         // send `extra` to treasury
         let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.treasury_address.to_string(),
@@ -852,5 +851,4 @@ fn _process_cache_withdrawing(
     Ok(vec![])
 }
 
-// - Make the collected_tolerance and cached_aum_tolerance logic the same
 // - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?

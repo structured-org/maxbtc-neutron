@@ -40,7 +40,7 @@ pub struct Config {
     pub deposit_fee: Decimal,
     /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
     /// TODO
-    pub cached_aum_tolerance: Decimal,
+    pub target_aum_tolerance: Decimal,
     /// TODO
     pub cached_er_ttl: u64,
 }
