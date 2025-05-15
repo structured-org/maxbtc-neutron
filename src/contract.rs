@@ -70,7 +70,8 @@ pub fn instantiate(
     let create_maxbtc_denom_msg =
         create_tokenfactory_create_denom_msg(env.clone(), cfg.maxbtc_denom.clone())?;
 
-    // TODO: initialise as IDLE
+    // Initialise the FSM in the Idle state
+    FSM.set_initial_state(deps.storage, ContractState::Idle)?;
 
     Ok(Response::new()
         .add_message(create_maxbtc_denom_msg)
@@ -193,28 +194,31 @@ fn execute_flush_deposits(
     }
     let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
-    // TODO: transition IDLE -> FLUSHING, should not be possible if already in FLUSHING or in WITHDRAWING
-
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
     if now < last_time + cfg.deposit_flush_period {
         // Not enough time has passed, do nothing
         return Ok(Response::new()
+            .add_messages(msgs)
             .add_attribute("action", "flush_deposits")
             .add_attribute("status", "not_enough_time_elapsed"));
     }
-    // Update flush timestamp
-    LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
 
     let mut contract_balance = deps
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
 
     if contract_balance.amount.is_zero() {
+        // There have been no deposits, set last flush time to now and wait for another
+        // cfg.deposit_flush_period
+        LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
+
         return Ok(Response::new()
             .add_attribute("action", "flush_deposits")
             .add_attribute("status", "zero_outstanding_deposits"));
     }
+
+    FSM.go_to(deps.storage, ContractState::Flushing)?;
 
     let aum = query_aum(&deps.as_ref(), &cfg)?;
 
@@ -391,7 +395,6 @@ fn execute_process_active_batch(
     )?;
     if total_redemption_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
-        ACTIVE_BATCH.save(deps.storage, &Some(active_batch))?;
         ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
         return Ok(Response::new()
@@ -400,7 +403,7 @@ fn execute_process_active_batch(
             .add_attribute("status", "no_withdraw_requests_found"));
     }
 
-    // TODO: transition IDLE -> WITHDRAWING, should not be possible if already in WITHDRAWING or in FLUSHING
+    FSM.go_to(deps.storage, ContractState::Withdrawing)?;
 
     let mut withdrawing_batch = Batch {
         batch_id: active_batch.batch_id,
@@ -724,7 +727,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     // definitely came through, we can make the FLUSHING -> IDLE transition and
                     // discard the cache.
                     if aum > cached_aum.aum {
-                        // TODO: transition FLUSHING -> IDLE
+                        FSM.go_to(deps.storage, ContractState::Idle)?;
                         CACHED_AUM.save(deps.storage, &None)?;
                         return Ok(vec![]);
                     }
@@ -737,7 +740,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                         Decimal::from_atomics(cached_aum.aum, cfg.deposit_decimals)?;
                     let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
                     if cached_aum.aum - aum < allowed_deviation {
-                        // TODO: transition FLUSHING -> IDLE
+                        FSM.go_to(deps.storage, ContractState::Idle)?;
                         CACHED_AUM.save(deps.storage, &None)?;
                         return Ok(vec![]);
                     }
@@ -810,7 +813,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                         finalized_batch.batch_id,
                         &finalized_batch,
                     )?;
-                    // TODO: transition WITHDRAWING -> IDLE
+                    FSM.go_to(deps.storage, ContractState::Idle)?;
 
                     Ok(vec![])
                 }
@@ -824,3 +827,4 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
 // - Implement actual state transitions outside of process_cache()
 // - Make the collected_tolerance and cached_aum_tolerance logic the same
 // - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?
+// - Process situation when there are no outstanding deposits
