@@ -3,7 +3,11 @@ use crate::msg::{
     AUMQueryMsg, BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg,
     QueryMsg,
 };
-use crate::state::{Batch, CachedAUM, Config, SystemState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER, CACHED_AUM, CONFIG, FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, SYSTEM_STATE, WITHDRAWING_BATCH, WITHDRAWING_BATCH_START_TIME};
+use crate::state::{
+    Batch, CachedAUM, Config, SystemState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER,
+    CACHED_AUM, CONFIG, FINALIZED_BATCHES, LAST_DEPOSIT_FLUSH_TIME, SYSTEM_STATE,
+    WITHDRAWING_BATCH,
+};
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QueryRequest, Response, StdResult, SupplyResponse, Uint128, WasmMsg,
@@ -46,12 +50,11 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &cfg)?;
 
-    SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+    // TODO: initialise as IDLE
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
     ACTIVE_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
-    WITHDRAWING_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
 
     // Create the first active batch
     let new_batch_id = 1u64;
@@ -125,7 +128,7 @@ fn execute_deposit(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-    process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Validate funds
     if info.funds.is_empty() {
@@ -163,10 +166,11 @@ fn execute_deposit(
             denom: cfg.maxbtc_denom.clone(),
         },
     )?;
+    msgs.push(mint_msg);
 
     // 5. Return a response
     Ok(Response::new()
-        .add_message(mint_msg)
+        .add_messages(msgs)
         .add_attribute("action", "deposit")
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", recipient)
@@ -187,8 +191,7 @@ fn execute_flush_deposits(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-
-    process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
@@ -221,8 +224,6 @@ fn execute_flush_deposits(
     let liquidation_current_balance = deps
         .querier
         .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
-
-    let mut msgs: Vec<CosmosMsg> = vec![];
 
     // If liquidation contract < required => send the difference
     if liquidation_current_balance.amount < required_buffer {
@@ -261,10 +262,13 @@ fn execute_flush_deposits(
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
     if !contract_balance.amount.is_zero() {
-        CACHED_AUM.save(deps.storage, &Some(CachedAUM{
-            aum: aum + contract_balance.amount,
-            timeout: now + cfg.cached_aum_ttl, // TODO: can we really re-use this value?
-        }))?;
+        CACHED_AUM.save(
+            deps.storage,
+            &Some(CachedAUM {
+                aum: aum + contract_balance.amount,
+                timeout: now + cfg.cached_aum_ttl,
+            }),
+        )?;
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.deposit_pump_contract.to_string(),
             amount: vec![contract_balance.clone()],
@@ -273,7 +277,7 @@ fn execute_flush_deposits(
     }
 
     // Change the system state to Flushing
-    SYSTEM_STATE.save(deps.storage, &SystemState::Flushing)?;
+    // TODO: transition IDLE -> FLUSHING
 
     let resp = Response::new()
         .add_messages(msgs)
@@ -286,13 +290,16 @@ fn execute_flush_deposits(
 }
 
 /// User requests to withdraw BTC and burn their maxBTC
-fn execute_withdraw(mut deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+fn execute_withdraw(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-
-    process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Validate that we received some MaxBTC
     if info.funds.is_empty() {
@@ -315,6 +322,7 @@ fn execute_withdraw(mut deps: DepsMut, env: Env, info: MessageInfo) -> Result<Re
     // Burn the maxBTC from user
     let burn_msg =
         create_tokenfactory_burn_msg(env.clone(), amount.clone(), info.sender.to_string())?;
+    msgs.push(burn_msg);
 
     // Mint redemption tokens for the current active batch
     let active_opt = ACTIVE_BATCH.load(deps.storage)?;
@@ -336,7 +344,7 @@ fn execute_withdraw(mut deps: DepsMut, env: Env, info: MessageInfo) -> Result<Re
     )?;
 
     let resp = Response::new()
-        .add_message(burn_msg)
+        .add_messages(msgs)
         .add_message(mint_redemption_msg)
         .add_attribute("action", "withdraw")
         .add_attribute("sender", info.sender)
@@ -356,8 +364,7 @@ fn execute_process_active_batch(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-
-    process_cache(deps.branch(), env.clone(), &cfg)?;
+    let msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
     let now = env.block.time.seconds();
     let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
@@ -425,7 +432,6 @@ fn execute_process_active_batch(
 
     // Save it in WITHDRAWING_BATCH
     WITHDRAWING_BATCH.save(deps.storage, &Some(withdrawing_batch.clone()))?;
-    WITHDRAWING_BATCH_START_TIME.save(deps.storage, &now)?;
 
     // Create a new ACTIVE batch
     let mut batch_id_counter = BATCH_ID_COUNTER.load(deps.storage)?;
@@ -442,6 +448,7 @@ fn execute_process_active_batch(
     ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
     let resp = Response::new()
+        .add_messages(msgs)
         .add_attribute("action", "process_active_batch")
         .add_attribute("sender", info.sender)
         .add_attribute(
@@ -463,8 +470,7 @@ fn execute_claim(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
-
-    process_cache(deps.branch(), env.clone(), &cfg)?;
+    let mut msgs = process_cache(deps.branch(), env.clone(), &cfg)?;
 
     if info.funds.len() != 1 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
@@ -494,8 +500,6 @@ fn execute_claim(
     )?;
     let user_btc_dec = available_dec * fraction;
     let user_btc = user_btc_dec.atomics();
-
-    let mut msgs: Vec<CosmosMsg> = vec![];
 
     // Send the user’s BTC to `recipient` address
     let send_msg = CosmosMsg::Bank(BankMsg::Send {
@@ -677,10 +681,8 @@ fn get_batch_id_from_redemption_coin(
 fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
     let mut aum = query_aum(deps, &cfg)?;
     match CACHED_AUM.load(deps.storage)? {
-        Some(cached_aum) => {
-            aum = cached_aum.aum
-        }
-        None() => {}
+        Some(cached_aum) => aum = cached_aum.aum,
+        None => {}
     }
 
     let maxbtc_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
@@ -693,7 +695,7 @@ fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError
     Ok(er)
 }
 
-fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg>), ContractError> {
+fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     let aum = query_aum(&deps.as_ref(), &cfg)?;
     let maybe_cached_aum = CACHED_AUM.load(deps.storage)?;
 
@@ -716,7 +718,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
                     // definitely came through, we can make the FLUSHING -> IDLE transition and
                     // discard the cache.
                     if aum > cached_aum.aum {
-                        SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+                        // TODO: transition FLUSHING -> IDLE
                         CACHED_AUM.save(deps.storage, &None)?;
                         return Ok(vec![]);
                     }
@@ -729,7 +731,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
                         Decimal::from_atomics(cached_aum.aum, cfg.deposit_decimals)?;
                     let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
                     if cached_aum.aum - aum < allowed_deviation {
-                        SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+                        // TODO: transition FLUSHING -> IDLE
                         CACHED_AUM.save(deps.storage, &None)?;
                     }
 
@@ -739,7 +741,9 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
                 }
                 SystemState::Withdrawing => {
                     // If we are in a withdrawing state, there has to be a withdrawing batch
-                    let withdrawing_batch = WITHDRAWING_BATCH.load(deps.storage)?.ok_or(Err(ContractError::ProtocolInEmergency {}))?;
+                    let withdrawing_batch = WITHDRAWING_BATCH
+                        .load(deps.storage)?
+                        .ok_or(ContractError::ProtocolInEmergency {})?;
 
                     // Calculate the collected amount
                     let current_collector_balance = deps
@@ -750,8 +754,10 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
 
                     // If the collected amount is less than accepted_withdrawable_percentage of requested => pause
                     let requested = withdrawing_batch.btc_requested;
-                    let collected_dec = Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
-                    let requested_dec = Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
+                    let collected_dec =
+                        Decimal::from_atomics(Uint128::from(collected), cfg.deposit_decimals)?;
+                    let requested_dec =
+                        Decimal::from_atomics(Uint128::from(requested), cfg.deposit_decimals)?;
                     let ratio = if requested_dec.is_zero() {
                         Decimal::one()
                     } else {
@@ -761,7 +767,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
                     // We didn't collect the required amount yet, but the cache is not stale either;
                     // no issue here, we keep waiting.
                     if ratio < cfg.collected_tolerance {
-                        return Ok(vec![])
+                        return Ok(vec![]);
                     }
 
                     let mut msgs: Vec<CosmosMsg> = vec![];
@@ -783,26 +789,31 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<(Vec<CosmosMsg
                         btc_requested: withdrawing_batch.btc_requested,
                         collected_amount: collected,
                         paid_amount: Uint128::zero(),
-                        collector_historical_balance: withdrawing_batch.collector_historical_balance,
+                        collector_historical_balance: withdrawing_batch
+                            .collector_historical_balance,
                     };
-
-                    // Save the new finalized batch to finalized map
-                    FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
 
                     // Clear the WITHDRAWING_BATCH, clear cache, transition state
                     CACHED_AUM.save(deps.storage, &None)?;
                     WITHDRAWING_BATCH.save(deps.storage, &None)?;
-                    SYSTEM_STATE.save(deps.storage, &SystemState::Idle)?;
+
+                    // Save the new finalized batch to finalized map
+                    FINALIZED_BATCHES.save(
+                        deps.storage,
+                        finalized_batch.batch_id,
+                        &finalized_batch,
+                    )?;
+                    // TODO: transition WITHDRAWING -> IDLE
 
                     Ok(vec![])
-                },
+                }
             }
         }
         None => Ok(vec![]),
     }
 }
 
-// - Process the messages returned by the process_cache() fn
+// - Set the caches
 // - Implement actual state transitions outside of process_cache()
 // - Make the collected_tolerance and cached_aum_tolerance logic the same
 // - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?
