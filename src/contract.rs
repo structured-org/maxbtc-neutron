@@ -4,8 +4,8 @@ use crate::msg::{
     QueryMsg,
 };
 use crate::state::{
-    Batch, CachedAUM, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
-    BATCH_ID_COUNTER, CACHED_AUM, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
+    Batch, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
+    BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
     WITHDRAWING_BATCH,
 };
 use cosmwasm_std::{
@@ -59,6 +59,7 @@ pub fn instantiate(
     let new_batch = Batch {
         batch_id: new_batch_id,
         btc_requested: Uint128::zero(),
+        maxbtc_burned: Default::default(),
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
@@ -150,7 +151,7 @@ fn execute_deposit(
     }
 
     // Get the exchange rate
-    let er = get_exchange_rate(&deps.as_ref(), &cfg.clone())?;
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
 
     // Adjust for deposit fee
     let fee_multiplier = Decimal::one() - cfg.deposit_fee;
@@ -204,11 +205,11 @@ fn execute_flush_deposits(
             .add_attribute("status", "not_enough_time_elapsed"));
     }
 
-    let mut contract_balance = deps
+    let mut deposit_buffer = deps
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
 
-    if contract_balance.amount.is_zero() {
+    if deposit_buffer.amount.is_zero() {
         // There have been no deposits, set last flush time to now and wait for another
         // cfg.deposit_flush_period
         LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
@@ -220,7 +221,7 @@ fn execute_flush_deposits(
 
     FSM.go_to(deps.storage, ContractState::Flushing)?;
 
-    let aum = query_aum(&deps.as_ref(), &cfg)?;
+    let aum = query_aum_contract(&deps.as_ref(), &cfg)?;
 
     // The "liquidation buffer" we want is liquidation_buffer_share * aum
     let required_buffer = (Decimal::from_atomics(aum, cfg.deposit_decimals)?
@@ -235,10 +236,11 @@ fn execute_flush_deposits(
     // TODO: implement properly, after discussion with Kai. Not clear how to count this.
     // Cache the full AUM that we know of: AUM from the oracle + the current deposits buffer +
     // the liquidation contract balance.
-    CACHED_AUM.save(
+    CACHED_ER.save(
         deps.storage,
-        &Some(CachedAUM {
-            aum: aum + contract_balance.amount + liquidation_contract_balance.amount.clone(),
+        &Some(CachedER {
+            aum: aum + deposit_buffer.amount + liquidation_contract_balance.amount.clone(),
+            er: Default::default(), // TODO: calculate
             timeout: now + cfg.cached_aum_ttl,
         }),
     )?;
@@ -247,8 +249,8 @@ fn execute_flush_deposits(
     if liquidation_contract_balance.amount < required_buffer {
         let mut to_send = required_buffer - liquidation_contract_balance.amount;
         // We are allowed to exhaust the deposit buffer completely.
-        if to_send > contract_balance.amount {
-            to_send = contract_balance.amount
+        if to_send > deposit_buffer.amount {
+            to_send = deposit_buffer.amount
         }
         // We do a bank send of the deposit_denom from this contract to the liquidation contract
         let msg = CosmosMsg::Bank(BankMsg::Send {
@@ -259,7 +261,7 @@ fn execute_flush_deposits(
             }],
         });
         msgs.push(msg);
-        contract_balance.amount -= to_send;
+        deposit_buffer.amount -= to_send;
     } else {
         // If liquidation contract > required => call liquidation contract's method to send back the difference
         let to_recv = Coin {
@@ -273,16 +275,16 @@ fn execute_flush_deposits(
                 to_recv.clone(),
             )?;
             msgs.push(msg);
-            contract_balance.amount += to_recv.amount;
+            deposit_buffer.amount += to_recv.amount;
         }
     }
 
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
-    if !contract_balance.amount.is_zero() {
+    if !deposit_buffer.amount.is_zero() {
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.deposit_pump_contract.to_string(),
-            amount: vec![contract_balance.clone()],
+            amount: vec![deposit_buffer.clone()],
         });
         msgs.push(msg);
     }
@@ -292,7 +294,7 @@ fn execute_flush_deposits(
         .add_attribute("action", "flush_deposits")
         .add_attribute("sender", info.sender)
         .add_attribute("liquidation_buffer", required_buffer.to_string())
-        .add_attribute("contract_balance", contract_balance.to_string());
+        .add_attribute("contract_balance", deposit_buffer.to_string());
 
     Ok(resp)
 }
@@ -332,14 +334,15 @@ fn execute_withdraw(
         create_tokenfactory_burn_msg(env.clone(), amount.clone(), info.sender.to_string())?;
     msgs.push(burn_msg);
 
-    // Mint redemption tokens for the current active batch
-    let active_opt = ACTIVE_BATCH.load(deps.storage)?;
-    let active_batch = active_opt.ok_or(ContractError::BatchStateError {})?;
+    // Update the maxbtc_burned amount in the active batch
+    let mut active_batch = ACTIVE_BATCH
+        .load(deps.storage)?
+        .ok_or(ContractError::BatchStateError {})?;
+    active_batch.maxbtc_burned += amount.amount;
+    ACTIVE_BATCH.save(deps.storage, &Some(active_batch.clone()))?;
 
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = amount.amount;
-    ACTIVE_BATCH.save(deps.storage, &Some(active_batch.clone()))?;
-
     // Construct a message to mint redemption tokens
     let redemption_denom = format!("redemption/batch/{}", active_batch.batch_id);
     let mint_redemption_msg = create_tokenfactory_mint_msg(
@@ -408,6 +411,7 @@ fn execute_process_active_batch(
     let mut withdrawing_batch = Batch {
         batch_id: active_batch.batch_id,
         btc_requested: Uint128::zero(),
+        maxbtc_burned: active_batch.maxbtc_burned,
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
@@ -419,8 +423,8 @@ fn execute_process_active_batch(
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
     withdrawing_batch.collector_historical_balance = collector_balance.amount;
 
-    // Get the exchange rate (no deposit fee)
-    let er = get_exchange_rate(&deps.as_ref(), &cfg.clone())?;
+    // Get the exchange rate
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
 
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
@@ -437,6 +441,7 @@ fn execute_process_active_batch(
     let new_active_batch = Batch {
         batch_id: batch_id_counter,
         btc_requested: Uint128::zero(),
+        maxbtc_burned: withdrawing_batch.maxbtc_burned,
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
@@ -601,7 +606,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
 
 /// Query the AUM contract for the current BTC-denominated AUM.
 /// In practice, you'd call `AUMContract::GetAumInBtc {}` or something similar.
-fn query_aum(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
+fn query_aum_contract(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
     deps.querier
         .query_wasm_smart(cfg.aum_contract.to_string(), &AUMQueryMsg::GetAUM {})
 }
@@ -687,26 +692,43 @@ fn get_batch_id_from_redemption_coin(
     Ok(batch_id)
 }
 
-fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
-    let mut aum = query_aum(deps, &cfg)?;
-    match CACHED_AUM.load(deps.storage)? {
-        Some(cached_aum) => aum = cached_aum.aum,
-        None => {}
+fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, ContractError> {
+    // If there is a cached exchange rate, return it
+    if let Some(cached_er) = CACHED_ER.load(deps.storage)? {
+        return Ok(cached_er.er);
     }
 
+    // Calculate the ER as:
+    // (AUM received from oracle + deposits buffer + liquidation contract balance)
+    //  /
+    // (maxBTC total supply + maxBTC burned in current active withdrawal batch)
+    let oracle_aum = query_aum_contract(deps, &cfg)?;
+    let deposit_buffer = deps
+        .querier
+        .query_balance(env.contract.address, &cfg.deposit_denom)?;
+    let liquidation_buffer = deps
+        .querier
+        .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
+    let er_numerator = oracle_aum + deposit_buffer.amount + liquidation_buffer.amount;
+
     let maxbtc_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
-    let er = if maxbtc_supply.is_zero() {
+    let active_batch = ACTIVE_BATCH
+        .load(deps.storage)?
+        .ok_or(ContractError::BatchStateError {})?;
+    let er_denominator = maxbtc_supply + active_batch.btc_requested;
+
+    let er = if er_denominator.is_zero() {
         Decimal::one()
     } else {
-        Decimal::from_ratio(aum, maxbtc_supply)
+        Decimal::from_ratio(er_numerator, er_denominator)
     };
 
     Ok(er)
 }
 
 fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
-    let aum = query_aum(&deps.as_ref(), &cfg)?;
-    let maybe_cached_aum = CACHED_AUM.load(deps.storage)?;
+    let aum = query_aum_contract(&deps.as_ref(), &cfg)?;
+    let maybe_cached_aum = CACHED_ER.load(deps.storage)?;
 
     match maybe_cached_aum {
         Some(cached_aum) => {
@@ -728,7 +750,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     // discard the cache.
                     if aum > cached_aum.aum {
                         FSM.go_to(deps.storage, ContractState::Idle)?;
-                        CACHED_AUM.save(deps.storage, &None)?;
+                        CACHED_ER.save(deps.storage, &None)?;
                         return Ok(vec![]);
                     }
 
@@ -741,7 +763,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     let allowed_deviation = (cached_aum_dec * cfg.cached_aum_tolerance).atomics();
                     if cached_aum.aum - aum < allowed_deviation {
                         FSM.go_to(deps.storage, ContractState::Idle)?;
-                        CACHED_AUM.save(deps.storage, &None)?;
+                        CACHED_ER.save(deps.storage, &None)?;
                         return Ok(vec![]);
                     }
 
@@ -797,6 +819,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     let finalized_batch = Batch {
                         batch_id: withdrawing_batch.batch_id,
                         btc_requested: withdrawing_batch.btc_requested,
+                        maxbtc_burned: withdrawing_batch.maxbtc_burned,
                         collected_amount: collected,
                         paid_amount: Uint128::zero(),
                         collector_historical_balance: withdrawing_batch
@@ -804,7 +827,7 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
                     };
 
                     // Clear the WITHDRAWING_BATCH, clear cache, transition state
-                    CACHED_AUM.save(deps.storage, &None)?;
+                    CACHED_ER.save(deps.storage, &None)?;
                     WITHDRAWING_BATCH.save(deps.storage, &None)?;
 
                     // Save the new finalized batch to finalized map
@@ -824,7 +847,5 @@ fn process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>
 }
 
 // - Set the caches
-// - Implement actual state transitions outside of process_cache()
 // - Make the collected_tolerance and cached_aum_tolerance logic the same
 // - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?
-// - Process situation when there are no outstanding deposits

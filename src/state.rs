@@ -58,6 +58,8 @@ pub struct Batch {
     pub batch_id: u64,
     /// If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
     pub btc_requested: Uint128,
+    /// The amount of maxBTC burned for this batch
+    pub maxbtc_burned: Uint128,
     /// If in FINALIZED state, how much BTC was actually collected?
     pub collected_amount: Uint128,
     /// If in FINALIZED state, how much BTC was already paid to users?
@@ -67,8 +69,9 @@ pub struct Batch {
 }
 
 #[cw_serde]
-pub struct CachedAUM {
+pub struct CachedER {
     pub aum: Uint128,
+    pub er: Decimal,
     pub timeout: u64,
 }
 
@@ -126,4 +129,4 @@ pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_tim
 
 /// Cached assets under management value. Can be set when we trigger a deposits flush
 /// and when we move a batch to the WITHDRAWING state.
-pub const CACHED_AUM: Item<Option<CachedAUM>> = Item::new("cached_aum");
+pub const CACHED_ER: Item<Option<CachedER>> = Item::new("cached_aum");
