@@ -743,7 +743,7 @@ fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg
     let fsm_state = FSM.get_current_state(deps.storage)?;
     match fsm_state {
         ContractState::Idle => {
-            // If the protocol is in idle state, we can not have a cached AUM
+            // If the protocol is in idle state, we can not have a cached ER
             Err(ContractError::ProtocolInEmergency {})
         }
         ContractState::Flushing => _process_cache_flushing(deps, cfg, cached_er),
@@ -756,28 +756,26 @@ fn _process_cache_flushing(
     cfg: &Config,
     cached_er: CachedER,
 ) -> Result<Vec<CosmosMsg>, ContractError> {
-    let oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
+    let current_oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
 
     // If we are flushing, cached_aum must be present
     let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;
+    let historical_oracle_aum = cached_aum.oracle_aum;
 
-    // TODO: this is, strictly speaking, not an emergency, because it can occur naturally?
-    if oracle_aum < cached_aum.oracle_aum {
+    // TODO: this is, strictly speaking, not an emergency (can occur naturally, right?)
+    if current_oracle_aum < historical_oracle_aum {
         return Err(ContractError::ProtocolInEmergency {});
     }
 
     // If the cache is not stale, we need to check whether the amount that reached Binance / Solana
     // is close enough to the previously flushed deposit buffer; if that is the case, we can make
     // the FLUSHING -> IDLE transition and discard the cache.
-    // Note: if the oracle-provided AUM is greater than what we expected, last deposit
-    // definitely came through, we can make the FLUSHING -> IDLE transition and
-    // discard the cache.
-    let received = oracle_aum - cached_aum.oracle_aum;
+    let successfully_flushed = current_oracle_aum - historical_oracle_aum;
     let cached_deposit_buffer_dec =
         Decimal::from_atomics(cached_aum.deposit_buffer, cfg.deposit_decimals)?;
     let accepted_diff = (cached_deposit_buffer_dec * cfg.deposit_buffer_tolerance).atomics();
-    if received > cached_aum.deposit_buffer
-        || (cached_aum.deposit_buffer - received) < accepted_diff
+    if successfully_flushed > cached_aum.deposit_buffer
+        || (cached_aum.deposit_buffer - successfully_flushed) < accepted_diff
     {
         FSM.go_to(deps.storage, ContractState::Idle)?;
         CACHED_ER.save(deps.storage, &None)?;
@@ -792,6 +790,8 @@ fn _process_cache_withdrawing(
     deps: DepsMut,
     cfg: &Config,
 ) -> Result<Vec<CosmosMsg>, ContractError> {
+    let mut msgs: Vec<CosmosMsg> = vec![];
+
     // If we are in a withdrawing state, there has to be a withdrawing batch
     let withdrawing_batch = WITHDRAWING_BATCH
         .load(deps.storage)?
@@ -801,57 +801,50 @@ fn _process_cache_withdrawing(
     let current_collector_balance = deps
         .querier
         .query_balance(&cfg.collector_contract, &cfg.deposit_denom)?;
-    let historical = withdrawing_batch.collector_historical_balance;
+    let historical_collector_balance = withdrawing_batch.collector_historical_balance;
 
     // Historical balance can not be greater that current balance
-    if historical > current_collector_balance.amount {
+    if current_collector_balance.amount < historical_collector_balance {
         return Err(ContractError::ProtocolInEmergency {});
     }
 
-    let collected = current_collector_balance.amount - historical;
+    let collected = current_collector_balance.amount - historical_collector_balance;
     let requested_dec =
         Decimal::from_atomics(withdrawing_batch.btc_requested, cfg.deposit_decimals)?;
+    let accepted_diff = (requested_dec * cfg.collected_tolerance).atomics();
 
-    // We didn't collect the required amount yet, but the cache is not stale either;
-    // no issue here, we keep waiting.
-    if withdrawing_batch.btc_requested - collected
-        > (requested_dec * cfg.collected_tolerance).atomics()
+    // If we collected more than requested, or within the `accepted_diff` less than requested,
+    // finalize the batch and transition WITHDRAWING -> IDLE.
+    if collected > withdrawing_batch.btc_requested
+        || withdrawing_batch.btc_requested - collected > accepted_diff
     {
-        return Ok(vec![]);
+        if collected > withdrawing_batch.btc_requested {
+            let extra = collected - withdrawing_batch.btc_requested;
+            // Send `extra` to treasury
+            let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
+                to_address: cfg.treasury_address.to_string(),
+                amount: vec![Coin {
+                    denom: cfg.deposit_denom.clone(),
+                    amount: Uint128::from(extra),
+                }],
+            });
+            msgs.push(send_msg);
+        }
+
+        let finalized_batch = Batch {
+            batch_id: withdrawing_batch.batch_id,
+            btc_requested: withdrawing_batch.btc_requested,
+            maxbtc_burned: withdrawing_batch.maxbtc_burned,
+            collected_amount: collected,
+            paid_amount: Uint128::zero(),
+            collector_historical_balance: withdrawing_batch.collector_historical_balance,
+        };
+
+        FSM.go_to(deps.storage, ContractState::Idle)?;
+        CACHED_ER.save(deps.storage, &None)?;
+        WITHDRAWING_BATCH.save(deps.storage, &None)?;
+        FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
     }
 
-    let mut msgs: Vec<CosmosMsg> = vec![];
-    if collected > withdrawing_batch.btc_requested {
-        let extra = collected - withdrawing_batch.btc_requested;
-        // send `extra` to treasury
-        let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
-            to_address: cfg.treasury_address.to_string(),
-            amount: vec![Coin {
-                denom: cfg.deposit_denom.clone(),
-                amount: Uint128::from(extra),
-            }],
-        });
-        msgs.push(send_msg);
-    }
-
-    let finalized_batch = Batch {
-        batch_id: withdrawing_batch.batch_id,
-        btc_requested: withdrawing_batch.btc_requested,
-        maxbtc_burned: withdrawing_batch.maxbtc_burned,
-        collected_amount: collected,
-        paid_amount: Uint128::zero(),
-        collector_historical_balance: withdrawing_batch.collector_historical_balance,
-    };
-
-    // Clear the WITHDRAWING_BATCH, clear cache, transition state
-    CACHED_ER.save(deps.storage, &None)?;
-    WITHDRAWING_BATCH.save(deps.storage, &None)?;
-
-    // Save the new finalized batch to finalized map
-    FINALIZED_BATCHES.save(deps.storage, finalized_batch.batch_id, &finalized_batch)?;
-    FSM.go_to(deps.storage, ContractState::Idle)?;
-
-    Ok(vec![])
+    Ok(msgs)
 }
-
-// - Can the protocol get stuck because we first check for stale cache? Maybe it's ok, but how do we "unstuck" it?
