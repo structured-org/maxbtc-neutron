@@ -1,5 +1,5 @@
 [package]
-name = "maxbtc-neutron"
+name = "maxbtc-neutron-core"
 version = "0.1.0"
 authors = ["Andrei Zavgorodnii <andrei.z@hadronlabs.org>"]
 edition = "2021"
