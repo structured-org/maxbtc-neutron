@@ -45,6 +45,8 @@ pub struct Config {
     pub cached_er_ttl: u64,
     /// TODO
     pub deposits_cap: Option<Uint128>,
+    /// TODO
+    pub deposits_allowlist: Option<Vec<Addr>>,
 }
 
 impl Config {

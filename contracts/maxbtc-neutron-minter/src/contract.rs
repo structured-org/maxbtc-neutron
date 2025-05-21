@@ -48,6 +48,14 @@ pub fn instantiate(
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_aum_ttl,
         deposits_cap: msg.deposits_cap,
+        deposits_allowlist: msg
+            .deposits_allowlist
+            .map(|v| {
+                v.into_iter()
+                    .map(|s| deps.api.addr_validate(&s))
+                    .collect::<StdResult<_>>()
+            })
+            .transpose()?,
     };
     CONFIG.save(deps.storage, &cfg)?;
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
@@ -134,6 +142,8 @@ fn execute_deposit(
 
     // We can't deposit if the total AUM are greater than the cap.
     check_deposit_cap(&deps.as_ref(), env.clone(), &cfg)?;
+    // We can't deposit if the recipient address is not allowlisted.
+    check_deposits_allowlist(&deps.as_ref(), &cfg, recipient.clone())?;
 
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
@@ -755,6 +765,25 @@ fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), Contract
     Ok(())
 }
 
+fn check_deposits_allowlist(
+    deps: &Deps,
+    cfg: &Config,
+    recipient: String,
+) -> Result<(), ContractError> {
+    let recipient = deps.api.addr_validate(&recipient)?;
+    if let Some(allowlist) = cfg.deposits_allowlist.clone() {
+        for addr in allowlist {
+            if addr == recipient {
+                return Ok(());
+            }
+        }
+
+        return Err(ContractError::Unauthorized {});
+    }
+
+    Ok(())
+}
+
 /// Orchestrates completion of long-running, multi-block operations by
 /// “draining” the cached exchange-rate (ER) object and driving the contract’s
 /// finite-state machine (FSM) back to `Idle`.
@@ -768,11 +797,6 @@ fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), Contract
 ///
 /// `_process_cache` must be called at the start of every externally-facing
 /// entry-point that can mutate balances / state.
-///
-/// # Side-effects
-/// May mutate `FSM`, `CACHED_ER`, `WITHDRAWING_BATCH` and
-/// `FINALIZED_BATCHES`.  Never touches user balances directly; it only queues
-/// messages for later execution.
 fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
     let cached_er = CACHED_ER

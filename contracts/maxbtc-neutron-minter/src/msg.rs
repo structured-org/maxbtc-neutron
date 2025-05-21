@@ -35,6 +35,8 @@ pub struct InstantiateMsg {
     pub cached_aum_ttl: u64,
     /// TODO
     pub deposits_cap: Option<Uint128>,
+    /// TODO
+    pub deposits_allowlist: Option<Vec<String>>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
