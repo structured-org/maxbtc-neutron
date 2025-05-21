@@ -43,6 +43,8 @@ pub struct Config {
     pub deposit_buffer_tolerance: Decimal,
     /// TODO
     pub cached_er_ttl: u64,
+    /// TODO
+    pub deposits_cap: Option<Uint128>,
 }
 
 impl Config {

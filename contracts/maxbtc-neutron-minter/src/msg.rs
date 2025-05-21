@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal};
+use cosmwasm_std::{Coin, Decimal, Uint128};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -33,6 +33,8 @@ pub struct InstantiateMsg {
     pub cached_aum_tolerance: Decimal,
     /// TODO
     pub cached_aum_ttl: u64,
+    /// TODO
+    pub deposits_cap: Option<Uint128>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.

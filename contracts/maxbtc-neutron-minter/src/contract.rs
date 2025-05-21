@@ -47,6 +47,7 @@ pub fn instantiate(
         deposit_fee: msg.deposit_fee,
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_aum_ttl,
+        deposits_cap: msg.deposits_cap,
     };
     CONFIG.save(deps.storage, &cfg)?;
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
@@ -130,6 +131,10 @@ fn execute_deposit(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    // We can't deposit if the total AUM are greater than the cap.
+    check_deposit_cap(&deps.as_ref(), env.clone(), &cfg)?;
+
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Validate funds
@@ -705,14 +710,13 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     // (AUM received from oracle + deposits buffer + liquidation contract balance)
     //  /
     // (maxBTC total supply + maxBTC burned in current active withdrawal batch)
-    let oracle_aum = query_aum_contract(deps, &cfg)?;
-    let deposit_buffer = deps
-        .querier
-        .query_balance(env.contract.address, &cfg.deposit_denom)?;
-    let liquidation_buffer = deps
-        .querier
-        .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
-    let er_numerator = oracle_aum + deposit_buffer.amount + liquidation_buffer.amount;
+    let er_numerator = get_aum(deps, env.clone(), &cfg)?;
+
+    if let Some(deposits_cap) = cfg.deposits_cap {
+        if er_numerator > deposits_cap {
+            return Err(ContractError::DepositCapExceeded {});
+        }
+    }
 
     let maxbtc_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
     let active_batch = ACTIVE_BATCH
@@ -729,6 +733,46 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     Ok(er)
 }
 
+fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError> {
+    let oracle_aum = query_aum_contract(deps, &cfg)?;
+    let deposit_buffer = deps
+        .querier
+        .query_balance(env.contract.address, &cfg.deposit_denom)?;
+    let liquidation_buffer = deps
+        .querier
+        .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
+
+    Ok(oracle_aum + deposit_buffer.amount + liquidation_buffer.amount)
+}
+
+fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), ContractError> {
+    if let Some(deposits_cap) = cfg.deposits_cap {
+        if get_aum(deps, env.clone(), cfg)? > deposits_cap {
+            return Err(ContractError::DepositCapExceeded {});
+        }
+    }
+
+    Ok(())
+}
+
+/// Orchestrates completion of long-running, multi-block operations by
+/// “draining” the cached exchange-rate (ER) object and driving the contract’s
+/// finite-state machine (FSM) back to `Idle`.
+///
+/// The contract performs some actions (deposit flush, withdrawal batch) that
+/// cannot be completed atomically inside a single transaction.  Each of those
+/// actions:
+/// 1. Stores a snapshot of the **exchange-rate cache** (`CACHED_ER`) together
+///    with a **timeout**;
+/// 2. Moves the FSM to an *intermediate* state (`Flushing` or `Withdrawing`).
+///
+/// `_process_cache` must be called at the start of every externally-facing
+/// entry-point that can mutate balances / state.
+///
+/// # Side-effects
+/// May mutate `FSM`, `CACHED_ER`, `WITHDRAWING_BATCH` and
+/// `FINALIZED_BATCHES`.  Never touches user balances directly; it only queues
+/// messages for later execution.
 fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
     let cached_er = CACHED_ER
