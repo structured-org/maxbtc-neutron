@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{
     BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationContractQueryMsg,
-    LiquidationExecuteMsg, OracleQueryMsg, QueryMsg,
+    LiquidationExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -121,12 +121,92 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::UpdateConfig(updates) => execute_update_config(deps, info, updates),
         ExecuteMsg::Deposit { recipient } => execute_deposit(deps, env, info, recipient),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
         ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
         ExecuteMsg::ProcessActiveBatch {} => execute_process_active_batch(deps, env, info),
         ExecuteMsg::Claim { recipient } => execute_claim(deps, env, info, recipient),
     }
+}
+
+/// Owner-only handler that updates the configuration in-place.
+fn execute_update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    updates: UpdateConfigMsg,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // Only the current owner may update the config.
+    if info.sender != cfg.owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    // Apply changes one field at a time.
+    if let Some(paused) = updates.paused {
+        cfg.paused = paused;
+    }
+    if let Some(owner) = updates.owner {
+        cfg.owner = deps.api.addr_validate(&owner)?;
+    }
+    if let Some(addr) = updates.aum_contract {
+        cfg.aum_contract = deps.api.addr_validate(&addr)?;
+    }
+    if let Some(addr) = updates.liquidation_contract {
+        cfg.liquidation_contract = deps.api.addr_validate(&addr)?;
+    }
+    if let Some(addr) = updates.deposit_pump_contract {
+        cfg.deposit_pump_contract = deps.api.addr_validate(&addr)?;
+    }
+    if let Some(addr) = updates.collector_contract {
+        cfg.collector_contract = deps.api.addr_validate(&addr)?;
+    }
+    if let Some(addr) = updates.treasury_address {
+        cfg.treasury_address = deps.api.addr_validate(&addr)?;
+    }
+    if let Some(v) = updates.deposit_flush_period {
+        cfg.deposit_flush_period = v;
+    }
+    if let Some(v) = updates.batch_active_duration {
+        cfg.batch_active_duration = v;
+    }
+    if let Some(v) = updates.batch_withdrawing_duration {
+        cfg.batch_withdrawing_duration = v;
+    }
+    if let Some(v) = updates.accepted_withdrawable_percentage {
+        cfg.collected_tolerance = v;
+    }
+    if let Some(v) = updates.liquidation_buffer_share {
+        cfg.liquidation_buffer_share = v;
+    }
+    if let Some(v) = updates.deposit_fee {
+        cfg.deposit_fee = v;
+    }
+    if let Some(v) = updates.cached_aum_tolerance {
+        cfg.deposit_buffer_tolerance = v;
+    }
+    if let Some(v) = updates.cached_aum_ttl {
+        cfg.cached_er_ttl = v;
+    }
+    if let Some(cap) = updates.deposits_cap {
+        cfg.deposits_cap = cap;
+    }
+    if let Some(maybe_list) = updates.deposits_allowlist {
+        cfg.deposits_allowlist = maybe_list
+            .map(|v| {
+                v.into_iter()
+                    .map(|s| deps.api.addr_validate(&s))
+                    .collect::<StdResult<_>>()
+            })
+            .transpose()?;
+    }
+
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("sender", info.sender))
 }
 
 fn execute_deposit(

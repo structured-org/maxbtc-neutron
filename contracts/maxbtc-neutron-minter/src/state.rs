@@ -5,47 +5,53 @@ use cw_storage_plus::{Item, Map};
 
 #[cw_serde]
 pub struct Config {
-    /// TODO
+    /// When `true`, user-initiated actions are rejected; can be set
+    /// automatically on emergencies or manually by the owner.
     pub paused: bool,
-    /// TODO
+    /// Address with full administrative rights over the contract.
     pub owner: Addr,
-    /// TODO
+    /// Address of the oracle contract that reports total AUM.
     pub aum_contract: Addr,
-    /// TODO
+    /// Address of the contract that manages the liquidation buffer.
     pub liquidation_contract: Addr,
-    /// TODO
+    /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: Addr,
-    /// TODO
+    /// Collector account that receives BTC shipped back from custody
+    /// during the withdrawal process.
     pub collector_contract: Addr,
-    /// TODO
+    /// Treasury account that receives protocol fees and surplus funds.
     pub treasury_address: Addr,
-    /// Denom for user deposits (e.g. the IBC-transferred BTC)
+    /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
-    /// Number of decimals in the deposits coin
+    /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// The tokenfactory denom representing the maxBTC token
+    /// Token-factory sub-denom used for maxBTC
     pub maxbtc_denom: String,
-    /// Duration in seconds after which deposit flush can be triggered
+    /// Minimum number of seconds between two deposit-flush operations
     pub deposit_flush_period: u64,
-    /// Duration in seconds after which an active batch transitions to WITHDRAWING
+    /// Seconds an ACTIVE batch remains open before promotion to WITHDRAWING
     pub batch_active_duration: u64,
-    /// Duration in seconds after which a withdrawing batch transitions to FINALIZED
+    /// Seconds a WITHDRAWING batch may remain open before finalization
     pub batch_withdrawing_duration: u64,
-    /// If the collected amount in the collector account is less than this % of requested,
-    /// the protocol goes into paused state.
+    /// Minimum percentage (Decimal) of `btc_requested` that must be
+    /// collected for a batch to finalize successfully
     pub collected_tolerance: Decimal,
-    /// The share (in decimal) of AUM we want to hold in the liquidation contract
+    /// Fraction of total AUM (Decimal) that the protocol must keep in the
+    /// liquidation contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
-    /// E.g. 0.003 for 0.3% deposit fee
+    /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_fee: Decimal,
-    /// Are deposits/withdrawals paused? (Could be triggered by emergencies)
-    /// TODO
+    /// Maximum tolerated relative difference (Decimal) between the deposit
+    /// buffer sent for flushing and the amount observed on the custody chain
     pub deposit_buffer_tolerance: Decimal,
-    /// TODO
+    /// Lifetime, in seconds, of the cached ER/AUM snapshot while a multi-step
+    /// operation is in flight
     pub cached_er_ttl: u64,
-    /// TODO
+    /// Optional upper limit on total AUM; deposits are rejected once the cap
+    /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// TODO
+    /// Optional allow-list of addresses that may mint maxBTC; `None` or an
+    /// empty vector means deposits are open to everyone
     pub deposits_allowlist: Option<Vec<Addr>>,
 }
 

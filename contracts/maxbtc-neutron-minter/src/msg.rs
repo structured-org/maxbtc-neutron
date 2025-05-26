@@ -2,41 +2,77 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Uint128};
 
 /// InstantiateMsg configures the contract on initialization.
+/// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub aum_contract: String,
+    /// Address of the contract that manages the liquidation buffer.
     pub liquidation_contract: String,
+    /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: String,
+    /// Collector contract that receives BTC shipped back from custody
+    /// during the withdrawal process.
     pub collector_contract: String,
+    /// Treasury account that receives protocol fees and surplus funds.
     pub treasury_address: String,
-    /// Denom for user deposits (e.g. the IBC-transferred BTC)
+    /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
-    /// Number of decimals in the deposits coin
+    /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// The tokenfactory denom representing the maxBTC token
+    /// The token-factory sub-denom used for the maxBTC token
     pub maxbtc_denom: String,
-    /// Duration in seconds after which deposit flush can be triggered
+    /// Minimum number of seconds that must elapse between two deposit-flush operations
     pub deposit_flush_period: u64,
-    /// Duration in seconds after which an active batch transitions to WITHDRAWING
+    /// Number of seconds an ACTIVE batch remains open before it can
+    /// be promoted to WITHDRAWING
     pub batch_active_duration: u64,
-    /// Duration in seconds after which a withdrawing batch transitions to FINALIZED
+    /// Number of seconds a WITHDRAWING batch may remain open before it
+    /// must be finalized
     pub batch_withdrawing_duration: u64,
-    /// If the collected amount in the collector account is less than this % of requested,
-    /// the protocol goes into paused state.
+    /// Minimum percentage (Decimal) of `btc_requested` that must be
+    /// collected for a batch to finalize successfully
     pub accepted_withdrawable_percentage: Decimal,
-    /// The share (in decimal) of AUM we want to hold in the liquidation contract
+    /// Fraction of total AUM (Decimal) that the protocol keeps on the
+    /// liquidation contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
-    /// The deposit fee (applied at the time of deposit)
+    /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_fee: Decimal,
-    /// TODO
+    /// Maximum tolerated relative difference (Decimal) between the
+    /// deposit buffer sent for flushing and the amount observed on the
+    /// custody chain
     pub cached_aum_tolerance: Decimal,
-    /// TODO
+    /// Lifetime, in seconds, of the cached ER/AUM snapshot that protects
+    /// the protocol while a multi-step operation is in flight
     pub cached_aum_ttl: u64,
-    /// TODO
+    /// Upper limit on total AUM; deposits are rejected once the cap
+    /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// TODO
+    /// Optional allow-list of addresses that may mint maxBTC while the
+    /// list is active (empty or `None` means open to everyone)
     pub deposits_allowlist: Option<Vec<String>>,
+}
+
+/// Message for updating configuration parameters (owner-only).
+#[cw_serde]
+pub struct UpdateConfigMsg {
+    pub paused: Option<bool>,
+    pub owner: Option<String>,
+    pub aum_contract: Option<String>,
+    pub liquidation_contract: Option<String>,
+    pub deposit_pump_contract: Option<String>,
+    pub collector_contract: Option<String>,
+    pub treasury_address: Option<String>,
+    pub deposit_flush_period: Option<u64>,
+    pub batch_active_duration: Option<u64>,
+    pub batch_withdrawing_duration: Option<u64>,
+    pub accepted_withdrawable_percentage: Option<Decimal>,
+    pub liquidation_buffer_share: Option<Decimal>,
+    pub deposit_fee: Option<Decimal>,
+    pub cached_aum_tolerance: Option<Decimal>,
+    pub cached_aum_ttl: Option<u64>,
+    pub deposits_cap: Option<Option<Uint128>>,
+    pub deposits_allowlist: Option<Option<Vec<String>>>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -56,6 +92,8 @@ pub enum ExecuteMsg {
         /// (which the user can IBC-transfer out later).
         recipient: String,
     },
+    /// Owner-only message to update protocol configuration in-place
+    UpdateConfig(UpdateConfigMsg),
 }
 
 /// QueryMsg for reading contract states.
