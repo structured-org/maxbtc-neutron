@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{
-    AUMQueryMsg, BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg,
-    QueryMsg,
+    BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationContractQueryMsg,
+    LiquidationExecuteMsg, OracleQueryMsg, QueryMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -236,7 +236,9 @@ fn execute_flush_deposits(
 
     FSM.go_to(deps.storage, ContractState::Flushing)?;
 
-    let oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
+    let oracle_aum = deps
+        .querier
+        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
 
     // The "liquidation buffer" we want is liquidation_buffer_share * oracle_aum
     let required_buffer = (Decimal::from_atomics(oracle_aum, cfg.deposit_decimals)?
@@ -407,14 +409,14 @@ fn execute_process_active_batch(
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    let total_redemption_supply = query_token_supply(
+    let redemption_token_supply = query_token_supply(
         &deps.as_ref(),
         cfg.get_redemption_denom(
             env.contract.address.to_string(),
             active_batch.batch_id.to_string(),
         ),
     )?;
-    if total_redemption_supply.is_zero() {
+    if redemption_token_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
         ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
 
@@ -447,7 +449,7 @@ fn execute_process_active_batch(
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
     // deposit denom.
-    let btc_requested = er * Decimal::from_atomics(total_redemption_supply, cfg.deposit_decimals)?;
+    let btc_requested = er * Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?;
     withdrawing_batch.btc_requested = btc_requested.atomics();
 
     // Save it in WITHDRAWING_BATCH
@@ -518,13 +520,15 @@ fn execute_claim(
     };
 
     // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
-    let redemption_supply = query_token_supply(&deps.as_ref(), redemption_coin.denom.clone())?;
-    if redemption_supply.is_zero() {
+    let redemption_token_supply =
+        query_token_supply(&deps.as_ref(), redemption_coin.denom.clone())?;
+    if redemption_token_supply.is_zero() {
         return Err(ContractError::RedemptionSupplyMismatch {});
     }
     let user_amount_dec = Decimal::from_atomics(redemption_coin.amount, cfg.deposit_decimals)?;
-    let total_supply_dec = Decimal::from_atomics(redemption_supply, cfg.deposit_decimals)?;
-    let fraction = user_amount_dec / total_supply_dec;
+    let redemption_token_supply_dec =
+        Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?;
+    let fraction = user_amount_dec / redemption_token_supply_dec;
 
     let available_dec = Decimal::from_atomics(
         batch.collected_amount - batch.paid_amount,
@@ -622,13 +626,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
 
-/// Query the AUM contract for the current BTC-denominated AUM.
-/// In practice, you'd call `AUMContract::GetAumInBtc {}` or something similar.
-fn query_aum_contract(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
-    deps.querier
-        .query_wasm_smart(cfg.aum_contract.to_string(), &AUMQueryMsg::GetAUM {})
-}
-
 /// Query the token supply for a given redemption token denom
 fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
     let resp: SupplyResponse = deps
@@ -636,6 +633,18 @@ fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
         .query(&QueryRequest::Bank(BankQuery::Supply { denom }))?;
 
     Ok(resp.amount.amount)
+}
+
+/// Query the total supply of maxBTC. At any moment, the maxBTC that is help by the liquidation
+/// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
+/// will be pretty soon, so we decrease the total supply by that amount.
+fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
+    let bank_supply = query_token_supply(&deps, cfg.maxbtc_denom.clone())?;
+    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_contract.to_string(),
+        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+    )?;
+    Ok(bank_supply - liquidation_contract_maxbtc_balance)
 }
 
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
@@ -719,7 +728,8 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     // Calculate the ER as:
     // (AUM received from oracle + deposits buffer + liquidation contract balance)
     //  /
-    // (maxBTC total supply + maxBTC burned in current active withdrawal batch)
+    // (maxBTC total supply + maxBTC burned in current active withdrawal batch + maxBTC still owned
+    // by the liquidation contract)
     let er_numerator = get_aum(deps, env.clone(), &cfg)?;
 
     if let Some(deposits_cap) = cfg.deposits_cap {
@@ -728,11 +738,16 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
         }
     }
 
-    let maxbtc_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
+    let maxbtc_supply = query_maxbtc_supply(deps, &cfg)?;
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    let er_denominator = maxbtc_supply + active_batch.btc_requested;
+    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_contract.to_string(),
+        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+    )?;
+    let er_denominator =
+        maxbtc_supply + active_batch.btc_requested - liquidation_contract_maxbtc_balance;
 
     let er = if er_denominator.is_zero() {
         Decimal::one()
@@ -744,15 +759,18 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
 }
 
 fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError> {
-    let oracle_aum = query_aum_contract(deps, &cfg)?;
+    let oracle_aum: Uint128 = deps
+        .querier
+        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
     let deposit_buffer = deps
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
-    let liquidation_buffer = deps
-        .querier
-        .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
+    let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_contract.to_string(),
+        &LiquidationContractQueryMsg::GetBTCBalance {},
+    )?;
 
-    Ok(oracle_aum + deposit_buffer.amount + liquidation_buffer.amount)
+    Ok(oracle_aum + deposit_buffer.amount + liquidation_contract_btc_balance)
 }
 
 fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), ContractError> {
@@ -824,7 +842,9 @@ fn _process_cache_flushing(
     cfg: &Config,
     cached_er: CachedER,
 ) -> Result<Vec<CosmosMsg>, ContractError> {
-    let current_oracle_aum = query_aum_contract(&deps.as_ref(), &cfg)?;
+    let current_oracle_aum: Uint128 = deps
+        .querier
+        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
 
     // If we are flushing, cached_aum must be present
     let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;

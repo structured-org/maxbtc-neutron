@@ -103,8 +103,15 @@ pub struct BatchResponse {
 }
 
 #[cw_serde]
-pub enum AUMQueryMsg {
+pub enum OracleQueryMsg {
     GetAUM {},
+}
+
+///
+#[cw_serde]
+pub enum LiquidationContractQueryMsg {
+    GetBTCBalance {},
+    GetMaxBTCBalance {},
 }
 
 #[cw_serde]
