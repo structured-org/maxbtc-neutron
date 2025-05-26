@@ -930,9 +930,11 @@ fn _process_cache_flushing(
     let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;
     let historical_oracle_aum = cached_aum.oracle_aum;
 
-    // TODO: this is, strictly speaking, not an emergency (can occur naturally, right?)
+    // This is, strictly speaking, not an emergency (can occur naturally due to price fluctuations,
+    // especially if this code is executed right after the deposit buffer was flushed).
+    // We simply return Ok() and stay with the cached ER that we have.
     if current_oracle_aum < historical_oracle_aum {
-        return Err(ContractError::ProtocolInEmergency {});
+        return Ok(vec![]);
     }
 
     // If the cache is not stale, we need to check whether the amount that reached Binance / Solana
