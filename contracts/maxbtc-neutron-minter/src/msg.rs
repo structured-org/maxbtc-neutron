@@ -44,7 +44,7 @@ pub struct InstantiateMsg {
     pub cached_aum_tolerance: Decimal,
     /// Lifetime, in seconds, of the cached ER/AUM snapshot that protects
     /// the protocol while a multi-step operation is in flight
-    pub cached_aum_ttl: u64,
+    pub cached_er_ttl: u64,
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
@@ -70,7 +70,7 @@ pub struct UpdateConfigMsg {
     pub liquidation_buffer_share: Option<Decimal>,
     pub deposit_fee: Option<Decimal>,
     pub cached_aum_tolerance: Option<Decimal>,
-    pub cached_aum_ttl: Option<u64>,
+    pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub deposits_allowlist: Option<Option<Vec<String>>>,
 }

@@ -46,7 +46,7 @@ pub fn instantiate(
         liquidation_buffer_share: msg.liquidation_buffer_share,
         deposit_fee: msg.deposit_fee,
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
-        cached_er_ttl: msg.cached_aum_ttl,
+        cached_er_ttl: msg.cached_er_ttl,
         deposits_cap: msg.deposits_cap,
         deposits_allowlist: msg
             .deposits_allowlist
@@ -186,7 +186,7 @@ fn execute_update_config(
     if let Some(v) = updates.cached_aum_tolerance {
         cfg.deposit_buffer_tolerance = v;
     }
-    if let Some(v) = updates.cached_aum_ttl {
+    if let Some(v) = updates.cached_er_ttl {
         cfg.cached_er_ttl = v;
     }
     if let Some(cap) = updates.deposits_cap {

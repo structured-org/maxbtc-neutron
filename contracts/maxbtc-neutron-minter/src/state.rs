@@ -152,4 +152,4 @@ pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_tim
 
 /// Cached assets under management value. Can be set when we trigger a deposits flush
 /// and when we move a batch to the WITHDRAWING state.
-pub const CACHED_ER: Item<Option<CachedER>> = Item::new("cached_aum");
+pub const CACHED_ER: Item<Option<CachedER>> = Item::new("cached_er");
