@@ -32,7 +32,7 @@ pub fn instantiate(
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
         aum_contract: deps.api.addr_validate(&msg.aum_contract)?,
-        liquidation_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
+        liquidation_buffer_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
         collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
         treasury_address: deps.api.addr_validate(&msg.treasury_address)?,
@@ -88,7 +88,10 @@ pub fn instantiate(
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
         .add_attribute("aum_contract", cfg.aum_contract.to_string())
-        .add_attribute("liquidation_contract", cfg.liquidation_contract.to_string())
+        .add_attribute(
+            "liquidation_buffer_contract",
+            cfg.liquidation_buffer_contract.to_string(),
+        )
         .add_attribute("collector_contract", cfg.collector_contract.to_string())
         .add_attribute("treasury_address", cfg.treasury_address.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
@@ -154,7 +157,7 @@ fn execute_update_config(
         cfg.aum_contract = deps.api.addr_validate(&addr)?;
     }
     if let Some(addr) = updates.liquidation_contract {
-        cfg.liquidation_contract = deps.api.addr_validate(&addr)?;
+        cfg.liquidation_buffer_contract = deps.api.addr_validate(&addr)?;
     }
     if let Some(addr) = updates.deposit_pump_contract {
         cfg.deposit_pump_contract = deps.api.addr_validate(&addr)?;
@@ -276,8 +279,8 @@ fn execute_deposit(
 
 /// Permissionless deposit flush
 /// - checks time has passed at least deposit_flush_period
-/// - if liquidation contract holds less than liquidation_buffer_share of AUM, send enough
-/// - if liquidation contract holds more, request some back (it will be processed next time)
+/// - if liquidation buffer contract holds less than liquidation_buffer_share of AUM, send enough
+/// - if liquidation buffer contract holds more, request some back (it will be processed next time)
 /// - then IBC Eureka transfer everything else to the custody
 fn execute_flush_deposits(
     mut deps: DepsMut,
@@ -325,10 +328,11 @@ fn execute_flush_deposits(
         * cfg.liquidation_buffer_share)
         .atomics();
 
-    // The actual buffer we have in the liquidation contract
-    let liquidation_contract_balance = deps
-        .querier
-        .query_balance(&cfg.liquidation_contract, &cfg.deposit_denom)?;
+    // The actual buffer we have in the liquidation buffer contract
+    let liquidation_contract_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_buffer_contract.to_string(),
+        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+    )?;
 
     // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
     // in process_cache() to check whether the deposit reached Binance / Solana
@@ -345,16 +349,16 @@ fn execute_flush_deposits(
         }),
     )?;
 
-    // If liquidation contract < required => send the difference
-    if liquidation_contract_balance.amount < required_buffer {
-        let mut to_send = required_buffer - liquidation_contract_balance.amount;
+    // If liquidation buffer contract < required => send the difference
+    if liquidation_contract_balance < required_buffer {
+        let mut to_send = required_buffer - liquidation_contract_balance;
         // We are allowed to exhaust the deposit buffer completely.
         if to_send > deposit_buffer.amount {
             to_send = deposit_buffer.amount
         }
-        // We do a bank send of the deposit_denom from this contract to the liquidation contract
+        // We do a bank send of the deposit_denom from this contract to the liquidation buffer contract
         let msg = CosmosMsg::Bank(BankMsg::Send {
-            to_address: cfg.liquidation_contract.to_string(),
+            to_address: cfg.liquidation_buffer_contract.to_string(),
             amount: vec![Coin {
                 denom: cfg.deposit_denom.clone(),
                 amount: Uint128::from(to_send),
@@ -363,15 +367,16 @@ fn execute_flush_deposits(
         msgs.push(msg);
         deposit_buffer.amount -= to_send;
     } else {
-        // If liquidation contract > required => call liquidation contract's method to send back the difference
+        // If liquidation buffer contract > required => call liquidation buffer contract's method to
+        // send back the difference
         let to_recv = Coin {
-            amount: liquidation_contract_balance.amount - required_buffer,
-            denom: liquidation_contract_balance.denom.clone(),
+            amount: liquidation_contract_balance - required_buffer,
+            denom: cfg.deposit_denom.clone(),
         };
         // The returned funds will be processed next time.
         if to_recv.amount > Uint128::zero() {
             let msg = create_liquidation_rebalance_msg(
-                cfg.liquidation_contract.to_string(),
+                cfg.liquidation_buffer_contract.to_string(),
                 to_recv.clone(),
             )?;
             msgs.push(msg);
@@ -656,7 +661,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = ConfigResponse {
                 owner: cfg.owner.to_string(),
                 aum_contract: cfg.aum_contract.to_string(),
-                liquidation_contract: cfg.liquidation_contract.to_string(),
+                liquidation_contract: cfg.liquidation_buffer_contract.to_string(),
                 treasury_address: cfg.treasury_address.to_string(),
                 deposit_denom: cfg.deposit_denom,
                 maxbtc_denom: cfg.maxbtc_denom,
@@ -721,7 +726,7 @@ fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
 fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
     let bank_supply = query_token_supply(&deps, cfg.maxbtc_denom.clone())?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_contract.to_string(),
+        cfg.liquidation_buffer_contract.to_string(),
         &LiquidationContractQueryMsg::GetMaxBTCBalance {},
     )?;
     Ok(bank_supply - liquidation_contract_maxbtc_balance)
@@ -757,7 +762,7 @@ fn create_tokenfactory_burn_msg(
     }))
 }
 
-/// Creates a message instructing the liquidation contract to rebalance (send funds back).
+/// Creates a message instructing the liquidation buffer contract to rebalance (send funds back).
 fn create_liquidation_rebalance_msg(
     liquidation_addr: String,
     amount: Coin,
@@ -806,10 +811,10 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     }
 
     // Calculate the ER as:
-    // (AUM received from oracle + deposits buffer + liquidation contract balance)
+    // (AUM received from oracle + deposits buffer + liquidation buffer contract balance)
     //  /
-    // (maxBTC total supply + maxBTC burned in current active withdrawal batch + maxBTC still owned
-    // by the liquidation contract)
+    // (maxBTC total supply + maxBTC burned in current active withdrawal batch - maxBTC still owned
+    // by the liquidation buffer contract)
     let er_numerator = get_aum(deps, env.clone(), &cfg)?;
 
     if let Some(deposits_cap) = cfg.deposits_cap {
@@ -823,7 +828,7 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_contract.to_string(),
+        cfg.liquidation_buffer_contract.to_string(),
         &LiquidationContractQueryMsg::GetMaxBTCBalance {},
     )?;
     let er_denominator =
@@ -846,7 +851,7 @@ fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
     let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_contract.to_string(),
+        cfg.liquidation_buffer_contract.to_string(),
         &LiquidationContractQueryMsg::GetBTCBalance {},
     )?;
 

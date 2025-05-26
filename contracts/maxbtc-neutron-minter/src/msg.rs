@@ -34,7 +34,7 @@ pub struct InstantiateMsg {
     /// collected for a batch to finalize successfully
     pub accepted_withdrawable_percentage: Decimal,
     /// Fraction of total AUM (Decimal) that the protocol keeps on the
-    /// liquidation contract as an instant-liquidity buffer
+    /// liquidation buffer contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
     /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_fee: Decimal,

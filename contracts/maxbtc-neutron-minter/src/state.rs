@@ -13,7 +13,7 @@ pub struct Config {
     /// Address of the oracle contract that reports total AUM.
     pub aum_contract: Addr,
     /// Address of the contract that manages the liquidation buffer.
-    pub liquidation_contract: Addr,
+    pub liquidation_buffer_contract: Addr,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: Addr,
     /// Collector account that receives BTC shipped back from custody
@@ -37,7 +37,7 @@ pub struct Config {
     /// collected for a batch to finalize successfully
     pub collected_tolerance: Decimal,
     /// Fraction of total AUM (Decimal) that the protocol must keep in the
-    /// liquidation contract as an instant-liquidity buffer
+    /// liquidation buffer contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
     /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_fee: Decimal,
