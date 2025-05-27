@@ -77,6 +77,7 @@ pub struct UpdateConfigMsg {
 
 /// ExecuteMsg enumerates all possible actions in this contract.
 #[cw_serde]
+#[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
     /// User deposit flow
     Deposit { recipient: String },
@@ -145,9 +146,9 @@ pub enum OracleQueryMsg {
     GetAUM {},
 }
 
-///
+/// Describes the queries that can be sent to the liquidation buffer contract.
 #[cw_serde]
-pub enum LiquidationContractQueryMsg {
+pub enum LiquidationBufferContractQueryMsg {
     GetBTCBalance {},
     GetMaxBTCBalance {},
 }

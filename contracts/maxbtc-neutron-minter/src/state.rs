@@ -57,11 +57,7 @@ pub struct Config {
 
 impl Config {
     pub fn get_maxbtc_denom(&self, contract_addr: String) -> String {
-        format!(
-            "factory/{}/{}",
-            contract_addr,
-            self.maxbtc_denom.to_string()
-        )
+        format!("factory/{}/{}", contract_addr, self.maxbtc_denom)
     }
 
     pub fn get_redemption_denom(&self, contract_addr: String, batch_id: String) -> String {

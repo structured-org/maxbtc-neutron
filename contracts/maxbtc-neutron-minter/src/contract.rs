@@ -1,6 +1,6 @@
 use crate::error::ContractError;
 use crate::msg::{
-    BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationContractQueryMsg,
+    BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationBufferContractQueryMsg,
     LiquidationExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
 };
 use crate::state::{
@@ -331,7 +331,7 @@ fn execute_flush_deposits(
     // The actual buffer we have in the liquidation buffer contract
     let liquidation_contract_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
     )?;
 
     // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
@@ -361,7 +361,7 @@ fn execute_flush_deposits(
             to_address: cfg.liquidation_buffer_contract.to_string(),
             amount: vec![Coin {
                 denom: cfg.deposit_denom.clone(),
-                amount: Uint128::from(to_send),
+                amount: to_send,
             }],
         });
         msgs.push(msg);
@@ -561,7 +561,7 @@ fn execute_process_active_batch(
         deps.storage,
         &Some(CachedER {
             aum: None,
-            er: er.clone(),
+            er,
             timeout: now + cfg.cached_er_ttl,
         }),
     )?;
@@ -724,10 +724,10 @@ fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
 /// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
 /// will be pretty soon, so we decrease the total supply by that amount.
 fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
-    let bank_supply = query_token_supply(&deps, cfg.maxbtc_denom.clone())?;
+    let bank_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
     )?;
     Ok(bank_supply - liquidation_contract_maxbtc_balance)
 }
@@ -779,13 +779,10 @@ fn get_batch_id_from_redemption_coin(
     env: Env,
     redemption_coin: Coin,
 ) -> Result<u64, ContractError> {
-    if !redemption_coin.denom.starts_with(
-        format!(
-            "factory/{}/redemption/batch/",
-            env.contract.address.to_string()
-        )
-        .as_str(),
-    ) {
+    if !redemption_coin
+        .denom
+        .starts_with(format!("factory/{}/redemption/batch/", env.contract.address).as_str())
+    {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
     if redemption_coin.amount.is_zero() {
@@ -815,7 +812,7 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     //  /
     // (maxBTC total supply + maxBTC burned in current active withdrawal batch - maxBTC still owned
     // by the liquidation buffer contract)
-    let er_numerator = get_aum(deps, env.clone(), &cfg)?;
+    let er_numerator = get_aum(deps, env.clone(), cfg)?;
 
     if let Some(deposits_cap) = cfg.deposits_cap {
         if er_numerator > deposits_cap {
@@ -823,13 +820,13 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
         }
     }
 
-    let maxbtc_supply = query_maxbtc_supply(deps, &cfg)?;
+    let maxbtc_supply = query_maxbtc_supply(deps, cfg)?;
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationContractQueryMsg::GetMaxBTCBalance {},
+        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
     )?;
     let er_denominator =
         maxbtc_supply + active_batch.btc_requested - liquidation_contract_maxbtc_balance;
@@ -852,7 +849,7 @@ fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
     let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationContractQueryMsg::GetBTCBalance {},
+        &LiquidationBufferContractQueryMsg::GetBTCBalance {},
     )?;
 
     Ok(oracle_aum + deposit_buffer.amount + liquidation_contract_btc_balance)
@@ -1000,7 +997,7 @@ fn _process_cache_withdrawing(
                 to_address: cfg.treasury_address.to_string(),
                 amount: vec![Coin {
                     denom: cfg.deposit_denom.clone(),
-                    amount: Uint128::from(extra),
+                    amount: extra,
                 }],
             });
             msgs.push(send_msg);
@@ -1023,3 +1020,5 @@ fn _process_cache_withdrawing(
 
     Ok(msgs)
 }
+
+// - Implement checking that the liquidation buffer did, in fact, return the clawed back assets.
