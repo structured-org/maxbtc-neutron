@@ -62,6 +62,7 @@ pub fn instantiate(
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
     ACTIVE_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
+    CACHED_ER.save(deps.storage, &None)?;
 
     // Create the first active batch
     let new_batch_id = 1u64;
@@ -899,9 +900,11 @@ fn check_deposits_allowlist(
 /// entry-point that can mutate balances / state.
 fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
-    let cached_er = CACHED_ER
-        .load(deps.storage)?
-        .ok_or(ContractError::ProtocolInEmergency {})?;
+    let cached_er = match CACHED_ER
+        .load(deps.storage)? {
+        Some(cached_er) => cached_er,
+        None => return Ok(vec![])
+    };
 
     // The cache is stale, we can not perform any operations
     if env.block.time.seconds() > cached_er.timeout {
