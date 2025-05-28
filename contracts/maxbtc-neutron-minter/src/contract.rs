@@ -254,28 +254,40 @@ fn execute_deposit(
 
     // Adjust for deposit fee
     let fee_multiplier = Decimal::one() - cfg.deposit_fee;
-    let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals)
+    let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals.into())
         .map_err(|_| ContractError::InvalidDepositAmount {})?;
-    let minted = (deposit_amount * fee_multiplier) / er;
 
-    // Mint the maxBTC to the recipient
+    // Apply the deposit fee and divide by exchange rate
+    let fee_multiplier = Decimal::one() - cfg.deposit_fee;
+    let minted_dec = (deposit_amount * fee_multiplier) / er;
+
+    // CosmWasm's Decimal always uses 18 digits internally, so scale down
+    // to match cfg.deposit_decimals (e.g., 6) before minting.
+    let minted_amount = minted_dec
+        .atomics()
+        .checked_div(Uint128::from(
+            10u128.pow(minted_dec.decimal_places() - cfg.deposit_decimals),
+        ))
+        .map_err(|_| ContractError::InvalidDepositAmount {})?;
+
+    // 4. Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(
         env,
         recipient.clone(),
         Coin {
-            amount: minted.atomics(),
+            amount: minted_amount,
             denom: cfg.maxbtc_denom.clone(),
         },
     )?;
     msgs.push(mint_msg);
 
-    // 5. Return a response
+    // 5. Return the response
     Ok(Response::new()
         .add_messages(msgs)
         .add_attribute("action", "deposit")
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", recipient)
-        .add_attribute("minted_maxbtc", minted.atomics().to_string()))
+        .add_attribute("minted_maxbtc", minted_amount.to_string()))
 }
 
 /// Permissionless deposit flush
@@ -900,10 +912,9 @@ fn check_deposits_allowlist(
 /// entry-point that can mutate balances / state.
 fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
-    let cached_er = match CACHED_ER
-        .load(deps.storage)? {
+    let cached_er = match CACHED_ER.load(deps.storage)? {
         Some(cached_er) => cached_er,
-        None => return Ok(vec![])
+        None => return Ok(vec![]),
     };
 
     // The cache is stale, we can not perform any operations
@@ -1025,3 +1036,4 @@ fn _process_cache_withdrawing(
 }
 
 // - Implement checking that the liquidation buffer did, in fact, return the clawed back assets.
+// - Fix decimal issues throughout the code
