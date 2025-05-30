@@ -253,7 +253,6 @@ fn execute_deposit(
     let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
 
     // Adjust for deposit fee
-    let fee_multiplier = Decimal::one() - cfg.deposit_fee;
     let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals.into())
         .map_err(|_| ContractError::InvalidDepositAmount {})?;
 
@@ -295,7 +294,7 @@ fn execute_deposit(
 /// - if liquidation buffer contract holds less than liquidation_buffer_share of AUM, send enough
 /// - if liquidation buffer contract holds more, request some back (it will be processed next time)
 /// - then IBC Eureka transfer everything else to the custody
-fn execute_flush_deposits(
+pub fn execute_flush_deposits(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -361,6 +360,8 @@ fn execute_flush_deposits(
             }),
         }),
     )?;
+
+    println!("{} {} {}", required_buffer, liquidation_contract_balance, er);
 
     // If liquidation buffer contract < required => send the difference
     if liquidation_contract_balance < required_buffer {
