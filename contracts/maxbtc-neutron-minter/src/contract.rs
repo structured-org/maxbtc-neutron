@@ -333,7 +333,7 @@ pub fn execute_flush_deposits(
 
     // The "liquidation buffer" we want is liquidation_buffer_share * total aum
     let required_buffer = dec_to_amount(
-        Decimal::from_atomics(aum.oracle_aum + aum.deposit_buffer, cfg.deposit_decimals)? * cfg.liquidation_buffer_share,
+        Decimal::from_atomics(aum.total(), cfg.deposit_decimals)? * cfg.liquidation_buffer_share,
         cfg.deposit_decimals,
     )?;
 

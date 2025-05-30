@@ -99,13 +99,6 @@ impl WasmMockQuerier {
         self.balances.insert((address.into(), denom.into()), amount);
     }
 
-    /// Convenience: mock both BTC *and* maxBTC balances in the liquidation buffer
-    /// in a single call (useful for the new tests).
-    pub fn update_liqbuffer_balances(&mut self, btc: Uint128, maxbtc: Uint128) {
-        self.liqbuffer_btc_balance = btc;
-        self.liqbuffer_maxbtc_balance = maxbtc;
-    }
-
     // ---------- Implementation of the Querier trait ----------
     fn handle_bank_query(&self, query: BankQuery) -> QuerierResult {
         match query {

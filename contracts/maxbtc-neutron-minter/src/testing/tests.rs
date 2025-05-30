@@ -268,7 +268,8 @@ fn test_deposit_exceeds_cap() {
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // Mock queries so that the AUM is already at 110 wBTC
-    deps.querier.update_oracle_aum(Uint128::from(110_000_000u128));
+    deps.querier
+        .update_oracle_aum(Uint128::from(110_000_000u128));
     deps.querier.update_maxbtc_supply(Uint128::zero());
     deps.querier
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
@@ -420,7 +421,8 @@ fn test_deposit_minted_zero_below_er() {
     // Then deposit of 50 wBTC => minted ~ 0.49 maxBTC if deposit_fee=1%,
     // which might floor to 0 in integer terms if decimals do not suffice.
     // Let’s try a scenario that results in minted=0 once we do integer trunc.
-    deps.querier.update_oracle_aum(Uint128::from(10_000_000_000u128)); // huge AUM => huge ER
+    deps.querier
+        .update_oracle_aum(Uint128::from(10_000_000_000u128)); // huge AUM => huge ER
     deps.querier
         .update_maxbtc_supply(Uint128::from(100_000_000u128));
     deps.querier
@@ -713,7 +715,8 @@ fn flush_requests_clawback_then_pump() {
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     deps.querier.update_oracle_aum(Uint128::new(1_000_000));
-    deps.querier.update_liqbuffer_btc_balance(Uint128::new(500_000));
+    deps.querier
+        .update_liqbuffer_btc_balance(Uint128::new(500_000));
     deps.querier.set_balance(
         &env.contract.address.to_string(),
         "wBTC",
@@ -736,14 +739,14 @@ fn flush_requests_clawback_then_pump() {
     assert_clawback_exists(
         &msgs,
         &cfg.liquidation_buffer_contract.to_string(),
-        coin(350_000u128, "wBTC"),
+        coin(300_000u128, "wBTC"),
     );
 
     // 2. Entire 2 000 000 now sitting in the contract is forwarded to the pump.
     assert_bank_send_exists(
         &msgs,
         &cfg.deposit_pump_contract.to_string(),
-        Uint128::new(850_000),
+        Uint128::new(800_000),
         "wBTC",
     );
 
