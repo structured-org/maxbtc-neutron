@@ -29,7 +29,7 @@ pub struct WasmMockQuerier {
     base: MockQuerier<Empty>,
 
     /// Mocked AUM value for `OracleQueryMsg::GetAUM {}` queries.
-    aum: Uint128,
+    oracle_aum: Uint128,
 
     /// Mocked total maxBTC supply for `QueryRequest::Bank(BankQuery::Supply { denom })`.
     maxbtc_supply: Uint128,
@@ -69,7 +69,7 @@ impl WasmMockQuerier {
     pub fn new(base: MockQuerier<Empty>) -> Self {
         WasmMockQuerier {
             base,
-            aum: Uint128::zero(),
+            oracle_aum: Uint128::zero(),
             maxbtc_supply: Uint128::zero(),
             liqbuffer_maxbtc_balance: Uint128::zero(),
             liqbuffer_btc_balance: Uint128::zero(),
@@ -78,8 +78,8 @@ impl WasmMockQuerier {
     }
 
     // ---------- Update methods for mocking specific values ----------
-    pub fn update_aum(&mut self, val: Uint128) {
-        self.aum = val;
+    pub fn update_oracle_aum(&mut self, val: Uint128) {
+        self.oracle_aum = val;
     }
 
     pub fn update_maxbtc_supply(&mut self, val: Uint128) {
@@ -160,7 +160,7 @@ impl WasmMockQuerier {
                 return match q {
                     OracleQueryMsg::GetAUM {} => {
                         // Return the mocked `aum` value
-                        let val = self.aum;
+                        let val = self.oracle_aum;
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };

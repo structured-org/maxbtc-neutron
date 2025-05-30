@@ -333,14 +333,8 @@ pub fn execute_flush_deposits(
 
     // The "liquidation buffer" we want is liquidation_buffer_share * total aum
     let required_buffer = dec_to_amount(
-        Decimal::from_atomics(aum.total(), cfg.deposit_decimals)? * cfg.liquidation_buffer_share,
+        Decimal::from_atomics(aum.oracle_aum + aum.deposit_buffer, cfg.deposit_decimals)? * cfg.liquidation_buffer_share,
         cfg.deposit_decimals,
-    )?;
-
-    // The actual buffer we have in the liquidation buffer contract
-    let liquidation_contract_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
     )?;
 
     // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
@@ -358,15 +352,10 @@ pub fn execute_flush_deposits(
         }),
     )?;
 
-    println!(
-        "{} {} {}",
-        required_buffer, liquidation_contract_balance, er
-    );
-
     // If liquidation buffer contract < required => send the difference
-    if liquidation_contract_balance < required_buffer {
+    if aum.liquidation_buffer_contract < required_buffer {
         let mut to_send_to_liquidation_buffer_contract =
-            required_buffer - liquidation_contract_balance;
+            required_buffer - aum.liquidation_buffer_contract;
         // We are allowed to exhaust the deposit buffer completely.
         if to_send_to_liquidation_buffer_contract > amount_to_flush {
             to_send_to_liquidation_buffer_contract = amount_to_flush
@@ -385,7 +374,7 @@ pub fn execute_flush_deposits(
         // If liquidation buffer contract > required => call liquidation buffer contract's method to
         // send back the difference
         let to_recv = Coin {
-            amount: liquidation_contract_balance - required_buffer,
+            amount: aum.liquidation_buffer_contract - required_buffer,
             denom: cfg.deposit_denom.clone(),
         };
         // The returned funds will be processed next time.
