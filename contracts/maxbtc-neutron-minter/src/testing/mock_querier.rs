@@ -101,11 +101,7 @@ impl WasmMockQuerier {
 
     /// Convenience: mock both BTC *and* maxBTC balances in the liquidation buffer
     /// in a single call (useful for the new tests).
-    pub fn update_liqbuffer_balances(
-        &mut self,
-        btc: Uint128,
-        maxbtc: Uint128,
-    ) {
+    pub fn update_liqbuffer_balances(&mut self, btc: Uint128, maxbtc: Uint128) {
         self.liqbuffer_btc_balance = btc;
         self.liqbuffer_maxbtc_balance = maxbtc;
     }

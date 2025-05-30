@@ -1,4 +1,4 @@
-use cosmwasm_std::{DecimalRangeExceeded, OverflowError, StdError};
+use cosmwasm_std::{DecimalRangeExceeded, DivideByZeroError, OverflowError, StdError};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -53,4 +53,7 @@ pub enum ContractError {
 
     #[error("Deposit cap was exceeded")]
     DepositCapExceeded {},
+
+    #[error("{0}")]
+    DivideByZeroError(#[from] DivideByZeroError),
 }

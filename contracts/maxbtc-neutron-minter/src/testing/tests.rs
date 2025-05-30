@@ -7,7 +7,10 @@ use crate::state::{
 };
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
-use cosmwasm_std::{coin, from_json, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OwnedDeps, Response, SubMsg, Uint128, WasmMsg};
+use cosmwasm_std::{
+    coin, from_json, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo,
+    OwnedDeps, Response, SubMsg, Uint128, WasmMsg,
+};
 
 fn default_instantiate_msg(
     deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
@@ -519,7 +522,10 @@ fn test_deposit_fsm_in_flushing_but_not_stale() {
 fn assert_bank_send_exists(msgs: &[CosmosMsg], to: &str, amount: Uint128, denom: &str) {
     assert!(
         msgs.iter().any(|m| match m {
-            CosmosMsg::Bank(BankMsg::Send { to_address, amount: coins }) => {
+            CosmosMsg::Bank(BankMsg::Send {
+                to_address,
+                amount: coins,
+            }) => {
                 to_address == to
                     && coins.len() == 1
                     && coins[0].denom == denom
@@ -533,18 +539,14 @@ fn assert_bank_send_exists(msgs: &[CosmosMsg], to: &str, amount: Uint128, denom:
 
 /// Asserts that a [`WasmMsg::Execute`] exists in `msgs` invoking
 /// `LiquidationExecuteMsg::ClawBack { amount }` on `contract_addr`.
-fn assert_clawback_exists(
-    msgs: &[CosmosMsg],
-    contract_addr: &str,
-    clawback: Coin,
-) {
+fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coin) {
     assert!(
         msgs.iter().any(|m| match m {
             CosmosMsg::Wasm(WasmMsg::Execute {
-                                contract_addr: c,
-                                msg,
-                                funds,
-                            }) => {
+                contract_addr: c,
+                msg,
+                funds,
+            }) => {
                 if c != contract_addr || !funds.is_empty() {
                     return false;
                 }
@@ -568,11 +570,13 @@ fn flush_guard_not_enough_time_elapsed() {
 
     // Deposit buffer: 0.5 wBTC.
     let buffer = Uint128::new(500_000);
-    deps.querier.set_balance(&env.contract.address.to_string(), "wBTC", buffer);
+    deps.querier
+        .set_balance(&env.contract.address.to_string(), "wBTC", buffer);
 
     // Mock oracle & liq-buffer queries so ER math inside the call can run.
     deps.querier.update_aum(Uint128::new(10_000_000));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::zero());
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
     deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
 
     // Set LAST_DEPOSIT_FLUSH_TIME so that *less* than `deposit_flush_period`
@@ -597,7 +601,10 @@ fn flush_guard_not_enough_time_elapsed() {
     assert_eq!(status_attr.value, "not_enough_time_elapsed");
 
     // 2. No state transitions happened.
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Idle);
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
     // 3. LAST_DEPOSIT_FLUSH_TIME unchanged.
     let stored = LAST_DEPOSIT_FLUSH_TIME.load(&deps.storage).unwrap();
     assert_eq!(stored, now - (cfg.deposit_flush_period / 2));
@@ -615,7 +622,8 @@ fn flush_zero_outstanding_deposits() {
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // No balance in the contract’s deposit buffer.
-    deps.querier.set_balance(&env.contract.address.to_string(), "wBTC", Uint128::zero());
+    deps.querier
+        .set_balance(&env.contract.address.to_string(), "wBTC", Uint128::zero());
 
     // Mock oracle/liq buffer queries (values don’t matter here).
     deps.querier.update_aum(Uint128::new(10_000_000));
@@ -632,11 +640,7 @@ fn flush_zero_outstanding_deposits() {
     let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
 
     // ── Assert ────────────────────────────────────────────────────────────────
-    let status_attr = resp
-        .attributes
-        .iter()
-        .find(|a| a.key == "status")
-        .unwrap();
+    let status_attr = resp.attributes.iter().find(|a| a.key == "status").unwrap();
     assert_eq!(status_attr.value, "zero_outstanding_deposits");
 
     // LAST_DEPOSIT_FLUSH_TIME must be set to *now*.
@@ -644,7 +648,10 @@ fn flush_zero_outstanding_deposits() {
     assert_eq!(stored, now);
 
     // FSM stays IDLE, nothing to send.
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Idle);
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
     assert!(resp.messages.is_empty());
 }
 
@@ -655,13 +662,12 @@ fn flush_sends_to_liqbuffer_then_pump() {
     cfg.paused = false;
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
-    // deps.querier.update_aum(Uint128::new(10_000_000));
-    // deps.querier.update_liqbuffer_maxbtc_balance(Uint128::new(300_000)); // mock GetMaxBTCBalance
     deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
     deps.querier.update_maxbtc_supply(Uint128::new(2_000_000));
 
     let deposit_buffer = Uint128::new(2_000_000);
-    deps.querier.set_balance(&env.contract.address.to_string(), "wBTC", deposit_buffer);
+    deps.querier
+        .set_balance(&env.contract.address.to_string(), "wBTC", deposit_buffer);
 
     // flush_period elapsed:
     let now = env.block.time.seconds();
@@ -677,21 +683,24 @@ fn flush_sends_to_liqbuffer_then_pump() {
 
     // ── Assert ────────────────────────────────────────────────────────────────
     // 1. FSM moved into Flushing state; ER got cached.
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Flushing);
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Flushing
+    );
     assert!(CACHED_ER.load(&deps.storage).unwrap().is_some());
 
-    // 2. We sent 700 000 wBTC to the liquidation buffer contract ...
+    // 2. We sent 200 000 wBTC to the liquidation buffer contract ...
     assert_bank_send_exists(
         &msgs,
         &cfg.liquidation_buffer_contract.to_string(),
         Uint128::new(200_000),
         "wBTC",
     );
-    // ... and the remaining 1 300 000 to the deposit pump.
+    // ... and the remaining 1 800 000 to the deposit pump.
     assert_bank_send_exists(
         &msgs,
         &cfg.deposit_pump_contract.to_string(),
-        Uint128::new(1_300_000),
+        Uint128::new(1_800_000),
         "wBTC",
     );
 }
@@ -710,10 +719,15 @@ fn flush_requests_clawback_then_pump() {
     // Contract deposit buffer = 1 000 000.  After claw-back it becomes 2 000 000
     //
     deps.querier.update_aum(Uint128::new(10_000_000));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::new(2_000_000));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::new(2_000_000));
     deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
 
-    deps.querier.set_balance(&env.contract.address.to_string(), "wBTC", Uint128::new(1_000_000));
+    deps.querier.set_balance(
+        &env.contract.address.to_string(),
+        "wBTC",
+        Uint128::new(1_000_000),
+    );
 
     let now = env.block.time.seconds();
     LAST_DEPOSIT_FLUSH_TIME
@@ -743,7 +757,10 @@ fn flush_requests_clawback_then_pump() {
     );
 
     // 3. FSM is Flushing and ER is cached.
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Flushing);
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Flushing
+    );
     assert!(CACHED_ER.load(&deps.storage).unwrap().is_some());
 }
 

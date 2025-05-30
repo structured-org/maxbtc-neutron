@@ -258,16 +258,11 @@ fn execute_deposit(
 
     // Apply the deposit fee and divide by exchange rate
     let fee_multiplier = Decimal::one() - cfg.deposit_fee;
-    let minted_dec = (deposit_amount * fee_multiplier) / er;
 
     // CosmWasm's Decimal always uses 18 digits internally, so scale down
     // to match cfg.deposit_decimals (e.g., 6) before minting.
-    let minted_amount = minted_dec
-        .atomics()
-        .checked_div(Uint128::from(
-            10u128.pow(minted_dec.decimal_places() - cfg.deposit_decimals),
-        ))
-        .map_err(|_| ContractError::InvalidDepositAmount {})?;
+    let minted_amount =
+        dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
 
     // 4. Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(
@@ -287,6 +282,12 @@ fn execute_deposit(
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", recipient)
         .add_attribute("minted_maxbtc", minted_amount.to_string()))
+}
+
+fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
+    dec.atomics()
+        .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
+        .map_err(|err| ContractError::DivideByZeroError(err))
 }
 
 /// Permissionless deposit flush
@@ -315,11 +316,10 @@ pub fn execute_flush_deposits(
             .add_attribute("status", "not_enough_time_elapsed"));
     }
 
-    let mut deposit_buffer = deps
-        .querier
-        .query_balance(env.contract.address.clone(), &cfg.deposit_denom)?;
+    let aum = get_aum(&deps.as_ref(), env.clone(), &cfg)?;
+    let mut amount_to_flush = aum.deposit_buffer.clone();
 
-    if deposit_buffer.amount.is_zero() {
+    if amount_to_flush.is_zero() {
         // There have been no deposits, set last flush time to now and wait for another
         // cfg.deposit_flush_period
         LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
@@ -331,14 +331,11 @@ pub fn execute_flush_deposits(
 
     FSM.go_to(deps.storage, ContractState::Flushing)?;
 
-    let oracle_aum = deps
-        .querier
-        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
-
-    // The "liquidation buffer" we want is liquidation_buffer_share * oracle_aum
-    let required_buffer = (Decimal::from_atomics(oracle_aum, cfg.deposit_decimals)?
-        * cfg.liquidation_buffer_share)
-        .atomics();
+    // The "liquidation buffer" we want is liquidation_buffer_share * total aum
+    let required_buffer = dec_to_amount(
+        Decimal::from_atomics(aum.total(), cfg.deposit_decimals)? * cfg.liquidation_buffer_share,
+        cfg.deposit_decimals,
+    )?;
 
     // The actual buffer we have in the liquidation buffer contract
     let liquidation_contract_balance: Uint128 = deps.querier.query_wasm_smart(
@@ -355,31 +352,35 @@ pub fn execute_flush_deposits(
             er,
             timeout: now + cfg.cached_er_ttl,
             aum: Some(CachedAUM {
-                oracle_aum,
-                deposit_buffer: deposit_buffer.amount,
+                oracle_aum: aum.oracle_aum,
+                deposit_buffer: aum.deposit_buffer,
             }),
         }),
     )?;
 
-    println!("{} {} {}", required_buffer, liquidation_contract_balance, er);
+    println!(
+        "{} {} {}",
+        required_buffer, liquidation_contract_balance, er
+    );
 
     // If liquidation buffer contract < required => send the difference
     if liquidation_contract_balance < required_buffer {
-        let mut to_send = required_buffer - liquidation_contract_balance;
+        let mut to_send_to_liquidation_buffer_contract =
+            required_buffer - liquidation_contract_balance;
         // We are allowed to exhaust the deposit buffer completely.
-        if to_send > deposit_buffer.amount {
-            to_send = deposit_buffer.amount
+        if to_send_to_liquidation_buffer_contract > amount_to_flush {
+            to_send_to_liquidation_buffer_contract = amount_to_flush
         }
         // We do a bank send of the deposit_denom from this contract to the liquidation buffer contract
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.liquidation_buffer_contract.to_string(),
             amount: vec![Coin {
                 denom: cfg.deposit_denom.clone(),
-                amount: to_send,
+                amount: to_send_to_liquidation_buffer_contract,
             }],
         });
         msgs.push(msg);
-        deposit_buffer.amount -= to_send;
+        amount_to_flush -= to_send_to_liquidation_buffer_contract;
     } else {
         // If liquidation buffer contract > required => call liquidation buffer contract's method to
         // send back the difference
@@ -394,16 +395,19 @@ pub fn execute_flush_deposits(
                 to_recv.clone(),
             )?;
             msgs.push(msg);
-            deposit_buffer.amount += to_recv.amount;
+            amount_to_flush += to_recv.amount;
         }
     }
 
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
-    if !deposit_buffer.amount.is_zero() {
+    if !amount_to_flush.is_zero() {
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.deposit_pump_contract.to_string(),
-            amount: vec![deposit_buffer.clone()],
+            amount: vec![Coin {
+                denom: cfg.deposit_denom,
+                amount: amount_to_flush,
+            }],
         });
         msgs.push(msg);
     }
@@ -413,7 +417,7 @@ pub fn execute_flush_deposits(
         .add_attribute("action", "flush_deposits")
         .add_attribute("sender", info.sender)
         .add_attribute("liquidation_buffer", required_buffer.to_string())
-        .add_attribute("contract_balance", deposit_buffer.to_string());
+        .add_attribute("flushed", amount_to_flush.to_string());
 
     Ok(resp)
 }
@@ -826,7 +830,7 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     //  /
     // (maxBTC total supply + maxBTC burned in current active withdrawal batch - maxBTC still owned
     // by the liquidation buffer contract)
-    let er_numerator = get_aum(deps, env.clone(), cfg)?;
+    let er_numerator = get_aum(deps, env.clone(), cfg)?.total();
 
     if let Some(deposits_cap) = cfg.deposits_cap {
         if er_numerator > deposits_cap {
@@ -854,11 +858,11 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
     Ok(er)
 }
 
-fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError> {
+fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Aum, ContractError> {
     let oracle_aum: Uint128 = deps
         .querier
         .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
-    let deposit_buffer = deps
+    let deposit_buffer_balance = deps
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
     let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
@@ -866,12 +870,16 @@ fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Uint128, ContractError
         &LiquidationBufferContractQueryMsg::GetBTCBalance {},
     )?;
 
-    Ok(oracle_aum + deposit_buffer.amount + liquidation_contract_btc_balance)
+    Ok(Aum {
+        oracle_aum,
+        deposit_buffer: deposit_buffer_balance.amount,
+        liquidation_buffer_contract: liquidation_contract_btc_balance,
+    })
 }
 
 fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), ContractError> {
     if let Some(deposits_cap) = cfg.deposits_cap {
-        if get_aum(deps, env.clone(), cfg)? > deposits_cap {
+        if get_aum(deps, env.clone(), cfg)?.total() > deposits_cap {
             return Err(ContractError::DepositCapExceeded {});
         }
     }
@@ -1038,3 +1046,15 @@ fn _process_cache_withdrawing(
 
 // - Implement checking that the liquidation buffer did, in fact, return the clawed back assets.
 // - Fix decimal issues throughout the code
+
+pub struct Aum {
+    pub oracle_aum: Uint128,
+    pub deposit_buffer: Uint128,
+    pub liquidation_buffer_contract: Uint128,
+}
+
+impl Aum {
+    pub fn total(&self) -> Uint128 {
+        self.oracle_aum + self.deposit_buffer + self.liquidation_buffer_contract
+    }
+}
