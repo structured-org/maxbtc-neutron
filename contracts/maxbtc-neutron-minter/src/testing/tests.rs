@@ -1,6 +1,6 @@
 use crate::contract::{
-    execute, execute_claim, execute_flush_deposits, execute_process_active_batch, execute_withdraw,
-    instantiate,
+    _process_cache, dec_to_amount, execute, execute_claim, execute_flush_deposits,
+    execute_process_active_batch, execute_withdraw, instantiate,
 };
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg};
@@ -638,7 +638,7 @@ fn test_withdraw_success() {
     ACTIVE_BATCH
         .save(
             &mut deps.storage,
-            &Some(crate::state::Batch {
+            &Some(Batch {
                 batch_id: 1,
                 btc_requested: Uint128::zero(),
                 maxbtc_burned: Uint128::zero(),
@@ -1001,6 +1001,237 @@ fn test_claim_supply_mismatch() {
     assert_eq!(err, ContractError::RedemptionSupplyMismatch {});
 }
 
+/// When *all* funds have reached the destination (or are within the
+/// tolerance) `_process_cache` must clear the cache and go Idle.
+#[test]
+fn test_cache_flushing_finalises_and_clears() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // The flushed “deposit buffer” we will pretend to have sent previously.
+    let deposit_buffer = Uint128::from(50_000u128);
+    let historic_oracle_aum = Uint128::from(100_000u128);
+
+    // Store cache & FSM=Flushing
+    let cache = CachedER {
+        er: Decimal::one(),
+        timeout: env.block.time.seconds() + 1_000, // not stale
+        aum: Some(CachedAUM {
+            oracle_aum: historic_oracle_aum,
+            deposit_buffer,
+        }),
+    };
+    prime_cache(&mut deps, ContractState::Flushing, cache);
+
+    // Mock the *current* oracle AUM → everything arrived
+    deps.querier
+        .update_oracle_aum(historic_oracle_aum + deposit_buffer);
+
+    // call the internal helper directly
+    let msgs = _process_cache(deps.as_mut(), env.clone(), &cfg).unwrap();
+
+    assert!(msgs.is_empty(), "no side-effect messages expected");
+
+    let fsm_state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(fsm_state, ContractState::Idle);
+
+    let cached_after = CACHED_ER.load(&deps.storage).unwrap();
+    assert!(
+        cached_after.is_none(),
+        "cache must have been cleared after successful flush"
+    );
+}
+
+/// If only part of the buffer has arrived and the difference is
+/// *outside* the tolerance window, we must **remain** in *Flushing*.
+#[test]
+fn test_cache_flushing_incomplete_keeps_state() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let deposit_buffer = Uint128::from(50_000u128);
+    let historic_oracle_aum = Uint128::from(100_000u128);
+
+    let cache = CachedER {
+        er: Decimal::one(),
+        timeout: env.block.time.seconds() + 1_000,
+        aum: Some(CachedAUM {
+            oracle_aum: historic_oracle_aum,
+            deposit_buffer,
+        }),
+    };
+    prime_cache(&mut deps, ContractState::Flushing, cache.clone());
+
+    let accepted_diff = dec_to_amount(
+        Decimal::from_atomics(deposit_buffer, cfg.deposit_decimals).unwrap()
+            * cfg.deposit_buffer_tolerance,
+        cfg.deposit_decimals,
+    )
+    .unwrap();
+
+    // Let only (deposit_buffer - accepted_diff - 1) reach the oracle.
+    let successfully_flushed = deposit_buffer - accepted_diff - Uint128::one();
+    deps.querier
+        .update_oracle_aum(historic_oracle_aum + successfully_flushed);
+
+    let msgs = _process_cache(deps.as_mut(), env.clone(), &cfg).unwrap();
+
+    assert!(msgs.is_empty());
+    let fsm_state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(fsm_state, ContractState::Flushing); // unchanged
+                                                    // Cache must still be present.
+    let _ = load_cache(&deps);
+}
+
+#[test]
+fn test_cache_flushing_stale_triggers_emergency() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let deposit_buffer = Uint128::from(1u128);
+    let cache = CachedER {
+        er: Decimal::one(),
+        timeout: env.block.time.seconds() - 1, // already stale
+        aum: Some(CachedAUM {
+            oracle_aum: Uint128::from(1u128),
+            deposit_buffer,
+        }),
+    };
+    prime_cache(&mut deps, ContractState::Flushing, cache);
+
+    let res = _process_cache(deps.as_mut(), env.clone(), &cfg);
+    assert!(matches!(res, Err(ContractError::ProtocolInEmergency {})));
+}
+
+#[test]
+fn test_cache_withdrawing_finalises_and_sends_extra() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Parameters for the fake batch
+    let btc_requested = Uint128::from(100_000u128);
+    let hist_col_balance = Uint128::zero(); // starting balance
+    let current_balance = Uint128::from(120_000u128); // +20 000 extra
+    let extra = current_balance - btc_requested;
+
+    // Store the withdrawing batch & FSM
+    let withdrawing_batch = Batch {
+        batch_id: 42,
+        btc_requested,
+        maxbtc_burned: Uint128::zero(),
+        collected_amount: Uint128::zero(),
+        paid_amount: Uint128::zero(),
+        collector_historical_balance: hist_col_balance,
+    };
+    WITHDRAWING_BATCH
+        .save(&mut deps.storage, &Some(withdrawing_batch))
+        .unwrap();
+
+    // Cache (contents irrelevant for withdrawing logic, only needs
+    // to exist and be non-stale)
+    let cache = CachedER {
+        er: Decimal::one(),
+        timeout: env.block.time.seconds() + 1_000,
+        aum: None,
+    };
+    prime_cache(&mut deps, ContractState::Withdrawing, cache);
+
+    // Mock the collector's *current* balance.
+    deps.querier.set_balance(
+        &cfg.collector_contract.to_string(),
+        &cfg.deposit_denom,
+        current_balance,
+    );
+
+    let msgs = _process_cache(deps.as_mut(), env.clone(), &cfg).unwrap();
+
+    // 1. Exactly one message: Bank::Send(extra) to the treasury
+    assert_eq!(msgs.len(), 1);
+    match &msgs[0] {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, &cfg.treasury_address.to_string());
+            assert_eq!(amount.len(), 1);
+            assert_eq!(amount[0].amount, extra);
+            assert_eq!(amount[0].denom, cfg.deposit_denom);
+        }
+        _ => panic!("expected a Bank::Send message"),
+    }
+
+    // 2. FSM back to Idle
+    let fsm_state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(fsm_state, ContractState::Idle);
+
+    // 3. Cache cleared
+    assert!(CACHED_ER.load(&deps.storage).unwrap().is_none());
+
+    // 4. WITHDRAWING_BATCH cleared
+    assert!(WITHDRAWING_BATCH.load(&deps.storage).unwrap().is_none());
+
+    // 5. Batch persisted into FINALIZED_BATCHES
+    let finalised = FINALIZED_BATCHES.load(&deps.storage, 42).unwrap();
+    assert_eq!(finalised.collected_amount, current_balance);
+    assert_eq!(finalised.paid_amount, Uint128::zero());
+}
+
+/// Collected amount is *inside* the acceptance window → nothing happens.
+#[test]
+fn test_cache_withdrawing_pending() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let btc_requested = Uint128::from(100_000u128);
+    let hist_balance = Uint128::zero();
+
+    // Determine “accepted_diff” so we can stay inside the window
+    let accepted_diff = dec_to_amount(
+        Decimal::from_atomics(btc_requested, cfg.deposit_decimals).unwrap()
+            * cfg.collected_tolerance,
+        cfg.deposit_decimals,
+    )
+    .unwrap();
+
+    let collected_ok = btc_requested - accepted_diff - Uint128::one(); // inside window
+
+    let batch = Batch {
+        batch_id: 7,
+        btc_requested,
+        maxbtc_burned: Uint128::zero(),
+        collected_amount: Uint128::zero(),
+        paid_amount: Uint128::zero(),
+        collector_historical_balance: hist_balance,
+    };
+    WITHDRAWING_BATCH
+        .save(&mut deps.storage, &Some(batch))
+        .unwrap();
+
+    let cache = CachedER {
+        er: Decimal::one(),
+        timeout: env.block.time.seconds() + 1_000,
+        aum: None,
+    };
+    prime_cache(&mut deps, ContractState::Withdrawing, cache);
+
+    // Mock the collector balance so that *collected_ok* is available
+    deps.querier.set_balance(
+        &cfg.collector_contract.to_string(),
+        &cfg.deposit_denom,
+        collected_ok,
+    );
+
+    let msgs = _process_cache(deps.as_mut(), env.clone(), &cfg).unwrap();
+
+    assert!(
+        msgs.is_empty(),
+        "no side effects expected while waiting for full collection"
+    );
+    let fsm_state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(fsm_state, ContractState::Withdrawing);
+
+    // Cache and WITHDRAWING_BATCH must still be present.
+    let _ = load_cache(&deps);
+    assert!(WITHDRAWING_BATCH.load(&deps.storage).unwrap().is_some());
+}
+
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
@@ -1148,4 +1379,25 @@ fn put_finalised_batch(
         .unwrap();
 
     cfg.get_redemption_denom(env.contract.address.to_string(), batch_id)
+}
+
+/// Convenience: put the FSM in the requested state **and**
+/// save a non-stale cache object.
+fn prime_cache(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+    state: ContractState,
+    cached_er: CachedER,
+) {
+    // Move the FSM
+    FSM.go_to(&mut deps.storage, state).unwrap();
+    // Store the cache
+    CACHED_ER.save(&mut deps.storage, &Some(cached_er)).unwrap();
+}
+
+/// Reads the cache; panics if it is not `Some`.
+fn load_cache(deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> CachedER {
+    CACHED_ER
+        .load(&deps.storage)
+        .unwrap()
+        .expect("cache must exist")
 }

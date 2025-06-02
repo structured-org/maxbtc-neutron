@@ -898,7 +898,11 @@ fn check_deposits_allowlist(
 ///
 /// `_process_cache` must be called at the start of every externally-facing
 /// entry-point that can mutate balances / state.
-fn _process_cache(deps: DepsMut, env: Env, cfg: &Config) -> Result<Vec<CosmosMsg>, ContractError> {
+pub(crate) fn _process_cache(
+    deps: DepsMut,
+    env: Env,
+    cfg: &Config,
+) -> Result<Vec<CosmosMsg>, ContractError> {
     // If there is no cache, there is nothing to do.
     let cached_er = match CACHED_ER.load(deps.storage)? {
         Some(cached_er) => cached_er,
@@ -947,7 +951,10 @@ fn _process_cache_flushing(
     let successfully_flushed = current_oracle_aum - historical_oracle_aum;
     let cached_deposit_buffer_dec =
         Decimal::from_atomics(cached_aum.deposit_buffer, cfg.deposit_decimals)?;
-    let accepted_diff = (cached_deposit_buffer_dec * cfg.deposit_buffer_tolerance).atomics();
+    let accepted_diff = dec_to_amount(
+        cached_deposit_buffer_dec * cfg.deposit_buffer_tolerance,
+        cfg.deposit_decimals,
+    )?;
     if successfully_flushed > cached_aum.deposit_buffer
         || (cached_aum.deposit_buffer - successfully_flushed) < accepted_diff
     {
@@ -983,14 +990,18 @@ fn _process_cache_withdrawing(
     }
 
     let collected = current_collector_balance.amount - historical_collector_balance;
+
     let requested_dec =
         Decimal::from_atomics(withdrawing_batch.btc_requested, cfg.deposit_decimals)?;
-    let accepted_diff = (requested_dec * cfg.collected_tolerance).atomics();
+    let accepted_diff = dec_to_amount(
+        requested_dec * cfg.collected_tolerance,
+        cfg.deposit_decimals,
+    )?;
 
     // If we collected more than requested, or within the `accepted_diff` less than requested,
     // finalize the batch and transition WITHDRAWING -> IDLE.
     if collected > withdrawing_batch.btc_requested
-        || withdrawing_batch.btc_requested - collected > accepted_diff
+        || withdrawing_batch.btc_requested - collected < accepted_diff
     {
         if collected > withdrawing_batch.btc_requested {
             let extra = collected - withdrawing_batch.btc_requested;
@@ -1038,7 +1049,7 @@ impl Aum {
     }
 }
 
-fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
+pub(crate) fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
     dec.atomics()
         .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
         .map_err(|err| ContractError::DivideByZeroError(err))
