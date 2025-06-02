@@ -1,4 +1,4 @@
-use crate::contract::{execute, execute_flush_deposits, instantiate};
+use crate::contract::{execute, execute_flush_deposits, execute_withdraw, instantiate};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg};
 use crate::state::{
@@ -11,32 +11,6 @@ use cosmwasm_std::{
     coin, from_json, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo,
     OwnedDeps, Response, SubMsg, Uint128, WasmMsg,
 };
-
-fn default_instantiate_msg(
-    deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
-) -> InstantiateMsg {
-    InstantiateMsg {
-        owner: deps.api.addr_make("owner_addr").to_string(),
-        aum_contract: deps.api.addr_make("aum_addr").to_string(),
-        liquidation_contract: deps.api.addr_make("liq_buffer_addr").to_string(),
-        deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
-        collector_contract: deps.api.addr_make("collector_addr").to_string(),
-        treasury_address: deps.api.addr_make("treasury_addr").to_string(),
-        deposit_denom: "wBTC".to_string(),
-        deposit_decimals: 6u32,
-        maxbtc_denom: "maxbtc".to_string(),
-        deposit_flush_period: 3600,
-        batch_active_duration: 86400,
-        batch_withdrawing_duration: 86400,
-        accepted_withdrawable_percentage: Decimal::percent(5),
-        liquidation_buffer_share: Decimal::percent(10),
-        deposit_fee: Decimal::percent(1),
-        cached_aum_tolerance: Decimal::percent(2),
-        cached_er_ttl: 100u64,
-        deposits_cap: None,
-        deposits_allowlist: None,
-    }
-}
 
 #[test]
 fn test_instantiate_success() {
@@ -124,46 +98,6 @@ fn test_instantiate_success() {
     assert_eq!(last_deposit_flush_time, env.block.time.seconds());
     let active_batch_start_time = ACTIVE_BATCH_START_TIME.load(&deps.storage).unwrap();
     assert_eq!(active_batch_start_time, env.block.time.seconds());
-}
-
-/// Initializes the contract and sets up a "happy path" config in storage.
-/// Returns a mutable Deps and an Env, Info you can reuse in tests.
-fn setup_contract() -> (
-    OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
-    Env,
-    MessageInfo,
-) {
-    let mut deps = mock_dependencies(); // your custom mock with WasmMockQuerier
-    let env = mock_env();
-    let info = message_info(&deps.api.addr_make("any_sender"), &[]);
-
-    // Instantiate with default params
-    let instantiate_msg = default_instantiate_msg(&deps);
-    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg).unwrap();
-
-    // Because deposit() calls `_process_cache(...)`, we typically also want
-    // to ensure that the FSM is in Idle state initially (it is, by default).
-    let state = FSM.get_current_state(&deps.storage).unwrap();
-    assert_eq!(state, ContractState::Idle);
-
-    (deps, env, info)
-}
-
-/// A convenience helper for calling the `execute_deposit` entry point.
-fn do_deposit(
-    deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
-    recipient: String,
-) -> Result<Response, ContractError> {
-    execute(
-        deps,
-        env,
-        info,
-        ExecuteMsg::Deposit {
-            recipient: recipient.to_string(),
-        },
-    )
 }
 
 #[test]
@@ -519,50 +453,8 @@ fn test_deposit_fsm_in_flushing_but_not_stale() {
     );
 }
 
-/// Asserts that a [`BankMsg::Send`] exists in `msgs` with the given
-/// destination/amount/denom.
-fn assert_bank_send_exists(msgs: &[CosmosMsg], to: &str, amount: Uint128, denom: &str) {
-    assert!(
-        msgs.iter().any(|m| match m {
-            CosmosMsg::Bank(BankMsg::Send {
-                to_address,
-                amount: coins,
-            }) => {
-                to_address == to
-                    && coins.len() == 1
-                    && coins[0].denom == denom
-                    && coins[0].amount == amount
-            }
-            _ => false,
-        }),
-        "expected BankMsg::Send(to={to}, amount={amount}{denom}) not found"
-    );
-}
-
-/// Asserts that a [`WasmMsg::Execute`] exists in `msgs` invoking
-/// `LiquidationExecuteMsg::ClawBack { amount }` on `contract_addr`.
-fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coin) {
-    assert!(
-        msgs.iter().any(|m| match m {
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: c,
-                msg,
-                funds,
-            }) => {
-                if c != contract_addr || !funds.is_empty() {
-                    return false;
-                }
-                let parsed: LiquidationExecuteMsg = from_json(msg).unwrap();
-                matches!(parsed, LiquidationExecuteMsg::ClawBack { amount } if amount == clawback)
-            }
-            _ => false,
-        }),
-        "expected WasmMsg::Execute(ClawBack) not found",
-    );
-}
-
 #[test]
-fn flush_guard_not_enough_time_elapsed() {
+fn test_flush_guard_not_enough_time_elapsed() {
     let (mut deps, env, _) = setup_contract();
 
     // ── Arrange ─────────────────────────────────────────────────────────────────
@@ -615,7 +507,7 @@ fn flush_guard_not_enough_time_elapsed() {
 }
 
 #[test]
-fn flush_zero_outstanding_deposits() {
+fn test_flush_zero_outstanding_deposits() {
     let (mut deps, env, _) = setup_contract();
 
     // ── Arrange ─────────────────────────────────────────────────────────────────
@@ -658,7 +550,7 @@ fn flush_zero_outstanding_deposits() {
 }
 
 #[test]
-fn flush_sends_to_liqbuffer_then_pump() {
+fn test_flush_sends_to_liqbuffer_then_pump() {
     let (mut deps, env, _) = setup_contract();
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
     cfg.paused = false;
@@ -708,7 +600,7 @@ fn flush_sends_to_liqbuffer_then_pump() {
 }
 
 #[test]
-fn flush_requests_clawback_then_pump() {
+fn test_flush_requests_clawback_then_pump() {
     let (mut deps, env, _) = setup_contract();
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
     cfg.paused = false;
@@ -758,7 +650,277 @@ fn flush_requests_clawback_then_pump() {
     assert!(CACHED_ER.load(&deps.storage).unwrap().is_some());
 }
 
+#[test]
+fn test_withdraw_success() {
+    let (mut deps, env, _) = setup_contract();
+
+    // Make sure we have an ACTIVE batch.
+    // `setup_contract()` *already* creates an ACTIVE batch with `batch_id = 1`
+    // but we enforce the assumption explicitly so that the test does not start
+    // failing if the helper ever changes.
+    ACTIVE_BATCH
+        .save(
+            &mut deps.storage,
+            &Some(crate::state::Batch {
+                batch_id: 1,
+                btc_requested: Uint128::zero(),
+                maxbtc_burned: Uint128::zero(),
+                collected_amount: Uint128::zero(),
+                paid_amount: Uint128::zero(),
+                collector_historical_balance: Uint128::zero(),
+            }),
+        )
+        .unwrap();
+
+    // Craft a withdrawal of exactly 1 maxBTC (denominated with 6 decimals).
+    let withdraw_amount = Uint128::from(1_000_000u128); // 1.000000 maxBTC
+    let sender = deps.api.addr_make("withdrawer");
+
+    let maxbtc_denom =
+        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+
+    let info = message_info(&sender, &[coin(withdraw_amount.u128(), &maxbtc_denom)]);
+    let res = execute_withdraw(deps.as_mut(), env.clone(), info.clone()).unwrap();
+
+    // The happy-path should emit **exactly two** SubMsgs:
+    //   0. token-factory burn of `maxBTC`
+    //   1. token-factory mint of `redemption/batch/1`
+    assert_eq!(res.messages.len(), 2, "expected Burn+Mint messages");
+
+    // Response attributes
+    let attr = |k: &str| -> Option<&str> {
+        res.attributes
+            .iter()
+            .find(|a| a.key == k)
+            .map(|a| a.value.as_str())
+    };
+
+    assert_eq!(attr("action"), Some("withdraw"));
+    assert_eq!(attr("sender"), Some(sender.as_str()));
+    assert_eq!(attr("batch_id"), Some("1"));
+    assert_eq!(attr("withdraw_amount"), Some(withdraw_amount.to_string().as_str()));
+
+    // ACTIVE_BATCH.maxbtc_burned must now equal `withdraw_amount`.
+    let active_batch = ACTIVE_BATCH
+        .load(&deps.storage)
+        .unwrap()
+        .expect("ACTIVE batch must exist");
+    assert_eq!(
+        active_batch.maxbtc_burned, withdraw_amount,
+        "burn counter in ACTIVE_BATCH must be updated"
+    );
+
+    // 2. FSM should still be `Idle` and no ER cache should have been created.
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
+    assert!(
+        CACHED_ER.load(&deps.storage).unwrap().is_none(),
+        "no ER cache is expected in the Idle state"
+    );
+}
+
+/* ------------------------------------------------------------------- *
+ *                          FAILURE PATHS                              *
+ * ------------------------------------------------------------------- */
+
+#[test]
+fn test_withdraw_fails_when_paused() {
+    let (mut deps, env, _) = setup_contract();
+
+    // Pause the contract.
+    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
+        c.paused = true;
+        Ok(c)
+    })
+        .unwrap();
+
+    // Any non-empty funds will do – they won’t be checked after the pause gate.
+    let info = message_info(&deps.api.addr_make("any"), &[coin(1, "dummy")]);
+
+    let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
+    assert!(matches!(err, ContractError::ContractPaused {}));
+}
+
+#[test]
+fn test_withdraw_fails_with_no_funds() {
+    let (mut deps, env, _) = setup_contract();
+    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
+        c.paused = false;
+        Ok(c)
+    })
+        .unwrap();
+
+    let info = message_info(&deps.api.addr_make("user"), &[]);
+    let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
+    assert!(matches!(err, ContractError::NoFundsSent {}));
+}
+
+#[test]
+fn test_withdraw_fails_with_wrong_denom() {
+    let (mut deps, env, _) = setup_contract();
+    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
+        c.paused = false;
+        Ok(c)
+    })
+        .unwrap();
+
+    let info = message_info(&deps.api.addr_make("user"), &[coin(1_000, "wBTC")]); // wrong denom
+    let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
+    assert!(matches!(err, ContractError::InvalidDepositDenom { .. }));
+}
+
+#[test]
+fn test_withdraw_fails_with_zero_amount() {
+    let (mut deps, env, _) = setup_contract();
+    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
+        c.paused = false;
+        Ok(c)
+    })
+        .unwrap();
+
+    let maxbtc_denom =
+        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+
+    let info = message_info(&deps.api.addr_make("user"), &[coin(0u128, &maxbtc_denom)]);
+    let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
+    assert!(matches!(err, ContractError::InvalidDepositAmount {}));
+}
+
+#[test]
+fn test_withdraw_fails_without_active_batch() {
+    let (mut deps, env, _) = setup_contract();
+    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
+        c.paused = false;
+        Ok(c)
+    })
+        .unwrap();
+
+    // Remove the ACTIVE batch altogether.
+    ACTIVE_BATCH.save(&mut deps.storage, &None).unwrap();
+
+    let maxbtc_denom =
+        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+    let info = message_info(&deps.api.addr_make("user"), &[coin(1_000, &maxbtc_denom)]);
+
+    let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
+    assert!(matches!(err, ContractError::BatchStateError {}));
+}
+
+/// -----------------------------------------------------------------------------------------------
+/// HELPER FUNCTIONS BELOW
+/// -----------------------------------------------------------------------------------------------
+
+/// Initializes the contract and sets up a "happy path" config in storage.
+/// Returns a mutable Deps and an Env, Info you can reuse in tests.
+fn setup_contract() -> (
+    OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+    Env,
+    MessageInfo,
+) {
+    let mut deps = mock_dependencies(); // your custom mock with WasmMockQuerier
+    let env = mock_env();
+    let info = message_info(&deps.api.addr_make("any_sender"), &[]);
+
+    // Instantiate with default params
+    let instantiate_msg = default_instantiate_msg(&deps);
+    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), instantiate_msg).unwrap();
+
+    // Because deposit() calls `_process_cache(...)`, we typically also want
+    // to ensure that the FSM is in Idle state initially (it is, by default).
+    let state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(state, ContractState::Idle);
+
+    (deps, env, info)
+}
+
+fn default_instantiate_msg(
+    deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+) -> InstantiateMsg {
+    InstantiateMsg {
+        owner: deps.api.addr_make("owner_addr").to_string(),
+        aum_contract: deps.api.addr_make("aum_addr").to_string(),
+        liquidation_contract: deps.api.addr_make("liq_buffer_addr").to_string(),
+        deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
+        collector_contract: deps.api.addr_make("collector_addr").to_string(),
+        treasury_address: deps.api.addr_make("treasury_addr").to_string(),
+        deposit_denom: "wBTC".to_string(),
+        deposit_decimals: 6u32,
+        maxbtc_denom: "maxbtc".to_string(),
+        deposit_flush_period: 3600,
+        batch_active_duration: 86400,
+        batch_withdrawing_duration: 86400,
+        accepted_withdrawable_percentage: Decimal::percent(5),
+        liquidation_buffer_share: Decimal::percent(10),
+        deposit_fee: Decimal::percent(1),
+        cached_aum_tolerance: Decimal::percent(2),
+        cached_er_ttl: 100u64,
+        deposits_cap: None,
+        deposits_allowlist: None,
+    }
+}
+
+/// A convenience helper for calling the `execute_deposit` entry point.
+fn do_deposit(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    recipient: String,
+) -> Result<Response, ContractError> {
+    execute(
+        deps,
+        env,
+        info,
+        ExecuteMsg::Deposit {
+            recipient: recipient.to_string(),
+        },
+    )
+}
+
 /// Returns only the `CosmosMsg`-payloads from a vector of `SubMsg`.
 fn extract_msgs(submsgs: &[SubMsg]) -> Vec<CosmosMsg> {
     submsgs.iter().map(|s| s.msg.clone()).collect()
+}
+
+/// Asserts that a [`BankMsg::Send`] exists in `msgs` with the given
+/// destination/amount/denom.
+fn assert_bank_send_exists(msgs: &[CosmosMsg], to: &str, amount: Uint128, denom: &str) {
+    assert!(
+        msgs.iter().any(|m| match m {
+            CosmosMsg::Bank(BankMsg::Send {
+                                to_address,
+                                amount: coins,
+                            }) => {
+                to_address == to
+                    && coins.len() == 1
+                    && coins[0].denom == denom
+                    && coins[0].amount == amount
+            }
+            _ => false,
+        }),
+        "expected BankMsg::Send(to={to}, amount={amount}{denom}) not found"
+    );
+}
+
+/// Asserts that a [`WasmMsg::Execute`] exists in `msgs` invoking
+/// `LiquidationExecuteMsg::ClawBack { amount }` on `contract_addr`.
+fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coin) {
+    assert!(
+        msgs.iter().any(|m| match m {
+            CosmosMsg::Wasm(WasmMsg::Execute {
+                                contract_addr: c,
+                                msg,
+                                funds,
+                            }) => {
+                if c != contract_addr || !funds.is_empty() {
+                    return false;
+                }
+                let parsed: LiquidationExecuteMsg = from_json(msg).unwrap();
+                matches!(parsed, LiquidationExecuteMsg::ClawBack { amount } if amount == clawback)
+            }
+            _ => false,
+        }),
+        "expected WasmMsg::Execute(ClawBack) not found",
+    );
 }

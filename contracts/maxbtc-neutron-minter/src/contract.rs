@@ -412,7 +412,7 @@ pub fn execute_flush_deposits(
 }
 
 /// User requests to withdraw BTC and burn their maxBTC
-fn execute_withdraw(
+pub fn execute_withdraw(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
