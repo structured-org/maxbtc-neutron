@@ -577,7 +577,7 @@ pub(crate) fn execute_process_active_batch(
 }
 
 /// User claims their BTC, providing redemption tokens as input
-fn execute_claim(
+pub(crate) fn execute_claim(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -617,8 +617,7 @@ fn execute_claim(
         batch.collected_amount - batch.paid_amount,
         cfg.deposit_decimals,
     )?;
-    let user_btc_dec = available_dec * fraction;
-    let user_btc = user_btc_dec.atomics();
+    let user_btc = dec_to_amount(available_dec * fraction, cfg.deposit_decimals)?;
 
     // Send the user’s BTC to `recipient` address
     let send_msg = CosmosMsg::Bank(BankMsg::Send {

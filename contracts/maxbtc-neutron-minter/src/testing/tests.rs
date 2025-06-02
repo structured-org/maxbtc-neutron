@@ -1,11 +1,13 @@
 use crate::contract::{
-    execute, execute_flush_deposits, execute_process_active_batch, execute_withdraw, instantiate,
+    execute, execute_claim, execute_flush_deposits, execute_process_active_batch, execute_withdraw,
+    instantiate,
 };
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg};
 use crate::state::{
-    CachedAUM, CachedER, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER,
-    CACHED_ER, CONFIG, FSM, LAST_DEPOSIT_FLUSH_TIME, WITHDRAWING_BATCH,
+    Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
+    BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
+    WITHDRAWING_BATCH,
 };
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
@@ -441,7 +443,7 @@ fn test_deposit_fsm_in_flushing_but_not_stale() {
 fn test_flush_guard_not_enough_time_elapsed() {
     let (mut deps, env, _) = setup_contract();
 
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // Deposit buffer: 0.5 wBTC.
     let buffer = Uint128::new(500_000);
@@ -491,7 +493,7 @@ fn test_flush_guard_not_enough_time_elapsed() {
 fn test_flush_zero_outstanding_deposits() {
     let (mut deps, env, _) = setup_contract();
 
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // No balance in the contract’s deposit buffer.
     deps.querier
@@ -530,7 +532,7 @@ fn test_flush_zero_outstanding_deposits() {
 #[test]
 fn test_flush_sends_to_liqbuffer_then_pump() {
     let (mut deps, env, _) = setup_contract();
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
     deps.querier
@@ -579,7 +581,7 @@ fn test_flush_sends_to_liqbuffer_then_pump() {
 #[test]
 fn test_flush_requests_clawback_then_pump() {
     let (mut deps, env, _) = setup_contract();
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     deps.querier.update_oracle_aum(Uint128::new(1_000_000));
     deps.querier
@@ -833,8 +835,8 @@ fn test_process_active_batch_happy_path() {
 
 #[test]
 fn test_process_active_batch_no_withdraw_requests() {
-    let (mut deps, mut env, _) = setup_contract();
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // Make the batch old enough
     let now = env.block.time.seconds();
@@ -883,6 +885,120 @@ fn test_process_active_batch_too_early() {
         FSM.get_current_state(&deps.storage).unwrap(),
         ContractState::Idle
     );
+}
+
+#[test]
+fn test_claim_success() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Finalised batch #1 with 1_000_000 sat worth of BTC already collected.
+    let total_redemption = Uint128::from(1_000_000u128);
+    let redemption_denom = put_finalised_batch(
+        &mut deps,
+        &cfg,
+        &env.clone(),
+        1,
+        /*collected*/ total_redemption,
+        /*paid*/ Uint128::zero(),
+    );
+
+    // Mock Bank supply so that total redemption-token = 1_000_000.
+    deps.querier
+        .set_token_supply(&redemption_denom, total_redemption);
+
+    // The claimant sends 200_000 redemption tokens.
+    let user_redeem = Uint128::from(200_000u128);
+    let claimant = deps.api.addr_make("claimer");
+    let recipient = deps.api.addr_make("btc_receiver");
+    let info = message_info(&claimant, &[coin(user_redeem.u128(), &redemption_denom)]);
+
+    let res = execute_claim(deps.as_mut(), env.clone(), info, recipient.to_string()).unwrap();
+
+    // We expect two Cosmos messages: send BTC and burn redemption token.
+    assert_eq!(res.messages.len(), 2, "exactly send + burn");
+
+    // Bank send
+    match &res.messages[0].msg {
+        CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+            assert_eq!(to_address, &recipient.to_string());
+            assert_eq!(amount.len(), 1);
+            assert_eq!(amount[0].denom, cfg.deposit_denom);
+            assert_eq!(
+                amount[0].amount, user_redeem,
+                "user gets 1:1 BTC for redeemed tokens"
+            );
+        }
+        _ => panic!("1st message must be Bank::Send"),
+    }
+
+    // Burn message – we only check it *is* a burn.
+    match &res.messages[1].msg {
+        CosmosMsg::Any(any_msg) => {
+            assert_eq!(any_msg.type_url, "/osmosis.tokenfactory.v1beta1.MsgBurn");
+        }
+        _ => panic!("Expected Any message with MsgBurn type_url"),
+    }
+
+    let user_attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "user_claim_btc")
+        .expect("attribute user_claim_btc must exist");
+    assert_eq!(user_attr.value, user_redeem.to_string());
+
+    // Batch paid_amount was updated.
+    let stored = FINALIZED_BATCHES.load(&deps.storage, 1).unwrap();
+    assert_eq!(stored.paid_amount, user_redeem);
+}
+
+#[test]
+fn test_claim_batch_not_finalised() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Create a redemption token denom that has **no** corresponding batch.
+    let redemption_denom = cfg.get_redemption_denom(env.contract.address.to_string(), 1);
+    deps.querier
+        .set_token_supply(&redemption_denom, Uint128::from(10u64));
+
+    let info = message_info(
+        &deps.api.addr_make("user"),
+        &[coin(10u128, &redemption_denom)],
+    );
+
+    let recv_addr = deps.api.addr_make("recv").to_string();
+    let err = execute_claim(deps.as_mut(), env, info, recv_addr.to_string()).unwrap_err();
+
+    assert_eq!(err, ContractError::BatchNotFinalized {});
+}
+
+#[test]
+fn test_claim_supply_mismatch() {
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Finalise batch #3 but set the token-supply to *zero*.
+    let redemption_denom = put_finalised_batch(
+        &mut deps,
+        &cfg,
+        &env.clone(),
+        3,
+        Uint128::from(500_000u128),
+        Uint128::zero(),
+    );
+    deps.querier
+        .set_token_supply(&redemption_denom, Uint128::zero());
+
+    let info = message_info(
+        &deps.api.addr_make("user"),
+        &[coin(1u128, &redemption_denom)],
+    );
+
+    let recv_addr = deps.api.addr_make("recv").to_string();
+    let err = execute_claim(deps.as_mut(), env, info, recv_addr).unwrap_err();
+
+    assert_eq!(err, ContractError::RedemptionSupplyMismatch {});
 }
 
 /// -----------------------------------------------------------------------------------------------
@@ -1006,4 +1122,30 @@ fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coi
 fn env_with_time(mut env: Env, offset_secs: u64) -> Env {
     env.block.time = env.block.time.plus_seconds(offset_secs);
     env
+}
+
+/// Helper that prepares a finalised batch `#batch_id` and returns its
+/// redemption-token denom (`redemption/batch/<id>`).  All monetary
+/// amounts are expressed **in the deposit-denom’s base units**.
+fn put_finalised_batch(
+    deps: &mut OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
+    cfg: &Config,
+    env: &Env,
+    batch_id: u64,
+    collected_amount: Uint128,
+    paid_amount: Uint128,
+) -> String {
+    let batch = Batch {
+        batch_id,
+        btc_requested: collected_amount,
+        maxbtc_burned: collected_amount,
+        collected_amount,
+        paid_amount,
+        collector_historical_balance: Uint128::zero(),
+    };
+    FINALIZED_BATCHES
+        .save(&mut deps.storage, batch_id, &batch)
+        .unwrap();
+
+    cfg.get_redemption_denom(env.contract.address.to_string(), batch_id)
 }
