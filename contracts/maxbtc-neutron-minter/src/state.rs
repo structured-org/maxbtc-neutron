@@ -60,7 +60,7 @@ impl Config {
         format!("factory/{}/{}", contract_addr, self.maxbtc_denom)
     }
 
-    pub fn get_redemption_denom(&self, contract_addr: String, batch_id: String) -> String {
+    pub fn get_redemption_denom(&self, contract_addr: String, batch_id: u64) -> String {
         format!("factory/{}/redemption/batch/{}", contract_addr, batch_id)
     }
 }

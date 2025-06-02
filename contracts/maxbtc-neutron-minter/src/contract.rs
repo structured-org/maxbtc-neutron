@@ -213,7 +213,7 @@ fn execute_update_config(
         .add_attribute("sender", info.sender))
 }
 
-fn execute_deposit(
+pub(crate) fn execute_deposit(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -284,18 +284,12 @@ fn execute_deposit(
         .add_attribute("minted_maxbtc", minted_amount.to_string()))
 }
 
-fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
-    dec.atomics()
-        .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
-        .map_err(|err| ContractError::DivideByZeroError(err))
-}
-
 /// Permissionless deposit flush
 /// - checks time has passed at least deposit_flush_period
 /// - if liquidation buffer contract holds less than liquidation_buffer_share of AUM, send enough
 /// - if liquidation buffer contract holds more, request some back (it will be processed next time)
 /// - then IBC Eureka transfer everything else to the custody
-pub fn execute_flush_deposits(
+pub(crate) fn execute_flush_deposits(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -412,7 +406,7 @@ pub fn execute_flush_deposits(
 }
 
 /// User requests to withdraw BTC and burn their maxBTC
-pub fn execute_withdraw(
+pub(crate) fn execute_withdraw(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -478,7 +472,7 @@ pub fn execute_withdraw(
 }
 
 /// Permissionless call to move batch ACTIVE → WITHDRAWING if time is up
-fn execute_process_active_batch(
+pub(crate) fn execute_process_active_batch(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -503,10 +497,7 @@ fn execute_process_active_batch(
         .ok_or(ContractError::BatchStateError {})?;
     let redemption_token_supply = query_token_supply(
         &deps.as_ref(),
-        cfg.get_redemption_denom(
-            env.contract.address.to_string(),
-            active_batch.batch_id.to_string(),
-        ),
+        cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id),
     )?;
     if redemption_token_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
@@ -1046,4 +1037,10 @@ impl Aum {
     pub fn total(&self) -> Uint128 {
         self.oracle_aum + self.deposit_buffer + self.liquidation_buffer_contract
     }
+}
+
+fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
+    dec.atomics()
+        .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
+        .map_err(|err| ContractError::DivideByZeroError(err))
 }

@@ -31,9 +31,6 @@ pub struct WasmMockQuerier {
     /// Mocked AUM value for `OracleQueryMsg::GetAUM {}` queries.
     oracle_aum: Uint128,
 
-    /// Mocked total maxBTC supply for `QueryRequest::Bank(BankQuery::Supply { denom })`.
-    maxbtc_supply: Uint128,
-
     /// Mocked liquidation buffer contract's `GetMaxBTCBalance`.
     liqbuffer_maxbtc_balance: Uint128,
 
@@ -43,6 +40,8 @@ pub struct WasmMockQuerier {
     /// Optional map of `(address, denom) -> balance` for your own bank queries
     /// (used in `BankQuery::Balance { address, denom }`).
     balances: HashMap<(String, String), Uint128>,
+
+    supplies: HashMap<String, Uint128>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -70,20 +69,16 @@ impl WasmMockQuerier {
         WasmMockQuerier {
             base,
             oracle_aum: Uint128::zero(),
-            maxbtc_supply: Uint128::zero(),
             liqbuffer_maxbtc_balance: Uint128::zero(),
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
+            supplies: Default::default(),
         }
     }
 
     // ---------- Update methods for mocking specific values ----------
     pub fn update_oracle_aum(&mut self, val: Uint128) {
         self.oracle_aum = val;
-    }
-
-    pub fn update_maxbtc_supply(&mut self, val: Uint128) {
-        self.maxbtc_supply = val;
     }
 
     pub fn update_liqbuffer_maxbtc_balance(&mut self, val: Uint128) {
@@ -97,6 +92,10 @@ impl WasmMockQuerier {
     /// Allows you to store any arbitrary `(address, denom) -> amount` for `BankQuery::Balance`.
     pub fn set_balance(&mut self, address: &str, denom: &str, amount: Uint128) {
         self.balances.insert((address.into(), denom.into()), amount);
+    }
+
+    pub fn set_token_supply(&mut self, denom: &str, amount: Uint128) {
+        self.supplies.insert(denom.into(), amount);
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -116,16 +115,15 @@ impl WasmMockQuerier {
                 SystemResult::Ok(ContractResult::Ok(to_json_binary(&resp).unwrap()))
             }
             BankQuery::Supply { denom } => {
-                // If this is the "maxbtc" denom, return our mocked maxbtc_supply
-                if denom == "maxbtc" {
-                    let coin = coin(self.maxbtc_supply.u128(), denom.clone());
-                    let resp = SupplyResponse { amount: coin };
-                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&resp).unwrap()))
-                } else {
-                    // Fallback: let the base mock handle it (could be zero or whatever default)
-                    self.base
-                        .handle_query(&QueryRequest::Bank(BankQuery::Supply { denom }))
+                if let Some(val) = self.supplies.get(&denom) {
+                    let resp = SupplyResponse {
+                        amount: coin(val.u128(), denom.clone()),
+                    };
+                    return SystemResult::Ok(ContractResult::Ok(to_json_binary(&resp).unwrap()));
                 }
+
+                self.base
+                    .handle_query(&QueryRequest::Bank(BankQuery::Supply { denom }))
             }
             // For other queries, fallback to base
             _ => self.base.handle_query(&QueryRequest::Bank(query)),

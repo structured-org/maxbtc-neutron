@@ -1,9 +1,11 @@
-use crate::contract::{execute, execute_flush_deposits, execute_withdraw, instantiate};
+use crate::contract::{
+    execute, execute_flush_deposits, execute_process_active_batch, execute_withdraw, instantiate,
+};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg};
 use crate::state::{
     CachedAUM, CachedER, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME, BATCH_ID_COUNTER,
-    CACHED_ER, CONFIG, FSM, LAST_DEPOSIT_FLUSH_TIME,
+    CACHED_ER, CONFIG, FSM, LAST_DEPOSIT_FLUSH_TIME, WITHDRAWING_BATCH,
 };
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
@@ -105,16 +107,14 @@ fn test_first_deposit_success() {
     // Arrange
     let (mut deps, env, _) = setup_contract();
 
-    // Make sure the contract is not paused
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // Mock out the queries so that get_exchange_rate() returns ER=1
     //   - AUM = 100_000_000,
     //   - maxBTC supply = 0, etc.
     deps.querier.update_oracle_aum(Uint128::from(0u128));
-    deps.querier.update_maxbtc_supply(Uint128::zero());
+    deps.querier
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
     deps.querier
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
 
@@ -164,7 +164,6 @@ fn test_first_deposit_success() {
 
 #[test]
 fn test_deposit_contract_paused() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
 
     // Mark contract as paused
@@ -192,7 +191,6 @@ fn test_deposit_contract_paused() {
 
 #[test]
 fn test_deposit_exceeds_cap() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
 
     // Suppose the deposit cap is 100 wBTC
@@ -204,7 +202,8 @@ fn test_deposit_exceeds_cap() {
     // Mock queries so that the AUM is already at 110 wBTC
     deps.querier
         .update_oracle_aum(Uint128::from(110_000_000u128));
-    deps.querier.update_maxbtc_supply(Uint128::zero());
+    deps.querier
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
     deps.querier
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
 
@@ -228,7 +227,6 @@ fn test_deposit_exceeds_cap() {
 
 #[test]
 fn test_deposit_not_allowlisted() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
 
     // Suppose we have an allowlist of ["alice", "bob"]
@@ -243,7 +241,6 @@ fn test_deposit_not_allowlisted() {
         &[coin(1_000_000u128, "wBTC")],
     ); // 1 wBTC
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let err = do_deposit(
         deps.as_mut(),
@@ -262,16 +259,13 @@ fn test_deposit_not_allowlisted() {
 
 #[test]
 fn test_deposit_no_funds() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
     let info = message_info(&deps.api.addr_make("depositor"), &[]); // no funds
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
         .expect_err("No funds means error");
 
-    // Assert
     match err {
         ContractError::NoFundsSent {} => (),
         e => panic!("Unexpected error: {:?}", e),
@@ -280,7 +274,6 @@ fn test_deposit_no_funds() {
 
 #[test]
 fn test_deposit_multiple_funds() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
     let info = message_info(
         &deps.api.addr_make("depositor"),
@@ -290,12 +283,10 @@ fn test_deposit_multiple_funds() {
         ],
     );
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
         .expect_err("Must fail if multiple funds are attached");
 
-    // Assert
     match err {
         ContractError::InvalidDepositAmount {} => (),
         e => panic!("Unexpected error: {:?}", e),
@@ -304,17 +295,14 @@ fn test_deposit_multiple_funds() {
 
 #[test]
 fn test_deposit_zero_amount() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
     // deposit 0 wBTC
     let info = message_info(&deps.api.addr_make("depositor"), &[coin(0u128, "wBTC")]);
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
         .expect_err("Zero deposit is invalid");
 
-    // Assert
     match err {
         ContractError::InvalidDepositAmount {} => (),
         e => panic!("Unexpected error: {:?}", e),
@@ -323,7 +311,6 @@ fn test_deposit_zero_amount() {
 
 #[test]
 fn test_deposit_wrong_denom() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
     // deposit coin in a different denom
     let info = message_info(
@@ -331,12 +318,10 @@ fn test_deposit_wrong_denom() {
         &[coin(1_000_000u128, "ETH")],
     );
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
         .expect_err("Wrong denom should fail");
 
-    // Assert
     match err {
         ContractError::InvalidDepositDenom { expected, received } => {
             assert_eq!(expected, "wBTC");
@@ -348,8 +333,9 @@ fn test_deposit_wrong_denom() {
 
 #[test]
 fn test_deposit_minted_zero_below_er() {
-    // Arrange
     let (mut deps, env, _) = setup_contract();
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // Suppose the exchange rate is super high, e.g. ER=100.
     // Then deposit of 50 wBTC => minted ~ 0.49 maxBTC if deposit_fee=1%,
@@ -358,18 +344,16 @@ fn test_deposit_minted_zero_below_er() {
     deps.querier
         .update_oracle_aum(Uint128::from(10_000_000_000u128)); // huge AUM => huge ER
     deps.querier
-        .update_maxbtc_supply(Uint128::from(100_000_000u128));
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::from(100_000_000u128));
     deps.querier
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
 
     let info = message_info(&deps.api.addr_make("depositor"), &[coin(50u128, "wBTC")]); // 0.000050 wBTC in decimal(6)
 
-    // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     let res = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
         .expect("Should succeed even if minted=0");
 
-    // Assert
     // We expect a Mint message, but the minted amount is 0
     // The contract does NOT explicitly reject zero minted.
     // So it’s a valid (though strange) scenario.
@@ -457,10 +441,7 @@ fn test_deposit_fsm_in_flushing_but_not_stale() {
 fn test_flush_guard_not_enough_time_elapsed() {
     let (mut deps, env, _) = setup_contract();
 
-    // ── Arrange ─────────────────────────────────────────────────────────────────
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // Deposit buffer: 0.5 wBTC.
     let buffer = Uint128::new(500_000);
@@ -510,10 +491,7 @@ fn test_flush_guard_not_enough_time_elapsed() {
 fn test_flush_zero_outstanding_deposits() {
     let (mut deps, env, _) = setup_contract();
 
-    // ── Arrange ─────────────────────────────────────────────────────────────────
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // No balance in the contract’s deposit buffer.
     deps.querier
@@ -553,11 +531,10 @@ fn test_flush_zero_outstanding_deposits() {
 fn test_flush_sends_to_liqbuffer_then_pump() {
     let (mut deps, env, _) = setup_contract();
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
-    deps.querier.update_maxbtc_supply(Uint128::new(2_000_000));
+    deps.querier
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::from(2_000_000u128));
 
     let deposit_buffer = Uint128::new(2_000_000);
     deps.querier
@@ -603,8 +580,6 @@ fn test_flush_sends_to_liqbuffer_then_pump() {
 fn test_flush_requests_clawback_then_pump() {
     let (mut deps, env, _) = setup_contract();
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     deps.querier.update_oracle_aum(Uint128::new(1_000_000));
     deps.querier
@@ -748,12 +723,6 @@ fn test_withdraw_fails_when_paused() {
 #[test]
 fn test_withdraw_fails_with_no_funds() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG
-        .update::<_, ContractError>(&mut deps.storage, |mut c| {
-            c.paused = false;
-            Ok(c)
-        })
-        .unwrap();
 
     let info = message_info(&deps.api.addr_make("user"), &[]);
     let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
@@ -763,12 +732,6 @@ fn test_withdraw_fails_with_no_funds() {
 #[test]
 fn test_withdraw_fails_with_wrong_denom() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG
-        .update::<_, ContractError>(&mut deps.storage, |mut c| {
-            c.paused = false;
-            Ok(c)
-        })
-        .unwrap();
 
     let info = message_info(&deps.api.addr_make("user"), &[coin(1_000, "wBTC")]); // wrong denom
     let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
@@ -778,12 +741,6 @@ fn test_withdraw_fails_with_wrong_denom() {
 #[test]
 fn test_withdraw_fails_with_zero_amount() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG
-        .update::<_, ContractError>(&mut deps.storage, |mut c| {
-            c.paused = false;
-            Ok(c)
-        })
-        .unwrap();
 
     let maxbtc_denom = CONFIG
         .load(&deps.storage)
@@ -798,12 +755,6 @@ fn test_withdraw_fails_with_zero_amount() {
 #[test]
 fn test_withdraw_fails_without_active_batch() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG
-        .update::<_, ContractError>(&mut deps.storage, |mut c| {
-            c.paused = false;
-            Ok(c)
-        })
-        .unwrap();
 
     // Remove the ACTIVE batch altogether.
     ACTIVE_BATCH.save(&mut deps.storage, &None).unwrap();
@@ -816,6 +767,122 @@ fn test_withdraw_fails_without_active_batch() {
 
     let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
     assert!(matches!(err, ContractError::BatchStateError {}));
+}
+
+#[test]
+fn test_process_active_batch_happy_path() {
+    let (mut deps, mut env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Force the active-batch start to well in the past
+    let now = env.block.time.seconds();
+    let past = now - cfg.batch_active_duration - 10;
+    ACTIVE_BATCH_START_TIME
+        .save(&mut deps.storage, &past)
+        .unwrap();
+
+    // Make sure *some* redemption tokens exist
+    let redemption_denom = cfg.get_redemption_denom(env.contract.address.to_string(), 1u64); // batch_id = 1 on first instantiation
+    deps.querier
+        .set_token_supply(&redemption_denom, Uint128::from(1_000_000u128)); // 1 token (6 dec)
+
+    // ER machinery – keep it simple: numerator == denominator ⇒ ER = 1
+    deps.querier.update_oracle_aum(Uint128::from(1_000_000u128)); // oracle AUM
+    deps.querier
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::from(1_000_000u128));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+    deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
+
+    // Zero balance on collector; required later in transition
+    deps.querier.set_balance(
+        &cfg.collector_contract.as_str(),
+        &cfg.deposit_denom,
+        Uint128::zero(),
+    );
+
+    // Bump env time to (now) so that `execute_process_active_batch` “sees”
+    // that the batch is already old enough.
+    env = env_with_time(env, 0);
+
+    let info = message_info(&deps.api.addr_make("anyone"), &[]);
+    let res = execute_process_active_batch(deps.as_mut(), env.clone(), info).unwrap();
+
+    // FSM state
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Withdrawing
+    );
+
+    // WITHDRAWING_BATCH should now exist with batch_id == 1
+    let w_batch = WITHDRAWING_BATCH.load(&deps.storage).unwrap().unwrap();
+    assert_eq!(w_batch.batch_id, 1);
+
+    // ACTIVE_BATCH was rolled – its id must be 2
+    let active = ACTIVE_BATCH.load(&deps.storage).unwrap().unwrap();
+    assert_eq!(active.batch_id, 2);
+
+    // `new_withdrawing_batch_id` attribute is present
+    let attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "new_withdrawing_batch_id")
+        .unwrap();
+    assert_eq!(attr.value, "1");
+}
+
+#[test]
+fn test_process_active_batch_no_withdraw_requests() {
+    let (mut deps, mut env, _) = setup_contract();
+    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+
+    // Make the batch old enough
+    let now = env.block.time.seconds();
+    let past = now - cfg.batch_active_duration - 5;
+    ACTIVE_BATCH_START_TIME
+        .save(&mut deps.storage, &past)
+        .unwrap();
+
+    // *Zero* supply for the redemption token (implicitly – we do NOT call set_token_supply)
+
+    // Caller
+    let info = message_info(&deps.api.addr_make("trigger"), &[]);
+    let res = execute_process_active_batch(deps.as_mut(), env.clone(), info).unwrap();
+
+    // FSM never left Idle
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
+
+    // Attribute `status = no_withdraw_requests_found`
+    let attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "status")
+        .expect("status attribute");
+    assert_eq!(attr.value, "no_withdraw_requests_found");
+
+    // ACTIVE_BATCH_START_TIME was reset to *now*
+    let stored_time = ACTIVE_BATCH_START_TIME.load(&deps.storage).unwrap();
+    assert_eq!(stored_time, env.block.time.seconds());
+}
+
+#[test]
+fn test_process_active_batch_too_early() {
+    let (mut deps, env, _) = setup_contract();
+
+    // ACTIVE_BATCH_START_TIME is the current block time, so batch is *not* old enough
+    let info = message_info(&deps.api.addr_make("eager_beaver"), &[]);
+    let err = execute_process_active_batch(deps.as_mut(), env.clone(), info).unwrap_err();
+
+    assert!(matches!(err, ContractError::CannotProcessActiveBatchYet {}));
+
+    // No state-change: FSM remains Idle
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
 }
 
 /// -----------------------------------------------------------------------------------------------
@@ -933,4 +1000,10 @@ fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coi
         }),
         "expected WasmMsg::Execute(ClawBack) not found",
     );
+}
+
+/// Returns a fresh env whose block-time is `base + offset_secs`
+fn env_with_time(mut env: Env, offset_secs: u64) -> Env {
+    env.block.time = env.block.time.plus_seconds(offset_secs);
+    env
 }
