@@ -726,10 +726,6 @@ fn test_withdraw_success() {
     );
 }
 
-/* ------------------------------------------------------------------- *
- *                          FAILURE PATHS                              *
- * ------------------------------------------------------------------- */
-
 #[test]
 fn test_withdraw_fails_when_paused() {
     let (mut deps, env, _) = setup_contract();
