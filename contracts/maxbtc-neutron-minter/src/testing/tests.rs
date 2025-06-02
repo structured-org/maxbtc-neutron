@@ -676,8 +676,10 @@ fn test_withdraw_success() {
     let withdraw_amount = Uint128::from(1_000_000u128); // 1.000000 maxBTC
     let sender = deps.api.addr_make("withdrawer");
 
-    let maxbtc_denom =
-        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+    let maxbtc_denom = CONFIG
+        .load(&deps.storage)
+        .unwrap()
+        .get_maxbtc_denom(env.contract.address.to_string());
 
     let info = message_info(&sender, &[coin(withdraw_amount.u128(), &maxbtc_denom)]);
     let res = execute_withdraw(deps.as_mut(), env.clone(), info.clone()).unwrap();
@@ -698,7 +700,10 @@ fn test_withdraw_success() {
     assert_eq!(attr("action"), Some("withdraw"));
     assert_eq!(attr("sender"), Some(sender.as_str()));
     assert_eq!(attr("batch_id"), Some("1"));
-    assert_eq!(attr("withdraw_amount"), Some(withdraw_amount.to_string().as_str()));
+    assert_eq!(
+        attr("withdraw_amount"),
+        Some(withdraw_amount.to_string().as_str())
+    );
 
     // ACTIVE_BATCH.maxbtc_burned must now equal `withdraw_amount`.
     let active_batch = ACTIVE_BATCH
@@ -730,10 +735,11 @@ fn test_withdraw_fails_when_paused() {
     let (mut deps, env, _) = setup_contract();
 
     // Pause the contract.
-    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
-        c.paused = true;
-        Ok(c)
-    })
+    CONFIG
+        .update::<_, ContractError>(&mut deps.storage, |mut c| {
+            c.paused = true;
+            Ok(c)
+        })
         .unwrap();
 
     // Any non-empty funds will do – they won’t be checked after the pause gate.
@@ -746,10 +752,11 @@ fn test_withdraw_fails_when_paused() {
 #[test]
 fn test_withdraw_fails_with_no_funds() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
-        c.paused = false;
-        Ok(c)
-    })
+    CONFIG
+        .update::<_, ContractError>(&mut deps.storage, |mut c| {
+            c.paused = false;
+            Ok(c)
+        })
         .unwrap();
 
     let info = message_info(&deps.api.addr_make("user"), &[]);
@@ -760,10 +767,11 @@ fn test_withdraw_fails_with_no_funds() {
 #[test]
 fn test_withdraw_fails_with_wrong_denom() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
-        c.paused = false;
-        Ok(c)
-    })
+    CONFIG
+        .update::<_, ContractError>(&mut deps.storage, |mut c| {
+            c.paused = false;
+            Ok(c)
+        })
         .unwrap();
 
     let info = message_info(&deps.api.addr_make("user"), &[coin(1_000, "wBTC")]); // wrong denom
@@ -774,14 +782,17 @@ fn test_withdraw_fails_with_wrong_denom() {
 #[test]
 fn test_withdraw_fails_with_zero_amount() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
-        c.paused = false;
-        Ok(c)
-    })
+    CONFIG
+        .update::<_, ContractError>(&mut deps.storage, |mut c| {
+            c.paused = false;
+            Ok(c)
+        })
         .unwrap();
 
-    let maxbtc_denom =
-        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+    let maxbtc_denom = CONFIG
+        .load(&deps.storage)
+        .unwrap()
+        .get_maxbtc_denom(env.contract.address.to_string());
 
     let info = message_info(&deps.api.addr_make("user"), &[coin(0u128, &maxbtc_denom)]);
     let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
@@ -791,17 +802,20 @@ fn test_withdraw_fails_with_zero_amount() {
 #[test]
 fn test_withdraw_fails_without_active_batch() {
     let (mut deps, env, _) = setup_contract();
-    CONFIG.update::<_, ContractError>(&mut deps.storage, |mut c| {
-        c.paused = false;
-        Ok(c)
-    })
+    CONFIG
+        .update::<_, ContractError>(&mut deps.storage, |mut c| {
+            c.paused = false;
+            Ok(c)
+        })
         .unwrap();
 
     // Remove the ACTIVE batch altogether.
     ACTIVE_BATCH.save(&mut deps.storage, &None).unwrap();
 
-    let maxbtc_denom =
-        CONFIG.load(&deps.storage).unwrap().get_maxbtc_denom(env.contract.address.to_string());
+    let maxbtc_denom = CONFIG
+        .load(&deps.storage)
+        .unwrap()
+        .get_maxbtc_denom(env.contract.address.to_string());
     let info = message_info(&deps.api.addr_make("user"), &[coin(1_000, &maxbtc_denom)]);
 
     let err = execute_withdraw(deps.as_mut(), env, info).unwrap_err();
@@ -889,9 +903,9 @@ fn assert_bank_send_exists(msgs: &[CosmosMsg], to: &str, amount: Uint128, denom:
     assert!(
         msgs.iter().any(|m| match m {
             CosmosMsg::Bank(BankMsg::Send {
-                                to_address,
-                                amount: coins,
-                            }) => {
+                to_address,
+                amount: coins,
+            }) => {
                 to_address == to
                     && coins.len() == 1
                     && coins[0].denom == denom
@@ -909,10 +923,10 @@ fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coi
     assert!(
         msgs.iter().any(|m| match m {
             CosmosMsg::Wasm(WasmMsg::Execute {
-                                contract_addr: c,
-                                msg,
-                                funds,
-                            }) => {
+                contract_addr: c,
+                msg,
+                funds,
+            }) => {
                 if c != contract_addr || !funds.is_empty() {
                     return false;
                 }
