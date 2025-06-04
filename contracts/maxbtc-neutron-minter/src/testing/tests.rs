@@ -158,8 +158,6 @@ fn test_first_deposit_success() {
     assert_eq!(fsm_state, ContractState::Idle);
 
     // e.g. check if the exchange rate got cached.
-    // In this code, because we have no multi-step states, `_process_cache` might revert it
-    // if something was in progress. By default, there's no prior state, so we expect no caching:
     let cached = CACHED_ER.load(&deps.storage).unwrap();
     assert!(cached.is_none(), "Expected no cached ER in the Idle state");
 }
@@ -353,22 +351,8 @@ fn test_deposit_minted_zero_below_er() {
     let info = message_info(&deps.api.addr_make("depositor"), &[coin(50u128, "wBTC")]); // 0.000050 wBTC in decimal(6)
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let res = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
-        .expect("Should succeed even if minted=0");
-
-    // We expect a Mint message, but the minted amount is 0
-    // The contract does NOT explicitly reject zero minted.
-    // So it’s a valid (though strange) scenario.
-    assert_eq!(res.messages.len(), 1);
-    let minted_attr = res
-        .attributes
-        .iter()
-        .find(|attr| attr.key == "minted_maxbtc")
-        .expect("minted_maxbtc attribute must be present");
-    assert_eq!(minted_attr.value, "0");
-
-    // Because minted=0, the user effectively gets 0 maxBTC minted.
-    // This might or might not be desirable, but the current code does not forbid it.
+    do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+        .expect_err("Should not succeed (0 minted)");
 }
 
 #[test]

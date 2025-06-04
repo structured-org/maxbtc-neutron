@@ -231,23 +231,8 @@ pub(crate) fn execute_deposit(
 
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
-    // Validate funds
-    if info.funds.is_empty() {
-        return Err(ContractError::NoFundsSent {});
-    }
-    if info.funds.len() != 1 {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
-    let deposit_coin = &info.funds[0];
-    if deposit_coin.denom != cfg.deposit_denom {
-        return Err(ContractError::InvalidDepositDenom {
-            expected: cfg.deposit_denom,
-            received: deposit_coin.denom.clone(),
-        });
-    }
-    if deposit_coin.amount.is_zero() {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
+    // Input funds validation happens here.
+    let deposit_coin = get_deposit_coin(cfg.deposit_denom.clone(), info.funds)?;
 
     // Get the exchange rate
     let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
@@ -263,8 +248,12 @@ pub(crate) fn execute_deposit(
     // to match cfg.deposit_decimals (e.g., 6) before minting.
     let minted_amount =
         dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
+    // Can be equal to zero if rounding kicks in with a very high ER.
+    if minted_amount.is_zero() {
+        return Err(ContractError::InvalidDepositAmount {});
+    }
 
-    // 4. Mint the maxBTC to the recipient
+    // Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(
         env,
         recipient.clone(),
@@ -275,7 +264,7 @@ pub(crate) fn execute_deposit(
     )?;
     msgs.push(mint_msg);
 
-    // 5. Return the response
+    // Return the response
     Ok(Response::new()
         .add_messages(msgs)
         .add_attribute("action", "deposit")
@@ -417,38 +406,26 @@ pub(crate) fn execute_withdraw(
     }
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
-    // Validate that we received some MaxBTC
-    if info.funds.is_empty() {
-        return Err(ContractError::NoFundsSent {});
-    }
-    if info.funds.len() != 1 {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
-    let amount = &info.funds[0];
-    if amount.denom != cfg.get_maxbtc_denom(env.contract.address.to_string()) {
-        return Err(ContractError::InvalidDepositDenom {
-            expected: cfg.deposit_denom,
-            received: amount.denom.clone(),
-        });
-    }
-    if amount.amount.is_zero() {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
+    // Input funds validation happens here
+    let burned_amount = get_deposit_coin(
+        cfg.get_maxbtc_denom(env.contract.address.to_string()),
+        info.funds,
+    )?;
 
     // Burn the maxBTC from user
     let burn_msg =
-        create_tokenfactory_burn_msg(env.clone(), amount.clone(), info.sender.to_string())?;
+        create_tokenfactory_burn_msg(env.clone(), burned_amount.clone(), info.sender.to_string())?;
     msgs.push(burn_msg);
 
     // Update the maxbtc_burned amount in the active batch
     let mut active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    active_batch.maxbtc_burned += amount.amount;
+    active_batch.maxbtc_burned += burned_amount.amount;
     ACTIVE_BATCH.save(deps.storage, &Some(active_batch.clone()))?;
 
     // Mint the redemption tokens (1:1 maxBTC burned)
-    let minted_redemption = amount.amount;
+    let minted_redemption = burned_amount.amount;
     // Construct a message to mint redemption tokens
     let redemption_denom = format!("redemption/batch/{}", active_batch.batch_id);
     let mint_redemption_msg = create_tokenfactory_mint_msg(
@@ -466,7 +443,7 @@ pub(crate) fn execute_withdraw(
         .add_attribute("action", "withdraw")
         .add_attribute("sender", info.sender)
         .add_attribute("batch_id", active_batch.batch_id.to_string())
-        .add_attribute("withdraw_amount", amount.amount.to_string());
+        .add_attribute("withdraw_amount", burned_amount.amount.to_string());
 
     Ok(resp)
 }
@@ -1050,4 +1027,25 @@ pub(crate) fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, Cont
     dec.atomics()
         .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
         .map_err(ContractError::DivideByZeroError)
+}
+
+fn get_deposit_coin(deposit_denom: String, funds: Vec<Coin>) -> Result<Coin, ContractError> {
+    if funds.is_empty() {
+        return Err(ContractError::NoFundsSent {});
+    }
+    if funds.len() != 1 {
+        return Err(ContractError::InvalidDepositAmount {});
+    }
+    let deposit_coin = funds[0].clone();
+    if deposit_coin.denom != deposit_denom {
+        return Err(ContractError::InvalidDepositDenom {
+            expected: deposit_denom,
+            received: deposit_coin.denom.clone(),
+        });
+    }
+    if deposit_coin.amount.is_zero() {
+        return Err(ContractError::InvalidDepositAmount {});
+    }
+
+    Ok(deposit_coin)
 }
