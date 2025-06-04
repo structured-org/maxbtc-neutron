@@ -253,7 +253,7 @@ pub(crate) fn execute_deposit(
     let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
 
     // Adjust for deposit fee
-    let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals.into())
+    let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals)
         .map_err(|_| ContractError::InvalidDepositAmount {})?;
 
     // Apply the deposit fee and divide by exchange rate
@@ -311,7 +311,7 @@ pub(crate) fn execute_flush_deposits(
     }
 
     let aum = get_aum(&deps.as_ref(), env.clone(), &cfg)?;
-    let mut amount_to_flush = aum.deposit_buffer.clone();
+    let mut amount_to_flush = aum.deposit_buffer;
 
     if amount_to_flush.is_zero() {
         // There have been no deposits, set last flush time to now and wait for another
@@ -1034,9 +1034,6 @@ fn _process_cache_withdrawing(
     Ok(msgs)
 }
 
-// - Implement checking that the liquidation buffer did, in fact, return the clawed back assets.
-// - Fix decimal issues throughout the code
-
 pub struct Aum {
     pub oracle_aum: Uint128,
     pub deposit_buffer: Uint128,
@@ -1052,5 +1049,5 @@ impl Aum {
 pub(crate) fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
     dec.atomics()
         .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
-        .map_err(|err| ContractError::DivideByZeroError(err))
+        .map_err(ContractError::DivideByZeroError)
 }
