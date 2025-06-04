@@ -8,6 +8,7 @@ use crate::state::{
     BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
     WITHDRAWING_BATCH,
 };
+pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin, Aum};
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QueryRequest, Response, StdResult, SupplyResponse, Uint128, WasmMsg,
@@ -627,241 +628,6 @@ pub(crate) fn execute_claim(
     Ok(resp)
 }
 
-#[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
-    match msg {
-        QueryMsg::Config {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-            let resp = ConfigResponse {
-                owner: cfg.owner.to_string(),
-                aum_contract: cfg.aum_contract.to_string(),
-                liquidation_contract: cfg.liquidation_buffer_contract.to_string(),
-                treasury_address: cfg.treasury_address.to_string(),
-                deposit_denom: cfg.deposit_denom,
-                maxbtc_denom: cfg.maxbtc_denom,
-                deposit_flush_period: cfg.deposit_flush_period,
-                batch_active_duration: cfg.batch_active_duration,
-                batch_withdrawing_duration: cfg.batch_withdrawing_duration,
-                accepted_withdrawable_percentage: cfg.collected_tolerance,
-                liquidation_buffer_share: cfg.liquidation_buffer_share,
-                deposit_fee: cfg.deposit_fee,
-            };
-            Ok(to_json_binary(&resp)?)
-        }
-        QueryMsg::ActiveBatch {} => {
-            let batch = ACTIVE_BATCH.load(deps.storage)?;
-            let resp = batch.map(|b| BatchResponse {
-                batch_id: b.batch_id,
-                btc_requested: b.btc_requested.to_string(),
-                collected_amount: b.collected_amount.to_string(),
-                collector_historical_balance: b.collector_historical_balance.to_string(),
-            });
-            Ok(to_json_binary(&resp)?)
-        }
-        QueryMsg::WithdrawingBatch {} => {
-            let batch = WITHDRAWING_BATCH.load(deps.storage)?;
-            let resp = batch.map(|b| BatchResponse {
-                batch_id: b.batch_id,
-                btc_requested: b.btc_requested.to_string(),
-                collected_amount: b.collected_amount.to_string(),
-                collector_historical_balance: b.collector_historical_balance.to_string(),
-            });
-            Ok(to_json_binary(&resp)?)
-        }
-        QueryMsg::FinalizedBatch { batch_id } => {
-            let batch = FINALIZED_BATCHES.may_load(deps.storage, batch_id)?;
-            let resp = batch.map(|b| BatchResponse {
-                batch_id: b.batch_id,
-                btc_requested: b.btc_requested.to_string(),
-                collected_amount: b.collected_amount.to_string(),
-                collector_historical_balance: b.collector_historical_balance.to_string(),
-            });
-            Ok(to_json_binary(&resp)?)
-        }
-    }
-}
-
-/// -----------------------------------------------------------------------------------------------
-/// HELPER FUNCTIONS BELOW
-/// -----------------------------------------------------------------------------------------------
-
-/// Query the token supply for a given redemption token denom
-fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
-    let resp: SupplyResponse = deps
-        .querier
-        .query(&QueryRequest::Bank(BankQuery::Supply { denom }))?;
-
-    Ok(resp.amount.amount)
-}
-
-/// Query the total supply of maxBTC. At any moment, the maxBTC that is help by the liquidation
-/// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
-/// will be pretty soon, so we decrease the total supply by that amount.
-fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
-    let bank_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
-    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
-    )?;
-    Ok(bank_supply - liquidation_contract_maxbtc_balance)
-}
-
-/// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
-fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgMint {
-        sender: env.contract.address.to_string(),
-        amount: Some(BaseCoin::from(amount)),
-        mint_to_address: recipient,
-    }))
-}
-
-/// Creates a message to create a tokenfactory denom.
-fn create_tokenfactory_create_denom_msg(env: Env, denom: String) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
-        sender: env.contract.address.to_string(),
-        subdenom: denom,
-    }))
-}
-
-/// Creates a message to burn tokenfactory tokens from an address
-fn create_tokenfactory_burn_msg(
-    env: Env,
-    amount: Coin,
-    from_address: String,
-) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgBurn {
-        sender: env.contract.address.to_string(),
-        amount: Some(BaseCoin::from(amount)),
-        burn_from_address: from_address,
-    }))
-}
-
-/// Creates a message instructing the liquidation buffer contract to rebalance (send funds back).
-fn create_liquidation_rebalance_msg(
-    liquidation_addr: String,
-    amount: Coin,
-) -> Result<CosmosMsg, ContractError> {
-    let msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: liquidation_addr,
-        msg: to_json_binary(&LiquidationExecuteMsg::ClawBack { amount })?,
-        funds: vec![],
-    });
-    Ok(msg)
-}
-
-fn get_batch_id_from_redemption_coin(
-    env: Env,
-    redemption_coin: Coin,
-) -> Result<u64, ContractError> {
-    if !redemption_coin
-        .denom
-        .starts_with(format!("factory/{}/redemption/batch/", env.contract.address).as_str())
-    {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    if redemption_coin.amount.is_zero() {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-
-    // Extract the batch_id
-    let parts: Vec<&str> = redemption_coin.denom.split('/').collect();
-    if parts.len() != 5 {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    let batch_id: u64 = parts[4]
-        .parse()
-        .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
-
-    Ok(batch_id)
-}
-
-fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, ContractError> {
-    // If there is a cached exchange rate, return it
-    if let Some(cached_er) = CACHED_ER.load(deps.storage)? {
-        return Ok(cached_er.er);
-    }
-
-    // Calculate the ER as:
-    // (AUM received from oracle + deposits buffer + liquidation buffer contract balance)
-    //  /
-    // (maxBTC total supply + maxBTC burned in current active withdrawal batch - maxBTC still owned
-    // by the liquidation buffer contract)
-    let er_numerator = get_aum(deps, env.clone(), cfg)?.total();
-
-    if let Some(deposits_cap) = cfg.deposits_cap {
-        if er_numerator > deposits_cap {
-            return Err(ContractError::DepositCapExceeded {});
-        }
-    }
-
-    let maxbtc_supply = query_maxbtc_supply(deps, cfg)?;
-    let active_batch = ACTIVE_BATCH
-        .load(deps.storage)?
-        .ok_or(ContractError::BatchStateError {})?;
-    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
-    )?;
-    let er_denominator =
-        maxbtc_supply + active_batch.btc_requested - liquidation_contract_maxbtc_balance;
-
-    let er = if er_denominator.is_zero() {
-        Decimal::one()
-    } else {
-        Decimal::from_ratio(er_numerator, er_denominator)
-    };
-
-    Ok(er)
-}
-
-fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Aum, ContractError> {
-    let oracle_aum: Uint128 = deps
-        .querier
-        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
-    let deposit_buffer_balance = deps
-        .querier
-        .query_balance(env.contract.address, &cfg.deposit_denom)?;
-    let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationBufferContractQueryMsg::GetBTCBalance {},
-    )?;
-
-    Ok(Aum {
-        oracle_aum,
-        deposit_buffer: deposit_buffer_balance.amount,
-        liquidation_buffer_contract: liquidation_contract_btc_balance,
-    })
-}
-
-fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), ContractError> {
-    if let Some(deposits_cap) = cfg.deposits_cap {
-        if get_aum(deps, env.clone(), cfg)?.total() > deposits_cap {
-            return Err(ContractError::DepositCapExceeded {});
-        }
-    }
-
-    Ok(())
-}
-
-fn check_deposits_allowlist(
-    deps: &Deps,
-    cfg: &Config,
-    recipient: String,
-) -> Result<(), ContractError> {
-    let recipient = deps.api.addr_validate(&recipient)?;
-    if let Some(allowlist) = cfg.deposits_allowlist.clone() {
-        for addr in allowlist {
-            if addr == recipient {
-                return Ok(());
-            }
-        }
-
-        return Err(ContractError::Unauthorized {});
-    }
-
-    Ok(())
-}
-
 /// Orchestrates completion of long-running, multi-block operations by
 /// “draining” the cached exchange-rate (ER) object and driving the contract’s
 /// finite-state machine (FSM) back to `Idle`.
@@ -1011,41 +777,263 @@ fn _process_cache_withdrawing(
     Ok(msgs)
 }
 
-pub struct Aum {
-    pub oracle_aum: Uint128,
-    pub deposit_buffer: Uint128,
-    pub liquidation_buffer_contract: Uint128,
-}
-
-impl Aum {
-    pub fn total(&self) -> Uint128 {
-        self.oracle_aum + self.deposit_buffer + self.liquidation_buffer_contract
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
+    match msg {
+        QueryMsg::Config {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let resp = ConfigResponse {
+                owner: cfg.owner.to_string(),
+                aum_contract: cfg.aum_contract.to_string(),
+                liquidation_contract: cfg.liquidation_buffer_contract.to_string(),
+                treasury_address: cfg.treasury_address.to_string(),
+                deposit_denom: cfg.deposit_denom,
+                maxbtc_denom: cfg.maxbtc_denom,
+                deposit_flush_period: cfg.deposit_flush_period,
+                batch_active_duration: cfg.batch_active_duration,
+                batch_withdrawing_duration: cfg.batch_withdrawing_duration,
+                accepted_withdrawable_percentage: cfg.collected_tolerance,
+                liquidation_buffer_share: cfg.liquidation_buffer_share,
+                deposit_fee: cfg.deposit_fee,
+            };
+            Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::ActiveBatch {} => {
+            let batch = ACTIVE_BATCH.load(deps.storage)?;
+            let resp = batch.map(|b| BatchResponse {
+                batch_id: b.batch_id,
+                btc_requested: b.btc_requested.to_string(),
+                collected_amount: b.collected_amount.to_string(),
+                collector_historical_balance: b.collector_historical_balance.to_string(),
+            });
+            Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::WithdrawingBatch {} => {
+            let batch = WITHDRAWING_BATCH.load(deps.storage)?;
+            let resp = batch.map(|b| BatchResponse {
+                batch_id: b.batch_id,
+                btc_requested: b.btc_requested.to_string(),
+                collected_amount: b.collected_amount.to_string(),
+                collector_historical_balance: b.collector_historical_balance.to_string(),
+            });
+            Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::FinalizedBatch { batch_id } => {
+            let batch = FINALIZED_BATCHES.may_load(deps.storage, batch_id)?;
+            let resp = batch.map(|b| BatchResponse {
+                batch_id: b.batch_id,
+                btc_requested: b.btc_requested.to_string(),
+                collected_amount: b.collected_amount.to_string(),
+                collector_historical_balance: b.collector_historical_balance.to_string(),
+            });
+            Ok(to_json_binary(&resp)?)
+        }
     }
 }
 
-pub(crate) fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
-    dec.atomics()
-        .checked_div(Uint128::from(10u128.pow(dec.decimal_places() - decimals)))
-        .map_err(ContractError::DivideByZeroError)
+/// -----------------------------------------------------------------------------------------------
+/// HELPER FUNCTIONS BELOW
+/// -----------------------------------------------------------------------------------------------
+
+/// Query the token supply for a given redemption token denom
+fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
+    let resp: SupplyResponse = deps
+        .querier
+        .query(&QueryRequest::Bank(BankQuery::Supply { denom }))?;
+
+    Ok(resp.amount.amount)
 }
 
-fn get_deposit_coin(deposit_denom: String, funds: Vec<Coin>) -> Result<Coin, ContractError> {
-    if funds.is_empty() {
-        return Err(ContractError::NoFundsSent {});
+/// Query the total supply of maxBTC. At any moment, the maxBTC that is help by the liquidation
+/// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
+/// will be pretty soon, so we decrease the total supply by that amount.
+fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
+    let bank_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
+    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_buffer_contract.to_string(),
+        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
+    )?;
+    Ok(bank_supply - liquidation_contract_maxbtc_balance)
+}
+
+/// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
+fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> StdResult<CosmosMsg> {
+    Ok(Into::<CosmosMsg>::into(MsgMint {
+        sender: env.contract.address.to_string(),
+        amount: Some(BaseCoin::from(amount)),
+        mint_to_address: recipient,
+    }))
+}
+
+/// Creates a message to create a tokenfactory denom.
+fn create_tokenfactory_create_denom_msg(env: Env, denom: String) -> StdResult<CosmosMsg> {
+    Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
+        sender: env.contract.address.to_string(),
+        subdenom: denom,
+    }))
+}
+
+/// Creates a message to burn tokenfactory tokens from an address
+fn create_tokenfactory_burn_msg(
+    env: Env,
+    amount: Coin,
+    from_address: String,
+) -> StdResult<CosmosMsg> {
+    Ok(Into::<CosmosMsg>::into(MsgBurn {
+        sender: env.contract.address.to_string(),
+        amount: Some(BaseCoin::from(amount)),
+        burn_from_address: from_address,
+    }))
+}
+
+/// Creates a message instructing the liquidation buffer contract to rebalance (send funds back).
+fn create_liquidation_rebalance_msg(
+    liquidation_addr: String,
+    amount: Coin,
+) -> Result<CosmosMsg, ContractError> {
+    let msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: liquidation_addr,
+        msg: to_json_binary(&LiquidationExecuteMsg::ClawBack { amount })?,
+        funds: vec![],
+    });
+    Ok(msg)
+}
+
+/// Extracts the `batch_id` encoded in the *redemption token*’s denom.
+///
+/// A valid redemption denom has the layout
+/// `factory/{this_contract}/redemption/batch/{batch_id}`
+fn get_batch_id_from_redemption_coin(
+    env: Env,
+    redemption_coin: Coin,
+) -> Result<u64, ContractError> {
+    if !redemption_coin
+        .denom
+        .starts_with(format!("factory/{}/redemption/batch/", env.contract.address).as_str())
+    {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
-    if funds.len() != 1 {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
-    let deposit_coin = funds[0].clone();
-    if deposit_coin.denom != deposit_denom {
-        return Err(ContractError::InvalidDepositDenom {
-            expected: deposit_denom,
-            received: deposit_coin.denom.clone(),
-        });
-    }
-    if deposit_coin.amount.is_zero() {
-        return Err(ContractError::InvalidDepositAmount {});
+    if redemption_coin.amount.is_zero() {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
 
-    Ok(deposit_coin)
+    // Extract the batch_id
+    let parts: Vec<&str> = redemption_coin.denom.split('/').collect();
+    if parts.len() != 5 {
+        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
+    }
+    let batch_id: u64 = parts[4]
+        .parse()
+        .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
+
+    Ok(batch_id)
+}
+
+/// Computes or retrieves from cache the **exchange rate (ER)** between BTC
+/// *assets under management* (AUM) and circulating **maxBTC**.
+///
+/// The formula is:
+///
+/// ```text
+/// ER = (oracle AUM + deposit buffer + liquidation buffer BTC)
+///      ------------------------------------------------------
+///      (maxBTC supply + BTC requested for withdrawal
+///                       – maxBTC held by liquidation buffer)
+/// ```
+///
+/// If the denominator is zero (e.g. bootstrap state) the function returns `1`
+/// to avoid division by zero.
+fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, ContractError> {
+    // If there is a cached exchange rate, return it
+    if let Some(cached_er) = CACHED_ER.load(deps.storage)? {
+        return Ok(cached_er.er);
+    }
+
+    let er_numerator = get_aum(deps, env.clone(), cfg)?.total();
+
+    if let Some(deposits_cap) = cfg.deposits_cap {
+        if er_numerator > deposits_cap {
+            return Err(ContractError::DepositCapExceeded {});
+        }
+    }
+
+    let maxbtc_supply = query_maxbtc_supply(deps, cfg)?;
+    let active_batch = ACTIVE_BATCH
+        .load(deps.storage)?
+        .ok_or(ContractError::BatchStateError {})?;
+    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_buffer_contract.to_string(),
+        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
+    )?;
+    let er_denominator =
+        maxbtc_supply + active_batch.btc_requested - liquidation_contract_maxbtc_balance;
+
+    let er = if er_denominator.is_zero() {
+        Decimal::one()
+    } else {
+        Decimal::from_ratio(er_numerator, er_denominator)
+    };
+
+    Ok(er)
+}
+
+/// Retrieves the three BTC components that make up *assets under management*
+///
+/// * **Oracle AUM** – authoritative on-chain feed supplied by an oracle
+/// * **Deposit buffer** – BTC sitting in the contract itself waiting to get flushed
+/// * **Liquidation buffer** – BTC stored in the dedicated liquidation buffer contract
+fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Aum, ContractError> {
+    let oracle_aum: Uint128 = deps
+        .querier
+        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
+    let deposit_buffer_balance = deps
+        .querier
+        .query_balance(env.contract.address, &cfg.deposit_denom)?;
+    let liquidation_contract_btc_balance: Uint128 = deps.querier.query_wasm_smart(
+        cfg.liquidation_buffer_contract.to_string(),
+        &LiquidationBufferContractQueryMsg::GetBTCBalance {},
+    )?;
+
+    Ok(Aum {
+        oracle_aum,
+        deposit_buffer: deposit_buffer_balance.amount,
+        liquidation_buffer_contract: liquidation_contract_btc_balance,
+    })
+}
+
+/// Verifies that the current AUM does **not** exceed the optional *deposit cap*.
+///
+/// This check is performed in places where new deposits could push the system
+/// over its configured limit.
+fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), ContractError> {
+    if let Some(deposits_cap) = cfg.deposits_cap {
+        if get_aum(deps, env.clone(), cfg)?.total() > deposits_cap {
+            return Err(ContractError::DepositCapExceeded {});
+        }
+    }
+
+    Ok(())
+}
+
+/// Ensures that `recipient` is present in the optional *allow-list* for
+/// deposits.
+///
+/// If the allow-list is **not** configured (`None`) everyone is allowed.
+fn check_deposits_allowlist(
+    deps: &Deps,
+    cfg: &Config,
+    recipient: String,
+) -> Result<(), ContractError> {
+    let recipient = deps.api.addr_validate(&recipient)?;
+    if let Some(allowlist) = cfg.deposits_allowlist.clone() {
+        for addr in allowlist {
+            if addr == recipient {
+                return Ok(());
+            }
+        }
+
+        return Err(ContractError::Unauthorized {});
+    }
+
+    Ok(())
 }
