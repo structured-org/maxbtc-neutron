@@ -1,15 +1,16 @@
-use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, CONFIG};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128,
+    BankMsg, Binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
 use cw2::set_contract_version;
 
-const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-liquidation-buffer";
+use crate::error::ContractError;
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::state::{Config, CONFIG};
+
+// version info for migration info
+const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-collector";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -17,16 +18,11 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    msg: InstantiateMsg,
+    _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    let config = Config {
-        owned_maxbtc: msg.owned_maxbtc.unwrap_or(Uint128::zero()),
-        owned_btc: msg.owned_btc.unwrap_or(Uint128::zero()),
-    };
-
-    CONFIG.save(deps.storage, &config)?;
+    CONFIG.save(deps.storage, &Config {})?;
 
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
@@ -39,11 +35,11 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::ClawBack { amount } => clawback(deps, env, info, amount),
+        ExecuteMsg::Claim { amount } => claim(deps, env, info, amount),
     }
 }
 
-pub fn clawback(
+pub fn claim(
     _deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -58,17 +54,8 @@ pub fn clawback(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::GetBTCBalance {} => {
-            let config = CONFIG.load(deps.storage)?;
-            to_json_binary(&config.owned_btc)
-        }
-        QueryMsg::GetMaxBTCBalance {} => {
-            let config = CONFIG.load(deps.storage)?;
-            to_json_binary(&config.owned_maxbtc)
-        }
-    }
+pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
+    unimplemented!()
 }
 
 #[cfg(test)]

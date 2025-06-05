@@ -1141,7 +1141,7 @@ fn test_cache_withdrawing_finalises_and_sends_extra() {
         _ => panic!("expected a Bank::Send message"),
     }
     match &msgs[1] {
-        CosmosMsg::Wasm(WasmMsg::Execute { msg, ..}) => {
+        CosmosMsg::Wasm(WasmMsg::Execute { msg, .. }) => {
             let claim_message: CollectorExecuteMsg = from_json(msg).unwrap();
             match claim_message {
                 CollectorExecuteMsg::Claim { amount } => {
