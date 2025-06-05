@@ -3,7 +3,7 @@ use crate::contract::{
     execute_process_active_batch, execute_withdraw, instantiate,
 };
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationExecuteMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationBufferExecuteMsg};
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
     BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
@@ -1324,8 +1324,8 @@ fn assert_clawback_exists(msgs: &[CosmosMsg], contract_addr: &str, clawback: Coi
                 if c != contract_addr || !funds.is_empty() {
                     return false;
                 }
-                let parsed: LiquidationExecuteMsg = from_json(msg).unwrap();
-                matches!(parsed, LiquidationExecuteMsg::ClawBack { amount } if amount == clawback)
+                let parsed: LiquidationBufferExecuteMsg = from_json(msg).unwrap();
+                matches!(parsed, LiquidationBufferExecuteMsg::ClawBack { amount } if amount == clawback)
             }
             _ => false,
         }),

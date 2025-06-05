@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{
     BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationBufferContractQueryMsg,
-    LiquidationExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
+    LiquidationBufferExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -893,7 +893,7 @@ fn create_liquidation_rebalance_msg(
 ) -> Result<CosmosMsg, ContractError> {
     let msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: liquidation_addr,
-        msg: to_json_binary(&LiquidationExecuteMsg::ClawBack { amount })?,
+        msg: to_json_binary(&LiquidationBufferExecuteMsg::ClawBack { amount })?,
         funds: vec![],
     });
     Ok(msg)
