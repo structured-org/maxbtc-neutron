@@ -157,3 +157,8 @@ pub enum LiquidationBufferContractQueryMsg {
 pub enum LiquidationBufferExecuteMsg {
     ClawBack { amount: Coin },
 }
+
+#[cw_serde]
+pub enum CollectorExecuteMsg {
+    Claim { amount: Coin },
+}

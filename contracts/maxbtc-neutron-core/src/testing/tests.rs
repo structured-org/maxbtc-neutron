@@ -3,7 +3,7 @@ use crate::contract::{
     execute_process_active_batch, execute_withdraw, instantiate,
 };
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, LiquidationBufferExecuteMsg};
+use crate::msg::{CollectorExecuteMsg, ExecuteMsg, InstantiateMsg, LiquidationBufferExecuteMsg};
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
     BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
@@ -75,7 +75,7 @@ fn test_instantiate_success() {
     // Assert: check contract storage
     let cfg = CONFIG.load(&deps.storage).unwrap();
     assert_eq!(cfg.owner, deps.api.addr_make("owner_addr"));
-    assert_eq!(cfg.aum_contract, &deps.api.addr_make("aum_addr"));
+    assert_eq!(cfg.aum_oracle_contract, &deps.api.addr_make("aum_addr"));
     assert_eq!(cfg.paused, false);
     // etc. check more fields
     assert_eq!(cfg.deposit_decimals, 6u32);
@@ -1129,8 +1129,8 @@ fn test_cache_withdrawing_finalises_and_sends_extra() {
 
     let msgs = _process_cache(deps.as_mut(), env.clone(), &cfg).unwrap();
 
-    // 1. Exactly one message: Bank::Send(extra) to the treasury
-    assert_eq!(msgs.len(), 1);
+    // Exactly 2 messages: Claim from the collector and Bank::Send(extra) to the treasury
+    assert_eq!(msgs.len(), 2);
     match &msgs[0] {
         CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
             assert_eq!(to_address, &cfg.treasury_address.to_string());
@@ -1140,20 +1140,31 @@ fn test_cache_withdrawing_finalises_and_sends_extra() {
         }
         _ => panic!("expected a Bank::Send message"),
     }
+    match &msgs[1] {
+        CosmosMsg::Wasm(WasmMsg::Execute { msg, ..}) => {
+            let claim_message: CollectorExecuteMsg = from_json(msg).unwrap();
+            match claim_message {
+                CollectorExecuteMsg::Claim { amount } => {
+                    assert_eq!(amount.amount, btc_requested);
+                }
+            }
+        }
+        _ => panic!("expected a WasmMsg::Execute message"),
+    }
 
-    // 2. FSM back to Idle
+    // FSM back to Idle
     let fsm_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(fsm_state, ContractState::Idle);
 
-    // 3. Cache cleared
+    // Cache cleared
     assert!(CACHED_ER.load(&deps.storage).unwrap().is_none());
 
-    // 4. WITHDRAWING_BATCH cleared
+    // WITHDRAWING_BATCH cleared
     assert!(WITHDRAWING_BATCH.load(&deps.storage).unwrap().is_none());
 
-    // 5. Batch persisted into FINALIZED_BATCHES
+    // Batch persisted into FINALIZED_BATCHES
     let finalised = FINALIZED_BATCHES.load(&deps.storage, 42).unwrap();
-    assert_eq!(finalised.collected_amount, current_balance);
+    assert_eq!(finalised.collected_amount, current_balance - extra); // Extra was sent to treasury
     assert_eq!(finalised.paid_amount, Uint128::zero());
 }
 

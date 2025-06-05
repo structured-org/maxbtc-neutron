@@ -11,7 +11,7 @@ pub struct Config {
     /// Address with full administrative rights over the contract.
     pub owner: Addr,
     /// Address of the oracle contract that reports total AUM.
-    pub aum_contract: Addr,
+    pub aum_oracle_contract: Addr,
     /// Address of the contract that manages the liquidation buffer.
     pub liquidation_buffer_contract: Addr,
     /// Contract that forwards freshly-received deposits to the custody chain.

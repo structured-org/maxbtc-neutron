@@ -1,7 +1,8 @@
 use crate::error::ContractError;
 use crate::msg::{
-    BatchResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, LiquidationBufferContractQueryMsg,
-    LiquidationBufferExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
+    BatchResponse, CollectorExecuteMsg, ConfigResponse, ExecuteMsg, InstantiateMsg,
+    LiquidationBufferContractQueryMsg, LiquidationBufferExecuteMsg, OracleQueryMsg, QueryMsg,
+    UpdateConfigMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -32,7 +33,7 @@ pub fn instantiate(
     let cfg = Config {
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
-        aum_contract: deps.api.addr_validate(&msg.aum_contract)?,
+        aum_oracle_contract: deps.api.addr_validate(&msg.aum_contract)?,
         liquidation_buffer_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
         collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
@@ -89,7 +90,7 @@ pub fn instantiate(
         .add_message(create_maxbtc_denom_msg)
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
-        .add_attribute("aum_contract", cfg.aum_contract.to_string())
+        .add_attribute("aum_contract", cfg.aum_oracle_contract.to_string())
         .add_attribute(
             "liquidation_buffer_contract",
             cfg.liquidation_buffer_contract.to_string(),
@@ -156,7 +157,7 @@ fn execute_update_config(
         cfg.owner = deps.api.addr_validate(&owner)?;
     }
     if let Some(addr) = updates.aum_contract {
-        cfg.aum_contract = deps.api.addr_validate(&addr)?;
+        cfg.aum_oracle_contract = deps.api.addr_validate(&addr)?;
     }
     if let Some(addr) = updates.liquidation_contract {
         cfg.liquidation_buffer_contract = deps.api.addr_validate(&addr)?;
@@ -363,7 +364,7 @@ pub(crate) fn execute_flush_deposits(
         };
         // The returned funds will be processed next time.
         if to_recv.amount > Uint128::zero() {
-            let msg = create_liquidation_rebalance_msg(
+            let msg = create_liquidation_buffer_clawback_msg(
                 cfg.liquidation_buffer_contract.to_string(),
                 to_recv.clone(),
             )?;
@@ -673,9 +674,10 @@ fn _process_cache_flushing(
     cfg: &Config,
     cached_er: CachedER,
 ) -> Result<Vec<CosmosMsg>, ContractError> {
-    let current_oracle_aum: Uint128 = deps
-        .querier
-        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
+    let current_oracle_aum: Uint128 = deps.querier.query_wasm_smart(
+        cfg.aum_oracle_contract.to_string(),
+        &OracleQueryMsg::GetAUM {},
+    )?;
 
     // If we are flushing, cached_aum must be present
     let cached_aum = cached_er.aum.ok_or(ContractError::ProtocolInEmergency {})?;
@@ -732,7 +734,7 @@ fn _process_cache_withdrawing(
         return Err(ContractError::ProtocolInEmergency {});
     }
 
-    let collected = current_collector_balance.amount - historical_collector_balance;
+    let mut collected = current_collector_balance.amount - historical_collector_balance;
 
     let requested_dec =
         Decimal::from_atomics(withdrawing_batch.btc_requested, cfg.deposit_decimals)?;
@@ -748,6 +750,7 @@ fn _process_cache_withdrawing(
     {
         if collected > withdrawing_batch.btc_requested {
             let extra = collected - withdrawing_batch.btc_requested;
+            collected -= extra;
             // Send `extra` to treasury
             let send_msg: CosmosMsg = CosmosMsg::Bank(BankMsg::Send {
                 to_address: cfg.treasury_address.to_string(),
@@ -758,6 +761,16 @@ fn _process_cache_withdrawing(
             });
             msgs.push(send_msg);
         }
+
+        // Claim the collected amount
+        let receive_msg = create_collector_claim_msg(
+            cfg.collector_contract.to_string(),
+            Coin {
+                denom: cfg.deposit_denom.clone(),
+                amount: collected,
+            },
+        )?;
+        msgs.push(receive_msg);
 
         let finalized_batch = Batch {
             batch_id: withdrawing_batch.batch_id,
@@ -784,7 +797,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
                 owner: cfg.owner.to_string(),
-                aum_contract: cfg.aum_contract.to_string(),
+                aum_contract: cfg.aum_oracle_contract.to_string(),
                 liquidation_contract: cfg.liquidation_buffer_contract.to_string(),
                 treasury_address: cfg.treasury_address.to_string(),
                 deposit_denom: cfg.deposit_denom,
@@ -886,14 +899,27 @@ fn create_tokenfactory_burn_msg(
     }))
 }
 
-/// Creates a message instructing the liquidation buffer contract to rebalance (send funds back).
-fn create_liquidation_rebalance_msg(
-    liquidation_addr: String,
+/// Creates a message instructing the liquidation buffer contract to send funds back.
+fn create_liquidation_buffer_clawback_msg(
+    liquidation_buffer_addr: String,
     amount: Coin,
 ) -> Result<CosmosMsg, ContractError> {
     let msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: liquidation_addr,
+        contract_addr: liquidation_buffer_addr,
         msg: to_json_binary(&LiquidationBufferExecuteMsg::ClawBack { amount })?,
+        funds: vec![],
+    });
+    Ok(msg)
+}
+
+/// Creates a message instructing the collector contract to send collected funds to this contract.
+fn create_collector_claim_msg(
+    collector_addr: String,
+    amount: Coin,
+) -> Result<CosmosMsg, ContractError> {
+    let msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: collector_addr,
+        msg: to_json_binary(&CollectorExecuteMsg::Claim { amount })?,
         funds: vec![],
     });
     Ok(msg)
@@ -983,9 +1009,10 @@ fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, Con
 /// * **Deposit buffer** – BTC sitting in the contract itself waiting to get flushed
 /// * **Liquidation buffer** – BTC stored in the dedicated liquidation buffer contract
 fn get_aum(deps: &Deps, env: Env, cfg: &Config) -> Result<Aum, ContractError> {
-    let oracle_aum: Uint128 = deps
-        .querier
-        .query_wasm_smart(cfg.aum_contract.to_string(), &OracleQueryMsg::GetAUM {})?;
+    let oracle_aum: Uint128 = deps.querier.query_wasm_smart(
+        cfg.aum_oracle_contract.to_string(),
+        &OracleQueryMsg::GetAUM {},
+    )?;
     let deposit_buffer_balance = deps
         .querier
         .query_balance(env.contract.address, &cfg.deposit_denom)?;
