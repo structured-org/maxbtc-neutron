@@ -1,0 +1,163 @@
+use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::{Coin, Decimal, Uint128};
+
+/// InstantiateMsg configures the contract on initialization.
+#[cw_serde]
+pub struct InstantiateMsg {
+    pub owner: String,
+    pub aum_contract: String,
+    /// Address of the contract that manages the liquidation buffer.
+    pub liquidation_buffer_contract: String,
+    /// Contract that forwards freshly-received deposits to the custody chain.
+    pub deposit_pump_contract: String,
+    /// Collector contract that receives BTC shipped back from custody
+    /// during the withdrawal process.
+    pub collector_contract: String,
+    /// Treasury account that receives protocol fees and surplus funds.
+    pub treasury_address: String,
+    /// Denom for user deposits (e.g. IBC-transferred BTC)
+    pub deposit_denom: String,
+    /// Number of decimals carried by the `deposit_denom` asset
+    pub deposit_decimals: u32,
+    /// The token-factory sub-denom used for the maxBTC token
+    pub maxbtc_denom: String,
+    /// Minimum number of seconds that must elapse between two deposit-flush operations
+    pub deposit_flush_period: u64,
+    /// Number of seconds an ACTIVE batch remains open before it can
+    /// be promoted to WITHDRAWING
+    pub batch_active_duration: u64,
+    /// Number of seconds a WITHDRAWING batch may remain open before it
+    /// must be finalized
+    pub batch_withdrawing_duration: u64,
+    /// Minimum percentage (Decimal) of `btc_requested` that must be
+    /// collected for a batch to finalize successfully
+    pub accepted_withdrawable_percentage: Decimal,
+    /// Fraction of total AUM (Decimal) that the protocol keeps on the
+    /// liquidation buffer contract as an instant-liquidity buffer
+    pub liquidation_buffer_share: Decimal,
+    /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
+    pub deposit_fee: Decimal,
+    /// Maximum tolerated relative difference (Decimal) between the
+    /// deposit buffer sent for flushing and the amount observed on the
+    /// custody chain
+    pub cached_aum_tolerance: Decimal,
+    /// Lifetime, in seconds, of the cached ER/AUM snapshot that protects
+    /// the protocol while a multi-step operation is in flight
+    pub cached_er_ttl: u64,
+    /// Upper limit on total AUM; deposits are rejected once the cap
+    /// (if present) is exceeded
+    pub deposits_cap: Option<Uint128>,
+    /// Optional allow-list of addresses that may mint maxBTC while the
+    /// list is active (empty or `None` means open to everyone)
+    pub deposits_allowlist: Option<Vec<String>>,
+}
+
+/// Message for updating configuration parameters (owner-only).
+#[cw_serde]
+pub struct UpdateConfigMsg {
+    pub paused: Option<bool>,
+    pub owner: Option<String>,
+    pub aum_contract: Option<String>,
+    pub liquidation_contract: Option<String>,
+    pub deposit_pump_contract: Option<String>,
+    pub collector_contract: Option<String>,
+    pub treasury_address: Option<String>,
+    pub deposit_flush_period: Option<u64>,
+    pub batch_active_duration: Option<u64>,
+    pub batch_withdrawing_duration: Option<u64>,
+    pub accepted_withdrawable_percentage: Option<Decimal>,
+    pub liquidation_buffer_share: Option<Decimal>,
+    pub deposit_fee: Option<Decimal>,
+    pub cached_aum_tolerance: Option<Decimal>,
+    pub cached_er_ttl: Option<u64>,
+    pub deposits_cap: Option<Option<Uint128>>,
+    pub deposits_allowlist: Option<Option<Vec<String>>>,
+}
+
+/// ExecuteMsg enumerates all possible actions in this contract.
+#[cw_serde]
+#[allow(clippy::large_enum_variant)]
+pub enum ExecuteMsg {
+    /// User deposit flow
+    Deposit { recipient: String },
+    /// Permissionless handler to flush deposits after `deposit_flush_period`
+    FlushDeposits {},
+    /// User requests a withdrawal of a certain amount of maxBTC
+    Withdraw {},
+    /// Permissionless handler to process the ACTIVE batch after `batch_active_duration`
+    ProcessActiveBatch {},
+    /// User claims their BTC from a finalized batch
+    Claim {
+        /// The user wants to receive BTC at `recipient` address on Neutron
+        /// (which the user can IBC-transfer out later).
+        recipient: String,
+    },
+    /// Owner-only message to update protocol configuration in-place
+    UpdateConfig(UpdateConfigMsg),
+}
+
+/// QueryMsg for reading contract states.
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum QueryMsg {
+    /// Returns the Config state
+    #[returns(ConfigResponse)]
+    Config {},
+    /// Returns info about the current ACTIVE batch
+    #[returns(Option<BatchResponse>)]
+    ActiveBatch {},
+    /// Returns info about the current WITHDRAWING batch
+    #[returns(Option<BatchResponse>)]
+    WithdrawingBatch {},
+    /// Returns info for a finalized batch by id
+    #[returns(Option<BatchResponse>)]
+    FinalizedBatch { batch_id: u64 },
+}
+
+/// Response for querying config
+#[cw_serde]
+pub struct ConfigResponse {
+    pub owner: String,
+    pub aum_contract: String,
+    pub liquidation_contract: String,
+    pub treasury_address: String,
+    pub deposit_denom: String,
+    pub maxbtc_denom: String,
+    pub deposit_flush_period: u64,
+    pub batch_active_duration: u64,
+    pub batch_withdrawing_duration: u64,
+    pub accepted_withdrawable_percentage: Decimal,
+    pub liquidation_buffer_share: Decimal,
+    pub deposit_fee: Decimal,
+}
+
+/// Response for batch query
+#[cw_serde]
+pub struct BatchResponse {
+    pub batch_id: u64,
+    pub btc_requested: String,
+    pub collected_amount: String,
+    pub collector_historical_balance: String,
+}
+
+#[cw_serde]
+pub enum OracleQueryMsg {
+    GetAUM {},
+}
+
+/// Describes the queries that can be sent to the liquidation buffer contract.
+#[cw_serde]
+pub enum LiquidationBufferContractQueryMsg {
+    GetBTCBalance {},
+    GetMaxBTCBalance {},
+}
+
+#[cw_serde]
+pub enum LiquidationBufferExecuteMsg {
+    ClawBack { amount: Coin },
+}
+
+#[cw_serde]
+pub enum CollectorExecuteMsg {
+    Claim { amount: Coin },
+}
