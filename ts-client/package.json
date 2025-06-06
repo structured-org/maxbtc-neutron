@@ -1,5 +1,5 @@
 {
-  "name": "drop-ts-client",
+  "name": "maxbtc-neutron-ts-client",
   "version": "1.0.0",
   "license": "MIT",
   "main": "lib/contractLib/index.js",

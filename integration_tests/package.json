@@ -1,5 +1,5 @@
 {
-  "name": "drop-cosmos-integration-tests",
+  "name": "maxbtc-neutron-integration-tests",
   "version": "1.0.8",
   "main": "vitest",
   "license": "MIT",
@@ -43,6 +43,6 @@
     "typescript": "5.3.3",
     "vitest": "^0.34.1"
   },
-  "description": "Drop on Cosmos integration test",
-  "repository": "git@github.com:hadronlabs-org/lionco-contracts.git"
+  "description": "maxBTC on Neutron integration tests",
+  "repository": "git@github.com:structured-org/maxbtc-neutron.git"
 }
