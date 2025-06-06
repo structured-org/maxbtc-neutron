@@ -2,13 +2,12 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Uint128};
 
 /// InstantiateMsg configures the contract on initialization.
-/// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub aum_contract: String,
     /// Address of the contract that manages the liquidation buffer.
-    pub liquidation_contract: String,
+    pub liquidation_buffer_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: String,
     /// Collector contract that receives BTC shipped back from custody

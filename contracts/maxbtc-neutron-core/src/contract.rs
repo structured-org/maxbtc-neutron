@@ -34,7 +34,7 @@ pub fn instantiate(
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
         aum_oracle_contract: deps.api.addr_validate(&msg.aum_contract)?,
-        liquidation_buffer_contract: deps.api.addr_validate(&msg.liquidation_contract)?,
+        liquidation_buffer_contract: deps.api.addr_validate(&msg.liquidation_buffer_contract)?,
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
         collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
         treasury_address: deps.api.addr_validate(&msg.treasury_address)?,

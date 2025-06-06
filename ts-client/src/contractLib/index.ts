@@ -9,3 +9,6 @@ export const MaxbtcNeutronCore = _2;
 
 import * as _3 from './maxbtcNeutronLiquidationBuffer';
 export const MaxbtcNeutronLiquidationBuffer = _3;
+
+import * as _4 from './maxbtcNeutronPump';
+export const MaxbtcNeutronPump = _4;

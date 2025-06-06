@@ -9,7 +9,6 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Config, CONFIG};
 
-// version info for migration info
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-collector";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 

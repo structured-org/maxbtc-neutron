@@ -3,7 +3,8 @@ import {
     MaxbtcNeutronCore,
     MaxbtcNeutronCollector,
     MaxbtcNeutronAumOracle,
-    MaxbtcNeutronLiquidationBuffer
+    MaxbtcNeutronLiquidationBuffer,
+    MaxbtcNeutronPump
 } from 'maxbtc-neutron-ts-client';
 
 import {join} from 'path';
@@ -20,6 +21,7 @@ const CoreContractClient = MaxbtcNeutronCore.Client;
 const CollectorContractClient = MaxbtcNeutronCollector.Client;
 const AumOracleContractClient = MaxbtcNeutronAumOracle.Client;
 const LiquidationBufferContractClient = MaxbtcNeutronLiquidationBuffer.Client;
+const PumpContractClient = MaxbtcNeutronPump.Client;
 
 describe('Core', () => {
     const context: {
@@ -29,6 +31,8 @@ describe('Core', () => {
         collectorContractClient?: InstanceType<typeof CollectorContractClient>;
         aumOracleContractClient?: InstanceType<typeof AumOracleContractClient>;
         liquidationBufferContractClient?: InstanceType<typeof LiquidationBufferContractClient>;
+        pumpContractClient?: InstanceType<typeof PumpContractClient>;
+
         account?: AccountData;
         client?: SigningCosmWasmClient;
         neutronClient?: InstanceType<typeof NeutronClient>;
@@ -36,7 +40,10 @@ describe('Core', () => {
         coreContractAddress?: string;
         collectorContractAddress?: string,
         aumOracleContractAddress?: string,
-        liquidationContractAddress?: string,
+        liquidationBufferContractAddress?: string,
+        pumpContractAddress?: string,
+
+        treasuryAddress?: string,
     } = {};
 
     beforeAll(async (t) => {
@@ -62,6 +69,9 @@ describe('Core', () => {
                 gasPrice: GasPrice.fromString('0.025untrn'),
             },
         );
+
+        // Random address, doesn't really matter for the tests
+        context.treasuryAddress = "neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj"
     });
 
     afterAll(async () => {
@@ -97,6 +107,98 @@ describe('Core', () => {
         );
     });
 
+    it('instantiate aum oracle', async () => {
+        const {client, account} = context;
+        const res = await client.upload(
+            account.address,
+            Uint8Array.from(
+                fs.readFileSync(
+                    join(__dirname, '../../../artifacts/maxbtc_neutron_aum_oracle.wasm'),
+                ),
+            ),
+            1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        const instantiateRes = await MaxbtcNeutronAumOracle.Client.instantiate(
+            client,
+            account.address,
+            res.codeId,
+            {
+                aum: "1000"
+            },
+            'label',
+            'auto',
+            [],
+        );
+        expect(instantiateRes.contractAddress).toHaveLength(66);
+        context.aumOracleContractAddress = instantiateRes.contractAddress;
+        context.aumOracleContractClient = new MaxbtcNeutronAumOracle.Client(
+            client,
+            context.aumOracleContractAddress,
+        );
+    });
+
+    it('instantiate liquidation buffer', async () => {
+        const {client, account} = context;
+        const res = await client.upload(
+            account.address,
+            Uint8Array.from(
+                fs.readFileSync(
+                    join(__dirname, '../../../artifacts/maxbtc_neutron_liquidation_buffer.wasm'),
+                ),
+            ),
+            1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        const instantiateRes = await MaxbtcNeutronLiquidationBuffer.Client.instantiate(
+            client,
+            account.address,
+            res.codeId,
+            {
+                owned_maxbtc: "1000",
+                owned_btc: "1000"
+            },
+            'label',
+            'auto',
+            [],
+        );
+        expect(instantiateRes.contractAddress).toHaveLength(66);
+        context.liquidationBufferContractAddress = instantiateRes.contractAddress;
+        context.liquidationBufferContractClient = new MaxbtcNeutronLiquidationBuffer.Client(
+            client,
+            context.liquidationBufferContractAddress,
+        );
+    });
+
+    it('instantiate pump', async () => {
+        const {client, account} = context;
+        const res = await client.upload(
+            account.address,
+            Uint8Array.from(
+                fs.readFileSync(
+                    join(__dirname, '../../../artifacts/maxbtc_neutron_pump.wasm'),
+                ),
+            ),
+            1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        const instantiateRes = await MaxbtcNeutronLiquidationBuffer.Client.instantiate(
+            client,
+            account.address,
+            res.codeId,
+            {},
+            'label',
+            'auto',
+            [],
+        );
+        expect(instantiateRes.contractAddress).toHaveLength(66);
+        context.pumpContractAddress = instantiateRes.contractAddress;
+        context.pumpContractClient = new MaxbtcNeutronPump.Client(
+            client,
+            context.pumpContractAddress,
+        );
+    });
+
     it('instantiate core', async () => {
         const {client, account} = context;
         const res = await client.upload(
@@ -114,11 +216,11 @@ describe('Core', () => {
             account.address,
             res.codeId,
             {
-                aum_contract: "neutron12hw02dzjh6zkfmcs76m9zk2gy3rjkqcw7vayfk2xaeaeykh2x0rq2seje4", // TODO: instantiate
+                aum_contract: context.aumOracleContractAddress,
                 collector_contract: context.collectorContractAddress,
-                treasury_address: "neutron12hw02dzjh6zkfmcs76m9zk2gy3rjkqcw7vayfk2xaeaeykh2x0rq2seje4", // TODO: instantiate
-                liquidation_contract: "neutron12hw02dzjh6zkfmcs76m9zk2gy3rjkqcw7vayfk2xaeaeykh2x0rq2seje4", // TODO: instantiate
-                deposit_pump_contract: "neutron12hw02dzjh6zkfmcs76m9zk2gy3rjkqcw7vayfk2xaeaeykh2x0rq2seje4", // TODO: instantiate
+                treasury_address: context.treasuryAddress,
+                liquidation_buffer_contract: context.liquidationBufferContractAddress,
+                deposit_pump_contract: context.pumpContractAddress,
                 accepted_withdrawable_percentage: "0.005",
                 batch_active_duration: 10,
                 batch_withdrawing_duration: 10,

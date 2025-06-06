@@ -38,7 +38,7 @@ fn test_instantiate_success() {
         Attribute::new("aum_contract", msg.aum_contract.clone()),
         Attribute::new(
             "liquidation_buffer_contract",
-            msg.liquidation_contract.clone(),
+            msg.liquidation_buffer_contract.clone(),
         ),
         Attribute::new("collector_contract", msg.collector_contract.clone()),
         Attribute::new("treasury_address", msg.treasury_address.clone()),
@@ -1260,7 +1260,7 @@ fn default_instantiate_msg(
     InstantiateMsg {
         owner: deps.api.addr_make("owner_addr").to_string(),
         aum_contract: deps.api.addr_make("aum_addr").to_string(),
-        liquidation_contract: deps.api.addr_make("liq_buffer_addr").to_string(),
+        liquidation_buffer_contract: deps.api.addr_make("liq_buffer_addr").to_string(),
         deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
         collector_contract: deps.api.addr_make("collector_addr").to_string(),
         treasury_address: deps.api.addr_make("treasury_addr").to_string(),

@@ -83,7 +83,7 @@ export interface UpdateConfigArgs {
   required?: [];
 }
 /**
- * InstantiateMsg configures the contract on initialization. InstantiateMsg configures the contract on initialization.
+ * InstantiateMsg configures the contract on initialization.
  */
 export interface InstantiateMsg {
   /**
@@ -140,13 +140,13 @@ export interface InstantiateMsg {
    */
   deposits_cap?: Uint128 | null;
   /**
+   * Address of the contract that manages the liquidation buffer.
+   */
+  liquidation_buffer_contract: string;
+  /**
    * Fraction of total AUM (Decimal) that the protocol keeps on the liquidation buffer contract as an instant-liquidity buffer
    */
   liquidation_buffer_share: Decimal;
-  /**
-   * Address of the contract that manages the liquidation buffer.
-   */
-  liquidation_contract: string;
   /**
    * The token-factory sub-denom used for the maxBTC token
    */
