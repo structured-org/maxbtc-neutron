@@ -247,8 +247,8 @@ describe('Core', () => {
     });
 
     // it('Update validator info', async () => {
-    //   const { contractClient, account } = context;
-    //   const res = await contractClient.updateValidatorsInfo(
+    //   const { coreContractClient, account } = context;
+    //   const res = await coreContractClient.updateValidatorsInfo(
     //     account.address,
     //     {
     //       validators: [
@@ -274,7 +274,7 @@ describe('Core', () => {
     //   );
     //   expect(res.transactionHash).toBeTruthy();
     //
-    //   const validators = await contractClient.queryValidators();
+    //   const validators = await coreContractClient.queryValidators();
     //
     //   expect(validators).toEqual(
     //     expect.arrayContaining([

@@ -969,7 +969,11 @@ fn get_batch_id_from_redemption_coin(
 ///
 /// If the denominator is zero (e.g. bootstrap state) the function returns `1`
 /// to avoid division by zero.
-fn get_exchange_rate(deps: &Deps, env: Env, cfg: &Config) -> Result<Decimal, ContractError> {
+pub(crate) fn get_exchange_rate(
+    deps: &Deps,
+    env: Env,
+    cfg: &Config,
+) -> Result<Decimal, ContractError> {
     // If there is a cached exchange rate, return it
     if let Some(cached_er) = CACHED_ER.load(deps.storage)? {
         return Ok(cached_er.er);

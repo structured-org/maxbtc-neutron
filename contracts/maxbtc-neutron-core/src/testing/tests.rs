@@ -449,11 +449,9 @@ fn test_flush_guard_not_enough_time_elapsed() {
 
     let info = message_info(&deps.api.addr_make("flusher"), &[]);
 
-    // ── Act ────────────────────────────────────────────────────────────────────
     let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
 
-    // ── Assert ────────────────────────────────────────────────────────────────
-    // 1. Status attribute.
+    // Status attribute.
     let status_attr = resp
         .attributes
         .iter()
@@ -461,15 +459,15 @@ fn test_flush_guard_not_enough_time_elapsed() {
         .expect("status attribute present");
     assert_eq!(status_attr.value, "not_enough_time_elapsed");
 
-    // 2. No state transitions happened.
+    // No state transitions happened.
     assert_eq!(
         FSM.get_current_state(&deps.storage).unwrap(),
         ContractState::Idle
     );
-    // 3. LAST_DEPOSIT_FLUSH_TIME unchanged.
+    // LAST_DEPOSIT_FLUSH_TIME unchanged.
     let stored = LAST_DEPOSIT_FLUSH_TIME.load(&deps.storage).unwrap();
     assert_eq!(stored, now - (cfg.deposit_flush_period / 2));
-    // 4. No transfer messages emitted.
+    // No transfer messages emitted.
     assert!(resp.messages.is_empty());
 }
 
@@ -494,10 +492,8 @@ fn test_flush_zero_outstanding_deposits() {
 
     let info = message_info(&deps.api.addr_make("flusher"), &[]);
 
-    // ── Act ────────────────────────────────────────────────────────────────────
     let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
 
-    // ── Assert ────────────────────────────────────────────────────────────────
     let status_attr = resp.attributes.iter().find(|a| a.key == "status").unwrap();
     assert_eq!(status_attr.value, "zero_outstanding_deposits");
 
@@ -534,19 +530,17 @@ fn test_flush_sends_to_liqbuffer_then_pump() {
 
     let info = message_info(&deps.api.addr_make("flusher"), &[]);
 
-    // ── Act ────────────────────────────────────────────────────────────────────
     let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
     let msgs = extract_msgs(&resp.messages);
 
-    // ── Assert ────────────────────────────────────────────────────────────────
-    // 1. FSM moved into Flushing state; ER got cached.
+    // FSM moved into Flushing state; ER got cached.
     assert_eq!(
         FSM.get_current_state(&deps.storage).unwrap(),
         ContractState::Flushing
     );
     assert!(CACHED_ER.load(&deps.storage).unwrap().is_some());
 
-    // 2. We sent 200 000 wBTC to the liquidation buffer contract ...
+    // We sent 200 000 wBTC to the liquidation buffer contract ...
     assert_bank_send_exists(
         &msgs,
         &cfg.liquidation_buffer_contract.to_string(),
@@ -583,19 +577,17 @@ fn test_flush_requests_clawback_then_pump() {
 
     let info = message_info(&deps.api.addr_make("flusher"), &[]);
 
-    // ── Act ────────────────────────────────────────────────────────────────────
     let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
     let msgs = extract_msgs(&resp.messages);
 
-    // ── Assert ────────────────────────────────────────────────────────────────
-    // 1. Claw-back message exists.
+    // Claw-back message exists.
     assert_clawback_exists(
         &msgs,
         &cfg.liquidation_buffer_contract.to_string(),
         coin(300_000u128, "wBTC"),
     );
 
-    // 2. Entire 2 000 000 now sitting in the contract is forwarded to the pump.
+    // Entire 2 000 000 now sitting in the contract is forwarded to the pump.
     assert_bank_send_exists(
         &msgs,
         &cfg.deposit_pump_contract.to_string(),
@@ -603,7 +595,7 @@ fn test_flush_requests_clawback_then_pump() {
         "wBTC",
     );
 
-    // 3. FSM is Flushing and ER is cached.
+    // FSM is Flushing and ER is cached.
     assert_eq!(
         FSM.get_current_state(&deps.storage).unwrap(),
         ContractState::Flushing
