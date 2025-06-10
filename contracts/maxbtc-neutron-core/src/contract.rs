@@ -237,7 +237,7 @@ pub(crate) fn execute_deposit(
     let deposit_coin = get_deposit_coin(cfg.deposit_denom.clone(), info.funds)?;
 
     // Get the exchange rate
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone(), Some(deposit_coin.amount.clone()))?;
 
     // Adjust for deposit fee
     let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals)
@@ -324,7 +324,7 @@ pub(crate) fn execute_flush_deposits(
 
     // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
     // in process_cache() to check whether the deposit reached Binance / Solana
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg)?;
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg, None)?;
     CACHED_ER.save(
         deps.storage,
         &Some(CachedER {
@@ -506,7 +506,7 @@ pub(crate) fn execute_process_active_batch(
     withdrawing_batch.collector_historical_balance = collector_balance.amount;
 
     // Get the exchange rate
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone())?;
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone(), None)?;
 
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
@@ -860,8 +860,8 @@ fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
 /// Query the total supply of maxBTC. At any moment, the maxBTC that is help by the liquidation
 /// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
 /// will be pretty soon, so we decrease the total supply by that amount.
-fn query_maxbtc_supply(deps: &Deps, cfg: &Config) -> StdResult<Uint128> {
-    let bank_supply = query_token_supply(deps, cfg.maxbtc_denom.clone())?;
+fn query_maxbtc_supply(deps: &Deps, cfg: &Config, env: &Env) -> StdResult<Uint128> {
+    let bank_supply = query_token_supply(deps, cfg.get_maxbtc_denom(env.contract.address.to_string()))?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
         &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
@@ -973,13 +973,22 @@ pub(crate) fn get_exchange_rate(
     deps: &Deps,
     env: Env,
     cfg: &Config,
+    deposit: Option<Uint128>,
 ) -> Result<Decimal, ContractError> {
     // If there is a cached exchange rate, return it
     if let Some(cached_er) = CACHED_ER.load(deps.storage)? {
         return Ok(cached_er.er);
     }
 
-    let er_numerator = get_aum(deps, env.clone(), cfg)?.total();
+    let mut er_numerator = get_aum(deps, env.clone(), cfg)?.total();
+
+    // In a deposit scenario, the deposit coin attached to the Deposit message
+    // is added to the contract balance query result (used by get_aum() above).
+    // We do not want the incoming deposit to be included in the numerator,
+    // so we need to subtract it.
+    if let Some(deposit_amount) = deposit {
+        er_numerator = er_numerator - deposit_amount;
+    }
 
     if let Some(deposits_cap) = cfg.deposits_cap {
         if er_numerator > deposits_cap {
@@ -987,16 +996,12 @@ pub(crate) fn get_exchange_rate(
         }
     }
 
-    let maxbtc_supply = query_maxbtc_supply(deps, cfg)?;
+    let maxbtc_supply = query_maxbtc_supply(deps, cfg, &env)?;
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
-        cfg.liquidation_buffer_contract.to_string(),
-        &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
-    )?;
     let er_denominator =
-        maxbtc_supply + active_batch.btc_requested - liquidation_contract_maxbtc_balance;
+        maxbtc_supply + active_batch.btc_requested;
 
     let er = if er_denominator.is_zero() {
         Decimal::one()
