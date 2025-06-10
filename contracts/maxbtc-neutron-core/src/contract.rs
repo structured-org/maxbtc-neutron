@@ -237,7 +237,12 @@ pub(crate) fn execute_deposit(
     let deposit_coin = get_deposit_coin(cfg.deposit_denom.clone(), info.funds)?;
 
     // Get the exchange rate
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg.clone(), Some(deposit_coin.amount.clone()))?;
+    let er = get_exchange_rate(
+        &deps.as_ref(),
+        env.clone(),
+        &cfg.clone(),
+        Some(deposit_coin.amount),
+    )?;
 
     // Adjust for deposit fee
     let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals)
@@ -250,6 +255,7 @@ pub(crate) fn execute_deposit(
     // to match cfg.deposit_decimals (e.g., 6) before minting.
     let minted_amount =
         dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
+
     // Can be equal to zero if rounding kicks in with a very high ER.
     if minted_amount.is_zero() {
         return Err(ContractError::InvalidDepositAmount {});
@@ -861,7 +867,8 @@ fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
 /// contract is effectively taken out of circulation, because if it hasn't been burned yet, it
 /// will be pretty soon, so we decrease the total supply by that amount.
 fn query_maxbtc_supply(deps: &Deps, cfg: &Config, env: &Env) -> StdResult<Uint128> {
-    let bank_supply = query_token_supply(deps, cfg.get_maxbtc_denom(env.contract.address.to_string()))?;
+    let bank_supply =
+        query_token_supply(deps, cfg.get_maxbtc_denom(env.contract.address.to_string()))?;
     let liquidation_contract_maxbtc_balance: Uint128 = deps.querier.query_wasm_smart(
         cfg.liquidation_buffer_contract.to_string(),
         &LiquidationBufferContractQueryMsg::GetMaxBTCBalance {},
@@ -987,7 +994,7 @@ pub(crate) fn get_exchange_rate(
     // We do not want the incoming deposit to be included in the numerator,
     // so we need to subtract it.
     if let Some(deposit_amount) = deposit {
-        er_numerator = er_numerator - deposit_amount;
+        er_numerator -= deposit_amount;
     }
 
     if let Some(deposits_cap) = cfg.deposits_cap {
@@ -1000,8 +1007,7 @@ pub(crate) fn get_exchange_rate(
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    let er_denominator =
-        maxbtc_supply + active_batch.btc_requested;
+    let er_denominator = maxbtc_supply + active_batch.btc_requested;
 
     let er = if er_denominator.is_zero() {
         Decimal::one()

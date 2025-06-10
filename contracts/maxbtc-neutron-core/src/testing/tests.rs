@@ -76,7 +76,7 @@ fn test_instantiate_success() {
     let cfg = CONFIG.load(&deps.storage).unwrap();
     assert_eq!(cfg.owner, deps.api.addr_make("owner_addr"));
     assert_eq!(cfg.aum_oracle_contract, &deps.api.addr_make("aum_addr"));
-    assert_eq!(cfg.paused, false);
+    assert!(!cfg.paused);
     // etc. check more fields
     assert_eq!(cfg.deposit_decimals, 6u32);
     assert_eq!(cfg.deposit_denom, "wBTC");
@@ -127,6 +127,14 @@ fn test_first_deposit_success() {
     let info = message_info(
         &deps.api.addr_make("depositor"),
         &[coin(deposit_amount.u128(), "wBTC")],
+    );
+
+    // Set the balance that the contract will see AFTER receiving the deposit.
+    // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
     );
 
     // Act
@@ -343,12 +351,18 @@ fn test_deposit_minted_zero_below_er() {
     // Let’s try a scenario that results in minted=0 once we do integer trunc.
     deps.querier
         .update_oracle_aum(Uint128::from(10_000_000_000u128)); // huge AUM => huge ER
-    deps.querier
-        .set_token_supply(&cfg.maxbtc_denom, Uint128::from(100_000_000u128));
+    deps.querier.set_token_supply(
+        cfg.get_maxbtc_denom(env.contract.address.to_string())
+            .as_str(),
+        Uint128::from(100_000_000u128),
+    );
     deps.querier
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
 
-    let info = message_info(&deps.api.addr_make("depositor"), &[coin(50u128, "wBTC")]); // 0.000050 wBTC in decimal(6)
+    let info = message_info(
+        &deps.api.addr_make("depositor"),
+        &[coin(50u128, cfg.deposit_denom)],
+    ); // 0.000050 wBTC in decimal(6)
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
     do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
@@ -432,7 +446,7 @@ fn test_flush_guard_not_enough_time_elapsed() {
     // Deposit buffer: 0.5 wBTC.
     let buffer = Uint128::new(500_000);
     deps.querier
-        .set_balance(&env.contract.address.to_string(), "wBTC", buffer);
+        .set_balance(env.contract.address.as_ref(), "wBTC", buffer);
 
     // Mock oracle & liq-buffer queries so ER math inside the call can run.
     deps.querier.update_oracle_aum(Uint128::new(10_000_000));
@@ -479,7 +493,7 @@ fn test_flush_zero_outstanding_deposits() {
 
     // No balance in the contract’s deposit buffer.
     deps.querier
-        .set_balance(&env.contract.address.to_string(), "wBTC", Uint128::zero());
+        .set_balance(env.contract.address.as_ref(), "wBTC", Uint128::zero());
 
     // Mock oracle/liq buffer queries (values don’t matter here).
     deps.querier.update_oracle_aum(Uint128::new(10_000_000));
@@ -520,7 +534,7 @@ fn test_flush_sends_to_liqbuffer_then_pump() {
 
     let deposit_buffer = Uint128::new(2_000_000);
     deps.querier
-        .set_balance(&env.contract.address.to_string(), "wBTC", deposit_buffer);
+        .set_balance(env.contract.address.as_ref(), "wBTC", deposit_buffer);
 
     // flush_period elapsed:
     let now = env.block.time.seconds();
@@ -543,14 +557,14 @@ fn test_flush_sends_to_liqbuffer_then_pump() {
     // We sent 200 000 wBTC to the liquidation buffer contract ...
     assert_bank_send_exists(
         &msgs,
-        &cfg.liquidation_buffer_contract.to_string(),
+        cfg.liquidation_buffer_contract.as_ref(),
         Uint128::new(200_000),
         "wBTC",
     );
     // ... and the remaining 1 800 000 to the deposit pump.
     assert_bank_send_exists(
         &msgs,
-        &cfg.deposit_pump_contract.to_string(),
+        cfg.deposit_pump_contract.as_ref(),
         Uint128::new(1_800_000),
         "wBTC",
     );
@@ -564,11 +578,8 @@ fn test_flush_requests_clawback_then_pump() {
     deps.querier.update_oracle_aum(Uint128::new(1_000_000));
     deps.querier
         .update_liqbuffer_btc_balance(Uint128::new(500_000));
-    deps.querier.set_balance(
-        &env.contract.address.to_string(),
-        "wBTC",
-        Uint128::new(500_000),
-    );
+    deps.querier
+        .set_balance(env.contract.address.as_ref(), "wBTC", Uint128::new(500_000));
 
     let now = env.block.time.seconds();
     LAST_DEPOSIT_FLUSH_TIME
@@ -583,14 +594,14 @@ fn test_flush_requests_clawback_then_pump() {
     // Claw-back message exists.
     assert_clawback_exists(
         &msgs,
-        &cfg.liquidation_buffer_contract.to_string(),
+        cfg.liquidation_buffer_contract.as_ref(),
         coin(300_000u128, "wBTC"),
     );
 
     // Entire 2 000 000 now sitting in the contract is forwarded to the pump.
     assert_bank_send_exists(
         &msgs,
-        &cfg.deposit_pump_contract.to_string(),
+        cfg.deposit_pump_contract.as_ref(),
         Uint128::new(800_000),
         "wBTC",
     );
@@ -774,7 +785,7 @@ fn test_process_active_batch_happy_path() {
 
     // Zero balance on collector; required later in transition
     deps.querier.set_balance(
-        &cfg.collector_contract.as_str(),
+        cfg.collector_contract.as_ref(),
         &cfg.deposit_denom,
         Uint128::zero(),
     );
@@ -1080,6 +1091,43 @@ fn test_cache_flushing_stale_triggers_emergency() {
 }
 
 #[test]
+fn test_cached_expired_cache_triggers_emergency() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    prime_cache(
+        &mut deps,
+        ContractState::Flushing,
+        CachedER {
+            er: Decimal::one(),
+            timeout: env.block.time.seconds() - 1,
+            aum: None,
+        },
+    );
+
+    // When: A user attempts to deposit, which triggers _process_cache.
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("user"),
+        &[coin(deposit_amount.u128(), &cfg.deposit_denom)],
+    );
+
+    // Set the balance even though we expect an error, to be accurate.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let recipient = deps.api.addr_make("recipient");
+    let err = do_deposit(deps.as_mut(), env, info, recipient.to_string()).unwrap_err();
+
+    // Then: The transaction must fail with ProtocolInEmergency.
+    assert!(matches!(err, ContractError::ProtocolInEmergency {}));
+}
+
+#[test]
 fn test_cache_withdrawing_finalises_and_sends_extra() {
     let (mut deps, env, _) = setup_contract();
     let cfg = CONFIG.load(&deps.storage).unwrap();
@@ -1114,7 +1162,7 @@ fn test_cache_withdrawing_finalises_and_sends_extra() {
 
     // Mock the collector's *current* balance.
     deps.querier.set_balance(
-        &cfg.collector_contract.to_string(),
+        cfg.collector_contract.as_ref(),
         &cfg.deposit_denom,
         current_balance,
     );
@@ -1200,7 +1248,7 @@ fn test_cache_withdrawing_pending() {
 
     // Mock the collector balance so that *collected_ok* is available
     deps.querier.set_balance(
-        &cfg.collector_contract.to_string(),
+        cfg.collector_contract.as_ref(),
         &cfg.deposit_denom,
         collected_ok,
     );
@@ -1217,6 +1265,459 @@ fn test_cache_withdrawing_pending() {
     // Cache and WITHDRAWING_BATCH must still be present.
     let _ = load_cache(&deps);
     assert!(WITHDRAWING_BATCH.load(&deps.storage).unwrap().is_some());
+}
+
+/// -----------------------------------------------------------------------------------------------
+/// Tests for ER
+/// -----------------------------------------------------------------------------------------------
+
+/// Verifies that the first deposit correctly uses an Exchange Rate of 1.0
+/// when the system has no prior assets or supply.
+#[test]
+fn test_idle_first_deposit_er_is_one() {
+    // Arrange: The contract is newly instantiated.
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+
+    // Given: AUM, balances, and supply are all zero.
+    deps.querier.update_oracle_aum(Uint128::zero());
+    deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::zero());
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+
+    // When: User A deposits 1 wBTC.
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("user_a"),
+        &[coin(deposit_amount.u128(), &cfg.deposit_denom)],
+    );
+    let recipient = deps.api.addr_make("user_a_recipient").to_string();
+
+    // Set the balance that the contract will see AFTER receiving the deposit.
+    // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
+
+    // Then: User A receives 0.99 maxBTC.
+    // Inside contract: Numerator gets `balance` (1M) and subtracts `incoming` (1M), so AUM contribution is 0. ER defaults to 1.
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation: With no existing AUM or supply, the ER defaults to 1.0.
+    // The minted amount is the deposit after fees, divided by the ER.
+    // Amount after 1% fee = 1,000,000 * (1 - 0.01) = 990,000.
+    // Minted = 990,000 / 1.0 = 990,000.
+    let expected_minted = Uint128::from(990_000u128);
+    assert_eq!(minted_attr.value, expected_minted.to_string());
+}
+
+/// Verifies that a subsequent deposit correctly uses the new, higher ER,
+/// resulting in fewer maxBTC minted for the same deposit amount.
+#[test]
+fn test_idle_deposit_after_yield_accrued() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+
+    // Given: AUM has grown to 1.05 wBTC while maxBTC supply is 0.99. Contract balance is 0.
+    deps.querier.update_oracle_aum(Uint128::from(1_050_000u128));
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::from(990_000u128));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+
+    // When: User A deposits another 1 wBTC.
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("user_a"),
+        &[coin(deposit_amount.u128(), &cfg.deposit_denom)],
+    );
+    let recipient = deps.api.addr_make("user_a_recipient").to_string();
+
+    // Set balance to reflect the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
+
+    // Then: The minted amount reflects the new ER.
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation:
+    // 1. Exchange Rate (ER) = AUM / supply = 1,050,000 / 990,000 ≈ 1.060606...
+    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
+    // 3. Minted maxBTC = 990,000 / 1.060606... = 933,428.57... (truncates to 933,428).
+    let expected_minted = Uint128::from(933_428u128);
+    assert_eq!(minted_attr.value, expected_minted.to_string());
+}
+
+/// Verifies that a new user gets maxBTC at the current market rate, ensuring fairness.
+#[test]
+fn test_idle_second_user_deposits_at_higher_er() {
+    // Arrange: State is identical to Scenario 1.2
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+
+    deps.querier.update_oracle_aum(Uint128::from(1_050_000u128));
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::from(990_000u128));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+
+    // When: A new user, User B, deposits 1 wBTC.
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("user_b"),
+        &[coin(deposit_amount.u128(), &cfg.deposit_denom)],
+    );
+    let recipient = deps.api.addr_make("user_b_recipient").to_string();
+
+    // Set balance to reflect the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
+
+    // Then: User B receives the same amount as User A would have in the previous scenario.
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation:
+    // 1. Exchange Rate (ER) = AUM / supply = 1,050,000 / 990,000 ≈ 1.060606...
+    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
+    // 3. Minted maxBTC = 990,000 / 1.060606... = 933,428.57... (truncates to 933,428).
+    let expected_minted = Uint128::from(933_428u128);
+    assert_eq!(minted_attr.value, expected_minted.to_string());
+}
+
+/// Verifies that the ER calculation is stable and fair for back-to-back deposits
+/// without any intervening yield changes.
+#[test]
+fn test_idle_two_deposits_in_succession() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+
+    cfg.deposit_fee = Decimal::zero();
+    CONFIG.save(&mut deps.storage, &cfg).unwrap();
+
+    deps.querier
+        .update_oracle_aum(Uint128::from(10_000_000u128));
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::from(9_500_000u128));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+
+    // --- Deposit 1: User A ---
+    let user_a = &deps.api.addr_make("user_a");
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info_a = message_info(user_a, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
+
+    // Set balance for User A's deposit (previous balance 0 + 1M)
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res_a = do_deposit(deps.as_mut(), env.clone(), info_a, user_a.to_string()).unwrap();
+    let minted_a = res_a
+        .attributes
+        .iter()
+        .find(|a| a.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation for A:
+    // 1. Pre-deposit AUM = 10,000,000. Pre-deposit supply = 9,500,000.
+    // 2. ER = 10,000,000 / 9,500,000 ≈ 1.05263...
+    // 3. Minted (no fee) = 1,000,000 / 1.05263... = 950,000.
+    let expected_minted_a = Uint128::from(950_000u128);
+    assert_eq!(minted_a.value, expected_minted_a.to_string());
+
+    // --- Deposit 2: User B ---
+    // Arrange for User B's deposit: User A's 1 wBTC is now in the contract.
+    let user_b = &deps.api.addr_make("user_b");
+    let balance_from_a = deposit_amount;
+    let new_maxbtc_supply = Uint128::from(9_500_000u128) + expected_minted_a;
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), new_maxbtc_supply);
+
+    let info_b = message_info(user_b, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
+
+    // Set balance for User B's deposit (previous balance 1M + 1M)
+    let balance_for_b = balance_from_a + deposit_amount;
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        balance_for_b,
+    );
+
+    let res_b = do_deposit(deps.as_mut(), env, info_b, user_b.to_string()).unwrap();
+
+    let minted_b = res_b
+        .attributes
+        .iter()
+        .find(|a| a.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation for B:
+    // 1. Pre-deposit AUM = 10M (oracle) + 1M (from A) = 11,000,000.
+    // 2. Pre-deposit supply = 9.5M + 0.95M = 10,450,000.
+    // 3. ER = 11,000,000 / 10,450,000 ≈ 1.05263... (same as before).
+    // 4. Minted = 1,000,000 / 1.05263... = 950,000.
+    let expected_minted_b = Uint128::from(950_000u128);
+    assert_eq!(minted_b.value, expected_minted_b.to_string());
+}
+
+#[test]
+fn test_idle_denominator_with_liq_buffer() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+    assert_eq!(cfg.deposit_fee, Decimal::percent(1));
+
+    // Given:
+    deps.querier
+        .update_oracle_aum(Uint128::from(10_000_000u128));
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::from(10_000_000u128));
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::from(1_000_000u128));
+
+    // When: A deposit triggers get_exchange_rate
+    let user = &deps.api.addr_make("user");
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(user, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
+
+    // Set balance to reflect the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res = do_deposit(deps.as_mut(), env, info, user.to_string()).unwrap();
+
+    // Then: ER should be 1.11
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "minted_maxbtc")
+        .unwrap();
+    let expected_minted = Uint128::from(891_000u128);
+    assert_eq!(minted_attr.value, expected_minted.to_string());
+}
+
+/// Verifies that deposits made during the `Flushing` state use the
+/// cached ER, not a newly calculated one.
+#[test]
+fn test_cached_deposit_while_flushing() {
+    // Arrange
+    let (mut deps, mut env, _) = setup_contract();
+    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+    cfg.deposit_fee = Decimal::percent(1);
+    CONFIG.save(&mut deps.storage, &cfg).unwrap();
+
+    // Given: A pre-flush state with 2M in the contract
+    deps.querier.update_oracle_aum(Uint128::from(8_000_000u128));
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::from(2_000_000u128),
+    );
+    deps.querier
+        .set_token_supply(maxbtc_denom.as_str(), Uint128::from(9_000_000u128));
+
+    // Arrange: Trigger a flush
+    let flusher_info = message_info(&deps.api.addr_make("flusher"), &[]);
+    env.block.time = env.block.time.plus_seconds(cfg.deposit_flush_period + 1);
+    execute_flush_deposits(deps.as_mut(), env.clone(), flusher_info).unwrap();
+
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Flushing
+    );
+
+    // When: User C deposits 1 wBTC. The 2M flushed are "in-flight". The contract's balance is now just User C's 1M.
+    let user_c = &deps.api.addr_make("user_c");
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let info = message_info(user_c, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
+
+    // Set the balance to reflect the new state (flushed funds are gone, new deposit arrived).
+    deps.querier.set_balance(
+        env.contract.address.as_str(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    let res = do_deposit(deps.as_mut(), env, info, user_c.to_string()).unwrap();
+
+    // Then: The minted amount uses the cached ER, as the AUM calculation is skipped.
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "minted_maxbtc")
+        .unwrap();
+    // Calculation:
+    // 1. Cached ER was calculated before the flush:
+    //    ER = Total AUM / Supply = (8M oracle + 2M buffer) / 9M = 10 / 9.
+    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
+    // 3. Minted maxBTC = 990,000 / (10/9) = 990,000 * 0.9 = 891,000.
+    let expected_minted = Uint128::from(891_000u128);
+    assert_eq!(minted_attr.value, expected_minted.to_string());
+}
+
+/// Verifies that the system correctly returns to `Idle` and clears the cache
+/// once the flushed funds are confirmed to have arrived.
+#[test]
+fn test_cached_flush_completes_and_clears_cache() {
+    // Arrange: Start in a Flushing state.
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let flushed_amount = Uint128::from(2_000_000u128);
+    let historical_oracle_aum = Uint128::from(8_000_000u128);
+
+    prime_cache(
+        &mut deps,
+        ContractState::Flushing,
+        CachedER {
+            er: Decimal::one(),
+            timeout: env.block.time.seconds() + 1000,
+            aum: Some(CachedAUM {
+                oracle_aum: historical_oracle_aum,
+                deposit_buffer: flushed_amount,
+            }),
+        },
+    );
+
+    // Given: The flush completes.
+    let new_oracle_aum = historical_oracle_aum + flushed_amount;
+    deps.querier.update_oracle_aum(new_oracle_aum);
+
+    // When: A new deposit triggers _process_cache.
+    let deposit_amount = Uint128::from(500_000u128);
+    let another_user = &deps.api.addr_make("another_user");
+    let info = message_info(
+        another_user,
+        &[coin(deposit_amount.u128(), &cfg.deposit_denom)],
+    );
+
+    // Set the balance for the new deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    do_deposit(deps.as_mut(), env, info, another_user.to_string()).unwrap();
+
+    // Then: The cache is cleared and state returns to Idle.
+    assert_eq!(
+        FSM.get_current_state(&deps.storage).unwrap(),
+        ContractState::Idle
+    );
+    assert!(CACHED_ER.load(&deps.storage).unwrap().is_none());
+}
+
+#[test]
+fn test_withdrawing_proportional_claim_with_shortfall() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let batch_id = 5u64;
+
+    let collected_amount = Uint128::from(9_500_000u128);
+    let total_burned = Uint128::from(8_000_000u128);
+
+    FINALIZED_BATCHES
+        .save(
+            &mut deps.storage,
+            batch_id,
+            &Batch {
+                batch_id,
+                btc_requested: Uint128::from(10_000_000u128),
+                maxbtc_burned: total_burned,
+                collected_amount,
+                paid_amount: Uint128::zero(),
+                collector_historical_balance: Uint128::zero(),
+            },
+        )
+        .unwrap();
+
+    let redemption_denom = cfg.get_redemption_denom(env.contract.address.to_string(), batch_id);
+    deps.querier
+        .set_token_supply(&redemption_denom, total_burned);
+
+    // When: User A claims
+    let user_a_redeem = Uint128::from(2_000_000u128);
+    let user_a_receiver = &deps.api.addr_make("user_a_receiver");
+    let info_a = message_info(
+        &deps.api.addr_make("user_a"),
+        &[coin(user_a_redeem.u128(), &redemption_denom)],
+    );
+    let res_a = execute_claim(
+        deps.as_mut(),
+        env.clone(),
+        info_a,
+        user_a_receiver.to_string(),
+    )
+    .unwrap();
+
+    // Then: User A receives 25% of the collected amount.
+    let expected_payout_a = Uint128::from(2_375_000u128);
+    assert_bank_send_exists(
+        &extract_msgs(&res_a.messages),
+        user_a_receiver.as_ref(),
+        expected_payout_a,
+        &cfg.deposit_denom,
+    );
+
+    // Required because the Burn message for the redemption token is not executed in the test
+    deps.querier
+        .set_token_supply(&redemption_denom, total_burned - user_a_redeem);
+
+    // When: User B claims
+    let user_b_redeem = Uint128::from(6_000_000u128);
+    let user_b_receiver = &deps.api.addr_make("user_b_receiver");
+    let info_b = message_info(
+        &deps.api.addr_make("user_b"),
+        &[coin(user_b_redeem.u128(), &redemption_denom)],
+    );
+    let res_b = execute_claim(deps.as_mut(), env, info_b, user_b_receiver.to_string()).unwrap();
+
+    // Then: User B receives 75% of the collected amount.
+    let expected_payout_b = Uint128::from(7_125_000u128);
+    assert_bank_send_exists(
+        &extract_msgs(&res_b.messages),
+        user_b_receiver.as_ref(),
+        expected_payout_b,
+        &cfg.deposit_denom,
+    );
 }
 
 /// -----------------------------------------------------------------------------------------------
@@ -1387,375 +1888,4 @@ fn load_cache(deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Cached
         .load(&deps.storage)
         .unwrap()
         .expect("cache must exist")
-}
-
-// ---
-// ## 1. Tests without a Cached Exchange Rate (`Idle` State)
-// ---
-
-// ### A. Initial State & First Deposit
-
-#[test]
-/// **Scenario 1.1: First-ever deposit into the system**
-/// Verifies that the first deposit correctly uses an Exchange Rate of 1.0
-/// when the system has no prior assets or supply.
-fn test_idle_first_deposit_er_is_one() {
-    // Arrange: The contract is newly instantiated.
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-
-    // Given: AUM, balances, and supply are all zero.
-    deps.querier.update_oracle_aum(Uint128::zero());
-    deps.querier.update_liqbuffer_btc_balance(Uint128::zero());
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::zero());
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::zero());
-
-    // When: User A deposits 1 wBTC.
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(&deps.api.addr_make("user_a"), &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-    let recipient = deps.api.addr_make("user_a_recipient").to_string();
-
-    // Set the balance that the contract will see AFTER receiving the deposit.
-    // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
-
-    // Then: User A receives 0.99 maxBTC.
-    // Inside contract: Numerator gets `balance` (1M) and subtracts `incoming` (1M), so AUM contribution is 0. ER defaults to 1.
-    let minted_attr = res.attributes.iter().find(|attr| attr.key == "minted_maxbtc").unwrap();
-    // Calculation: With no existing AUM or supply, the ER defaults to 1.0.
-    // The minted amount is the deposit after fees, divided by the ER.
-    // Amount after 1% fee = 1,000,000 * (1 - 0.01) = 990,000.
-    // Minted = 990,000 / 1.0 = 990,000.
-    let expected_minted = Uint128::from(990_000u128);
-    assert_eq!(minted_attr.value, expected_minted.to_string());
-}
-
-// ### B. Single User Scenarios
-
-#[test]
-/// **Scenario 1.2: Deposit after yield has accrued**
-/// Verifies that a subsequent deposit correctly uses the new, higher ER,
-/// resulting in fewer maxBTC minted for the same deposit amount.
-fn test_idle_deposit_after_yield_accrued() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-
-    // Given: AUM has grown to 1.05 wBTC while maxBTC supply is 0.99. Contract balance is 0.
-    deps.querier.update_oracle_aum(Uint128::from(1_050_000u128));
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::from(990_000u128));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::zero());
-
-    // When: User A deposits another 1 wBTC.
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(&deps.api.addr_make("user_a"), &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-    let recipient = deps.api.addr_make("user_a_recipient").to_string();
-
-    // Set balance to reflect the incoming deposit.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
-
-    // Then: The minted amount reflects the new ER.
-    let minted_attr = res.attributes.iter().find(|attr| attr.key == "minted_maxbtc").unwrap();
-    // Calculation:
-    // 1. Exchange Rate (ER) = AUM / supply = 1,050,000 / 990,000 ≈ 1.060606...
-    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
-    // 3. Minted maxBTC = 990,000 / 1.060606... = 933,428.57... (truncates to 933,428).
-    let expected_minted = Uint128::from(933_428u128);
-    assert_eq!(minted_attr.value, expected_minted.to_string());
-}
-
-// ### C. Multi-User Scenarios
-
-#[test]
-/// **Scenario 1.3: Second user deposits after ER has increased**
-/// Verifies that a new user gets maxBTC at the current market rate, ensuring fairness.
-fn test_idle_second_user_deposits_at_higher_er() {
-    // Arrange: State is identical to Scenario 1.2
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-
-    deps.querier.update_oracle_aum(Uint128::from(1_050_000u128));
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::from(990_000u128));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::zero());
-
-    // When: A new user, User B, deposits 1 wBTC.
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(&deps.api.addr_make("user_b"), &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-    let recipient = deps.api.addr_make("user_b_recipient").to_string();
-
-    // Set balance to reflect the incoming deposit.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res = do_deposit(deps.as_mut(), env, info, recipient).unwrap();
-
-    // Then: User B receives the same amount as User A would have in the previous scenario.
-    let minted_attr = res.attributes.iter().find(|attr| attr.key == "minted_maxbtc").unwrap();
-    // Calculation:
-    // 1. Exchange Rate (ER) = AUM / supply = 1,050,000 / 990,000 ≈ 1.060606...
-    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
-    // 3. Minted maxBTC = 990,000 / 1.060606... = 933,428.57... (truncates to 933,428).
-    let expected_minted = Uint128::from(933_428u128);
-    assert_eq!(minted_attr.value, expected_minted.to_string());
-}
-
-#[test]
-/// **Scenario 1.4: Two deposits in close succession**
-/// Verifies that the ER calculation is stable and fair for back-to-back deposits
-/// without any intervening yield changes.
-fn test_idle_two_deposits_in_succession() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-
-    cfg.deposit_fee = Decimal::zero();
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
-
-    deps.querier.update_oracle_aum(Uint128::from(10_000_000u128));
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::from(9_500_000u128));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::zero());
-
-    // --- Deposit 1: User A ---
-    let user_a = &deps.api.addr_make("user_a");
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info_a = message_info(user_a, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set balance for User A's deposit (previous balance 0 + 1M)
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res_a = do_deposit(deps.as_mut(), env.clone(), info_a, user_a.to_string()).unwrap();
-    let minted_a = res_a.attributes.iter().find(|a| a.key == "minted_maxbtc").unwrap();
-    // Calculation for A:
-    // 1. Pre-deposit AUM = 10,000,000. Pre-deposit supply = 9,500,000.
-    // 2. ER = 10,000,000 / 9,500,000 ≈ 1.05263...
-    // 3. Minted (no fee) = 1,000,000 / 1.05263... = 950,000.
-    let expected_minted_a = Uint128::from(950_000u128);
-    assert_eq!(minted_a.value, expected_minted_a.to_string());
-
-    // --- Deposit 2: User B ---
-    // Arrange for User B's deposit: User A's 1 wBTC is now in the contract.
-    let user_b = &deps.api.addr_make("user_b");
-    let balance_from_a = deposit_amount;
-    let new_maxbtc_supply = Uint128::from(9_500_000u128) + expected_minted_a;
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), new_maxbtc_supply);
-
-    let info_b = message_info(user_b, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set balance for User B's deposit (previous balance 1M + 1M)
-    let balance_for_b = balance_from_a + deposit_amount;
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, balance_for_b);
-
-    let res_b = do_deposit(deps.as_mut(), env, info_b, user_b.to_string()).unwrap();
-
-    let minted_b = res_b.attributes.iter().find(|a| a.key == "minted_maxbtc").unwrap();
-    // Calculation for B:
-    // 1. Pre-deposit AUM = 10M (oracle) + 1M (from A) = 11,000,000.
-    // 2. Pre-deposit supply = 9.5M + 0.95M = 10,450,000.
-    // 3. ER = 11,000,000 / 10,450,000 ≈ 1.05263... (same as before).
-    // 4. Minted = 1,000,000 / 1.05263... = 950,000.
-    let expected_minted_b = Uint128::from(950_000u128);
-    assert_eq!(minted_b.value, expected_minted_b.to_string());
-}
-
-// ### D. Edge Cases & Potential Issues
-
-#[test]
-/// **Scenario 1.5: Verifying the denominator calculation with a liquidation buffer**
-fn test_idle_denominator_with_liq_buffer() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-    assert_eq!(cfg.deposit_fee, Decimal::percent(1));
-
-    // Given:
-    deps.querier.update_oracle_aum(Uint128::from(10_000_000u128));
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::from(10_000_000u128));
-    deps.querier.update_liqbuffer_maxbtc_balance(Uint128::from(1_000_000u128));
-
-    // When: A deposit triggers get_exchange_rate
-    let user = &deps.api.addr_make("user");
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(user, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set balance to reflect the incoming deposit.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res = do_deposit(deps.as_mut(), env, info, user.to_string()).unwrap();
-
-    // Then: ER should be 1.11
-    let minted_attr = res.attributes.iter().find(|a| a.key == "minted_maxbtc").unwrap();
-    let expected_minted = Uint128::from(891_000u128);
-    assert_eq!(minted_attr.value, expected_minted.to_string());
-}
-
-// ---
-// ## 2. Tests with a Cached Exchange Rate (`Flushing` or `Withdrawing` State)
-// ---
-
-#[test]
-/// **Scenario 2.1: Deposit while a flush is in progress**
-/// Verifies that deposits made during the `Flushing` state use the
-/// cached ER, not a newly calculated one.
-fn test_cached_deposit_while_flushing() {
-    // Arrange
-    let (mut deps, mut env, _) = setup_contract();
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-    cfg.deposit_fee = Decimal::percent(1);
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
-
-    // Given: A pre-flush state with 2M in the contract
-    deps.querier.update_oracle_aum(Uint128::from(8_000_000u128));
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, Uint128::from(2_000_000u128));
-    deps.querier.set_token_supply(maxbtc_denom.as_str(), Uint128::from(9_000_000u128));
-
-    // Arrange: Trigger a flush
-    let flusher_info = message_info(&deps.api.addr_make("flusher"), &[]);
-    env.block.time = env.block.time.plus_seconds(cfg.deposit_flush_period + 1);
-    execute_flush_deposits(deps.as_mut(), env.clone(), flusher_info).unwrap();
-
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Flushing);
-
-    // When: User C deposits 1 wBTC. The 2M flushed are "in-flight". The contract's balance is now just User C's 1M.
-    let user_c = &deps.api.addr_make("user_c");
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(user_c, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set the balance to reflect the new state (flushed funds are gone, new deposit arrived).
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let res = do_deposit(deps.as_mut(), env, info, user_c.to_string()).unwrap();
-
-    // Then: The minted amount uses the cached ER, as the AUM calculation is skipped.
-    let minted_attr = res.attributes.iter().find(|a| a.key == "minted_maxbtc").unwrap();
-    // Calculation:
-    // 1. Cached ER was calculated before the flush:
-    //    ER = Total AUM / Supply = (8M oracle + 2M buffer) / 9M = 10 / 9.
-    // 2. Amount to mint (after 1% fee) = 1,000,000 * 0.99 = 990,000.
-    // 3. Minted maxBTC = 990,000 / (10/9) = 990,000 * 0.9 = 891,000.
-    let expected_minted = Uint128::from(891_000u128);
-    assert_eq!(minted_attr.value, expected_minted.to_string());
-}
-
-#[test]
-/// **Scenario 2.2: Flush completes and cache is cleared**
-/// Verifies that the system correctly returns to `Idle` and clears the cache
-/// once the flushed funds are confirmed to have arrived.
-fn test_cached_flush_completes_and_clears_cache() {
-    // Arrange: Start in a Flushing state.
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-
-    let flushed_amount = Uint128::from(2_000_000u128);
-    let historical_oracle_aum = Uint128::from(8_000_000u128);
-
-    prime_cache(&mut deps, ContractState::Flushing, CachedER {
-        er: Decimal::one(),
-        timeout: env.block.time.seconds() + 1000,
-        aum: Some(CachedAUM { oracle_aum: historical_oracle_aum, deposit_buffer: flushed_amount })
-    });
-
-    // Given: The flush completes.
-    let new_oracle_aum = historical_oracle_aum + flushed_amount;
-    deps.querier.update_oracle_aum(new_oracle_aum);
-
-    // When: A new deposit triggers _process_cache.
-    let deposit_amount = Uint128::from(500_000u128);
-    let another_user = &deps.api.addr_make("another_user");
-    let info = message_info(another_user, &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set the balance for the new deposit.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    do_deposit(deps.as_mut(), env, info, another_user.to_string()).unwrap();
-
-    // Then: The cache is cleared and state returns to Idle.
-    assert_eq!(FSM.get_current_state(&deps.storage).unwrap(), ContractState::Idle);
-    assert!(CACHED_ER.load(&deps.storage).unwrap().is_none());
-}
-
-#[test]
-/// **Scenario 2.3: Two users claim from the same batch with a shortfall**
-fn test_withdrawing_proportional_claim_with_shortfall() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-    let batch_id = 5u64;
-
-    let collected_amount = Uint128::from(9_500_000u128);
-    let total_burned = Uint128::from(8_000_000u128);
-
-    FINALIZED_BATCHES.save(&mut deps.storage, batch_id, &Batch {
-        batch_id,
-        btc_requested: Uint128::from(10_000_000u128),
-        maxbtc_burned: total_burned,
-        collected_amount,
-        paid_amount: Uint128::zero(),
-        collector_historical_balance: Uint128::zero(),
-    }).unwrap();
-
-    let redemption_denom = cfg.get_redemption_denom(env.contract.address.to_string(), batch_id);
-    deps.querier.set_token_supply(&redemption_denom, total_burned);
-
-    // When: User A claims
-    let user_a_redeem = Uint128::from(2_000_000u128);
-    let user_a_receiver =  &deps.api.addr_make("user_a_receiver");
-    let info_a = message_info(&deps.api.addr_make("user_a"), &[coin(user_a_redeem.u128(), &redemption_denom)]);
-    let res_a = execute_claim(deps.as_mut(), env.clone(), info_a, user_a_receiver.to_string()).unwrap();
-
-    // Then: User A receives 25% of the collected amount.
-    let expected_payout_a = Uint128::from(2_375_000u128);
-    assert_bank_send_exists(&extract_msgs(&res_a.messages), &user_a_receiver.to_string(), expected_payout_a, &cfg.deposit_denom);
-
-    // Update batch state
-    let mut batch = FINALIZED_BATCHES.load(&deps.storage, batch_id).unwrap();
-    batch.paid_amount += expected_payout_a;
-    FINALIZED_BATCHES.save(&mut deps.storage, batch_id, &batch).unwrap();
-
-    // When: User B claims
-    let user_b_redeem = Uint128::from(6_000_000u128);
-    let user_b_receiver =  &deps.api.addr_make("user_b_receiver");
-    let info_b = message_info(&deps.api.addr_make("user_b"), &[coin(user_b_redeem.u128(), &redemption_denom)]);
-    let res_b = execute_claim(deps.as_mut(), env, info_b, user_b_receiver.to_string()).unwrap();
-
-    // Then: User B receives 75% of the collected amount.
-    let expected_payout_b = Uint128::from(7_125_000u128);
-    for m in res_b.messages.iter() {
-        println!("{:?}", m)
-    }
-    assert_bank_send_exists(&extract_msgs(&res_b.messages), &user_b_receiver.to_string(), expected_payout_b, &cfg.deposit_denom);
-}
-
-#[test]
-/// **Scenario 2.4: Attempting to act when a cached ER has expired**
-fn test_cached_expired_cache_triggers_emergency() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-
-    prime_cache(&mut deps, ContractState::Flushing, CachedER {
-        er: Decimal::one(),
-        timeout: env.block.time.seconds() - 1,
-        aum: None,
-    });
-
-    // When: A user attempts to deposit, which triggers _process_cache.
-    let deposit_amount = Uint128::from(1_000_000u128);
-    let info = message_info(&deps.api.addr_make("user"), &[coin(deposit_amount.u128(), &cfg.deposit_denom)]);
-
-    // Set the balance even though we expect an error, to be accurate.
-    deps.querier.set_balance(&env.contract.address.to_string(), &cfg.deposit_denom, deposit_amount);
-
-    let err = do_deposit(deps.as_mut(), env, info, "recipient".to_string()).unwrap_err();
-
-    // Then: The transaction must fail with ProtocolInEmergency.
-    assert!(matches!(err, ContractError::ProtocolInEmergency {}));
 }
