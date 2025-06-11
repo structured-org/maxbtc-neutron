@@ -124,7 +124,7 @@ describe('Core', () => {
             account.address,
             res.codeId,
             {
-                aum: "1000"
+                aum: "0"
             },
             'label',
             'auto',
@@ -155,8 +155,8 @@ describe('Core', () => {
             account.address,
             res.codeId,
             {
-                owned_maxbtc: "1000",
-                owned_btc: "1000"
+                owned_maxbtc: "0",
+                owned_btc: "0"
             },
             'label',
             'auto',
@@ -246,69 +246,51 @@ describe('Core', () => {
         );
     });
 
-    // it('Update validator info', async () => {
-    //   const { coreContractClient, account } = context;
-    //   const res = await coreContractClient.updateValidatorsInfo(
-    //     account.address,
-    //     {
-    //       validators: [
-    //         {
-    //           valoper_address: 'valoper2',
-    //           tombstone: true,
-    //           uptime: '0.5',
-    //           jailed_number: 1,
-    //           last_commission_in_range: 1234,
-    //           last_processed_local_height: 2345,
-    //           last_processed_remote_height: 3456,
-    //           last_validated_height: 4567,
-    //         },
-    //         {
-    //           valoper_address: 'valoper3',
-    //           tombstone: false,
-    //           uptime: '0.96',
-    //           jailed_number: 3,
-    //         },
-    //       ],
-    //     },
-    //     1.5,
-    //   );
-    //   expect(res.transactionHash).toBeTruthy();
-    //
-    //   const validators = await coreContractClient.queryValidators();
-    //
-    //   expect(validators).toEqual(
-    //     expect.arrayContaining([
-    //       {
-    //         valoper_address: 'valoper2',
-    //         weight: 2,
-    //         on_top: '0',
-    //         last_processed_remote_height: 3456,
-    //         last_processed_local_height: 2345,
-    //         last_validated_height: 4567,
-    //         last_commission_in_range: 1234,
-    //         uptime: '0.5',
-    //         tombstone: true,
-    //         jailed_number: 1,
-    //         init_proposal: null,
-    //         total_passed_proposals: 0,
-    //         total_voted_proposals: 0,
-    //       },
-    //       {
-    //         valoper_address: 'valoper3',
-    //         weight: 3,
-    //         on_top: '0',
-    //         last_processed_remote_height: null,
-    //         last_processed_local_height: null,
-    //         last_validated_height: null,
-    //         last_commission_in_range: null,
-    //         uptime: '0.96',
-    //         tombstone: false,
-    //         jailed_number: 3,
-    //         init_proposal: null,
-    //         total_passed_proposals: 0,
-    //         total_voted_proposals: 0,
-    //       },
-    //     ]),
-    //   );
-    // });
+    it('Deposit first time and check maxBTC balance', async () => {
+      const { neutronClient, coreContractClient, account, coreContractAddress } = context;
+      let res1 = await coreContractClient.deposit(
+        account.address,
+        {
+          recipient: account.address,
+        },
+        1.5,
+        "memo",
+        [{
+            denom: "untrn",
+            amount: "100"
+        }]
+      );
+      expect(res1.transactionHash).toBeTruthy();
+
+      let res2 =
+            await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+                account.address,
+                { denom: `factory/${coreContractAddress}/maxbtc` },
+            );
+      expect(res2.data.balance.amount).toEqual('99');
+    });
+
+    it('Deposit second time and check maxBTC balance', async () => {
+        const { neutronClient, coreContractClient, account, coreContractAddress } = context;
+        let res1 = await coreContractClient.deposit(
+            account.address,
+            {
+                recipient: account.address,
+            },
+            1.5,
+            "memo",
+            [{
+                denom: "untrn",
+                amount: "100"
+            }]
+        );
+        expect(res1.transactionHash).toBeTruthy();
+
+        let res2 =
+            await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+                account.address,
+                { denom: `factory/${coreContractAddress}/maxbtc` },
+            );
+        expect(res2.data.balance.amount).toEqual('198');
+    });
 });

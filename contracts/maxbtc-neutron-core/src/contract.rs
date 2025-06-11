@@ -263,11 +263,11 @@ pub(crate) fn execute_deposit(
 
     // Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(
-        env,
+        env.clone(),
         recipient.clone(),
         Coin {
             amount: minted_amount,
-            denom: cfg.maxbtc_denom.clone(),
+            denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
         },
     )?;
     msgs.push(mint_msg);
