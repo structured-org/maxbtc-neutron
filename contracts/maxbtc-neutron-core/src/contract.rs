@@ -529,7 +529,7 @@ pub(crate) fn execute_process_active_batch(
     let new_active_batch = Batch {
         batch_id: batch_id_counter,
         btc_requested: Uint128::zero(),
-        maxbtc_burned: withdrawing_batch.maxbtc_burned,
+        maxbtc_burned: Uint128::zero(),
         collected_amount: Uint128::zero(),
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),

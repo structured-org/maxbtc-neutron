@@ -810,6 +810,11 @@ fn test_process_active_batch_happy_path() {
     // ACTIVE_BATCH was rolled – its id must be 2
     let active = ACTIVE_BATCH.load(&deps.storage).unwrap().unwrap();
     assert_eq!(active.batch_id, 2);
+    assert_eq!(active.maxbtc_burned, Uint128::zero());
+    assert_eq!(active.btc_requested, Uint128::zero());
+    assert_eq!(active.paid_amount, Uint128::zero());
+    assert_eq!(active.collector_historical_balance, Uint128::zero());
+    assert_eq!(active.collected_amount, Uint128::zero());
 
     // `new_withdrawing_batch_id` attribute is present
     let attr = res
