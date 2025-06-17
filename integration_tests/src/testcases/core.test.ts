@@ -291,6 +291,7 @@ describe('Core', () => {
                 account.address,
                 { denom: `factory/${coreContractAddress}/maxbtc` },
             );
-        expect(res2.data.balance.amount).toEqual('198');
+        // Not 198 because after first mint, the ER is 1.01 due to the fee we took
+        expect(res2.data.balance.amount).toEqual('197');
     });
 });
