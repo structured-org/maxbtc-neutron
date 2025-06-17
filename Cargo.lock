@@ -748,7 +748,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw2",
- "neutron-std",
+ "neutron-std 5.0.0",
  "schemars",
  "serde",
  "thiserror 2.0.12",
@@ -776,7 +776,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw2",
- "neutron-std",
+ "neutron-std 5.0.0",
  "schemars",
  "serde",
  "thiserror 2.0.12",
@@ -790,7 +790,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-storage-plus",
  "cw2",
- "neutron-std",
+ "neutron-std 5.0.0",
  "schemars",
  "serde",
  "thiserror 2.0.12",
@@ -805,7 +805,8 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "cw2",
- "neutron-std",
+ "neutron-sdk",
+ "neutron-std 6.0.0",
  "schemars",
  "serde",
  "serde-json-wasm",
@@ -819,6 +820,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
+name = "neutron-sdk"
+version = "0.11.0"
+source = "git+https://github.com/neutron-org/neutron-sdk?branch=main#15cd9798050948db3295a2f2b57d506d5e4acf80"
+dependencies = [
+ "bech32 0.9.1",
+ "chrono",
+ "cosmos-sdk-proto",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "neutron-std 6.0.0",
+ "prost 0.12.6",
+ "prost-types",
+ "protobuf",
+ "schemars",
+ "serde",
+ "serde-cw-value",
+ "serde-json-wasm",
+ "serde_json",
+ "speedate",
+ "tendermint-proto",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "neutron-std"
 version = "5.0.0"
 source = "git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable#a4ee7d08ccb5927ac870a89a37c6334a0ab5b440"
@@ -828,7 +853,31 @@ dependencies = [
  "cosmos-sdk-proto",
  "cosmwasm-schema",
  "cosmwasm-std",
- "neutron-std-derive",
+ "neutron-std-derive 0.20.1 (git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable)",
+ "prost 0.12.6",
+ "prost-types",
+ "protobuf",
+ "schemars",
+ "serde",
+ "serde-cw-value",
+ "serde-json-wasm",
+ "serde_json",
+ "speedate",
+ "tendermint-proto",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "neutron-std"
+version = "6.0.0"
+source = "git+https://github.com/neutron-org/neutron-std?branch=main#f8c350c9de7fe02b383bd10a9c2bbdf13e854d44"
+dependencies = [
+ "bech32 0.9.1",
+ "chrono",
+ "cosmos-sdk-proto",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "neutron-std-derive 0.20.1 (git+https://github.com/neutron-org/neutron-std?branch=main)",
  "prost 0.12.6",
  "prost-types",
  "protobuf",
@@ -846,6 +895,18 @@ dependencies = [
 name = "neutron-std-derive"
 version = "0.20.1"
 source = "git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable#a4ee7d08ccb5927ac870a89a37c6334a0ab5b440"
+dependencies = [
+ "itertools 0.10.5",
+ "proc-macro2",
+ "prost-types",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "neutron-std-derive"
+version = "0.20.1"
+source = "git+https://github.com/neutron-org/neutron-std?branch=main#f8c350c9de7fe02b383bd10a9c2bbdf13e854d44"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",

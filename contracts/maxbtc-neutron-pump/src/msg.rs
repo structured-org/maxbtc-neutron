@@ -1,8 +1,8 @@
-use cosmwasm_std::{Addr, Coin};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::Coin;
+use crate::state::Config;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub transfer_denom: String,
@@ -16,10 +16,9 @@ pub struct InstantiateMsg {
     pub relay_fee: Coin,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum ExecuteMsg {
-    Transfer {
+    Push {
         amount: Coin,
         eureka_fee: EurekaFee,
         // These are fetched from an oracle for security
@@ -32,54 +31,54 @@ pub enum ExecuteMsg {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(Config)]
     Config {},
 }
 
 // Structs for building the complex memo
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct Memo {
     pub dest_callback: DestCallback,
     pub wasm: Wasm,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct DestCallback {
     pub address: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct Wasm {
     pub contract: String,
     pub msg: WasmMsg,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct WasmMsg {
     pub action: Action,
     pub exact_out: bool,
     pub timeout_timestamp: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct Action {
     pub action: IbcTransferAction,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum IbcTransferAction {
     IbcTransfer(IbcTransfer),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct IbcTransfer {
     pub ibc_info: IbcInfo,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct IbcInfo {
     pub encoding: String,
     pub eureka_fee: EurekaFee,
@@ -89,7 +88,7 @@ pub struct IbcInfo {
     pub source_channel: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct EurekaFee {
     pub coin: Coin,
     pub receiver: String,

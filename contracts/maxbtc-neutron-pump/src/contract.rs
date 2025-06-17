@@ -7,9 +7,10 @@ use crate::state::{Config, CONFIG};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Reply, Response, StdResult, Uint128,
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
 };
 use cw2::set_contract_version;
+use neutron_sdk::sudo::msg::{RequestPacket, SudoMsg};
 use neutron_std::types::cosmos::base::v1beta1::Coin as StdCoin;
 use neutron_std::types::neutron::feerefunder::Fee;
 use neutron_std::types::neutron::transfer::MsgTransfer;
@@ -55,7 +56,7 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Transfer {
+        ExecuteMsg::Push {
             amount,
             eureka_fee,
             oracle_entry_address,
@@ -76,6 +77,7 @@ pub fn execute(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_transfer(
     deps: DepsMut,
     env: Env,
@@ -166,15 +168,15 @@ fn execute_transfer(
         fee: Some(Fee {
             recv_fee: get_fee_item(
                 config.relay_fee.denom.clone(),
-                config.relay_fee.amount.clone(),
+                config.relay_fee.amount,
             ),
             ack_fee: get_fee_item(
                 config.relay_fee.denom.clone(),
-                config.relay_fee.amount.clone(),
+                config.relay_fee.amount,
             ),
             timeout_fee: get_fee_item(
                 config.relay_fee.denom.clone(),
-                config.relay_fee.amount.clone(),
+                config.relay_fee.amount,
             ),
         }),
     };
@@ -184,19 +186,47 @@ fn execute_transfer(
         .add_attribute("action", "ibc_transfer_to_ethereum"))
 }
 
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
+pub fn sudo(deps: DepsMut, env: Env, msg: SudoMsg) -> Result<Response, ContractError> {
+    match msg {
+        SudoMsg::Response { request, data } => sudo_response(deps, env, request, data),
+        SudoMsg::Error { request, details } => sudo_error(deps, env, request, details),
+        SudoMsg::Timeout { request } => sudo_timeout(deps, env, request),
+        _ => Ok(Response::default()),
+    }
+}
+
+fn sudo_response(
+    _deps: DepsMut,
+    _env: Env,
+    _request: RequestPacket,
+    _data: Binary,
+) -> Result<Response, ContractError> {
+    Ok(Response::new().add_attribute("action", "sudo_response"))
+}
+
+fn sudo_timeout(
+    _deps: DepsMut,
+    _env: Env,
+    _request: RequestPacket,
+) -> Result<Response, ContractError> {
+    Ok(Response::new().add_attribute("action", "sudo_timeout"))
+}
+
+fn sudo_error(
+    _deps: DepsMut,
+    _env: Env,
+    _request: RequestPacket,
+    _details: String,
+) -> Result<Response, ContractError> {
+    Ok(Response::new().add_attribute("action", "sudo_error"))
+}
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_json_binary(&CONFIG.load(deps.storage)?),
     }
-}
-
-fn handle_ibc_transfer_reply(_deps: DepsMut, _msg: Reply) -> Result<Response, ContractError> {
-    // Here you can handle the reply from the IBC transfer.
-    // For example, you could parse the reply data to get the sequence number
-    // and store some information about the pending transfer.
-    // For this example, we'll just log that the transfer was successful.
-    Ok(Response::new().add_attribute("action", "ibc_transfer_reply_success"))
 }
 
 fn get_fee_item(denom: String, amount: Uint128) -> Vec<StdCoin> {
