@@ -6,7 +6,9 @@ use crate::msg::{
 use crate::state::{Config, CONFIG};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128};
+use cosmwasm_std::{
+    to_json_binary, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+};
 use cw2::set_contract_version;
 use neutron_sdk::sudo::msg::{RequestPacket, SudoMsg};
 use neutron_std::types::cosmos::base::v1beta1::Coin as StdCoin;
@@ -36,7 +38,8 @@ pub fn instantiate(
         to_chain_receiver: msg.receiver.clone(),
         recover_address: msg.recover_address.clone(),
         source_port: msg.source_port.clone(),
-        source_channel: msg.source_channel.clone(),
+        eureka_source_channel: msg.eureka_source_channel.clone(),
+        neutron_source_channel: msg.neutron_source_channel.clone(),
         to_chain_entry_contract_address: msg.to_chain_entry_contract_address.clone(),
         to_chain_callback_contract_address: msg.to_chain_callback_contract_address.clone(),
         max_fee: msg.max_fee.clone(),
@@ -52,7 +55,8 @@ pub fn instantiate(
         .add_attribute("receiver", msg.receiver)
         .add_attribute("recover_address", msg.recover_address)
         .add_attribute("source_port", msg.source_port)
-        .add_attribute("source_channel", msg.source_channel)
+        .add_attribute("eureka_source_channel", msg.eureka_source_channel)
+        .add_attribute("neutron_source_channel", msg.neutron_source_channel)
         .add_attribute(
             "to_chain_entry_contract_address",
             msg.to_chain_entry_contract_address,
@@ -79,7 +83,7 @@ pub fn execute(
             amount,
             eureka_fee,
             oracle_entry_address,
-            source_channel,
+            eureka_source_channel,
             oracle_callback_address,
             eureka_fee_timeout_nano,
             eureka_full_timeout_nano,
@@ -91,7 +95,7 @@ pub fn execute(
             eureka_fee,
             oracle_entry_address,
             oracle_callback_address,
-            source_channel,
+            eureka_source_channel,
             eureka_fee_timeout_nano,
             eureka_full_timeout_nano,
         ),
@@ -107,7 +111,7 @@ fn execute_transfer(
     eureka_fee: EurekaFee,
     oracle_entry_address: String,
     oracle_callback_address: String,
-    source_channel: String,
+    eureka_source_channel: String,
     eureka_fee_timeout_nano: u64,
     eureka_full_timeout_nano: u64,
 ) -> Result<Response, ContractError> {
@@ -136,9 +140,9 @@ fn execute_transfer(
             value: oracle_callback_address,
         });
     }
-    if source_channel != config.source_channel {
+    if eureka_source_channel != config.eureka_source_channel {
         return Err(ContractError::OracleMismatch {
-            value: source_channel,
+            value: eureka_source_channel,
         });
     }
 
@@ -169,7 +173,7 @@ fn execute_transfer(
                             memo: "".to_string(),
                             receiver: config.to_chain_receiver.clone(),
                             recover_address: config.recover_address.clone(),
-                            source_channel: source_channel.clone(),
+                            source_channel: eureka_source_channel.clone(),
                         },
                     }),
                 },
@@ -185,7 +189,7 @@ fn execute_transfer(
     // Construct the IBC Transfer message
     let transfer_msg = MsgTransfer {
         source_port: config.source_port,
-        source_channel: source_channel.clone(),
+        source_channel: config.neutron_source_channel.clone(),
         sender: env.contract.address.to_string(),
         // The initial receiver on the dest chain
         receiver: config.to_chain_entry_contract_address,
@@ -214,9 +218,15 @@ fn execute_transfer(
         .add_attribute("eureka_fee_receiver", config.to_chain_receiver)
         .add_attribute("oracle_entry_address", oracle_entry_address)
         .add_attribute("oracle_callback_address", oracle_callback_address)
-        .add_attribute("source_channel", source_channel)
-        .add_attribute("eureka_fee_timeout_nano", eureka_fee_timeout_nano.to_string())
-        .add_attribute("eureka_full_timeout_nano", eureka_full_timeout_nano.to_string()))
+        .add_attribute("source_channel", eureka_source_channel)
+        .add_attribute(
+            "eureka_fee_timeout_nano",
+            eureka_fee_timeout_nano.to_string(),
+        )
+        .add_attribute(
+            "eureka_full_timeout_nano",
+            eureka_full_timeout_nano.to_string(),
+        ))
 }
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]

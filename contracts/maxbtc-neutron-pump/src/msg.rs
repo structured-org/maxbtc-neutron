@@ -9,7 +9,8 @@ pub struct InstantiateMsg {
     pub receiver: String,
     pub recover_address: String,
     pub source_port: String,
-    pub source_channel: String,
+    pub eureka_source_channel: String,
+    pub neutron_source_channel: String,
     pub to_chain_entry_contract_address: String,
     pub to_chain_callback_contract_address: String,
     pub max_fee: Coin,
@@ -26,7 +27,7 @@ pub enum ExecuteMsg {
         // These are fetched from an oracle for security
         oracle_entry_address: String,
         oracle_callback_address: String,
-        source_channel: String,
+        eureka_source_channel: String,
         // Expected format: 1750089037000000000 (unix nano)
         eureka_fee_timeout_nano: u64,
         // Expected format: 1750089037000000000 (unix nano)
