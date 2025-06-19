@@ -6,9 +6,7 @@ use crate::msg::{
 use crate::state::{Config, CONFIG};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
-};
+use cosmwasm_std::{to_json_binary, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128};
 use cw2::set_contract_version;
 use neutron_sdk::sudo::msg::{RequestPacket, SudoMsg};
 use neutron_std::types::cosmos::base::v1beta1::Coin as StdCoin;
@@ -17,6 +15,8 @@ use neutron_std::types::neutron::transfer::MsgTransfer;
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-pump";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const EUREKA_MEMO_ENCODING: &str = "application/x-solidity-abi";
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -32,20 +32,39 @@ pub fn instantiate(
 
     let config = Config {
         owner,
-        transfer_denom: msg.transfer_denom,
-        to_chain_receiver: msg.to_chain_receiver,
-        to_chain_recover_address: msg.to_chain_recover_address,
-        to_chain_source_channel: msg.to_chain_source_channel,
-        to_chain_entry_contract_address: msg.to_chain_entry_contract_address,
-        to_chain_callback_contract_address: msg.to_chain_callback_contract_address,
-        max_fee: msg.max_fee,
+        transfer_denom: msg.transfer_denom.clone(),
+        to_chain_receiver: msg.receiver.clone(),
+        recover_address: msg.recover_address.clone(),
+        source_port: msg.source_port.clone(),
+        source_channel: msg.source_channel.clone(),
+        to_chain_entry_contract_address: msg.to_chain_entry_contract_address.clone(),
+        to_chain_callback_contract_address: msg.to_chain_callback_contract_address.clone(),
+        max_fee: msg.max_fee.clone(),
         oracle_address,
-        relay_fee: msg.relay_fee,
+        exact_out: msg.exact_out,
+        relay_fee: msg.relay_fee.clone(),
     };
     CONFIG.save(deps.storage, &config)?;
     Ok(Response::new()
         .add_attribute("method", "instantiate")
-        .add_attribute("owner", msg.owner))
+        .add_attribute("owner", msg.owner)
+        .add_attribute("transfer_denom", msg.transfer_denom)
+        .add_attribute("receiver", msg.receiver)
+        .add_attribute("recover_address", msg.recover_address)
+        .add_attribute("source_port", msg.source_port)
+        .add_attribute("source_channel", msg.source_channel)
+        .add_attribute(
+            "to_chain_entry_contract_address",
+            msg.to_chain_entry_contract_address,
+        )
+        .add_attribute(
+            "to_chain_callback_contract_address",
+            msg.to_chain_callback_contract_address,
+        )
+        .add_attribute("max_fee", msg.max_fee.to_string())
+        .add_attribute("oracle_address", msg.oracle_address)
+        .add_attribute("exact_out", msg.exact_out.to_string())
+        .add_attribute("relay_fee", msg.relay_fee.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -60,9 +79,10 @@ pub fn execute(
             amount,
             eureka_fee,
             oracle_entry_address,
+            source_channel,
             oracle_callback_address,
-            timeout_timestamp_ibc,
-            timeout_timestamp_eureka,
+            eureka_fee_timeout_nano,
+            eureka_full_timeout_nano,
         } => execute_transfer(
             deps,
             env,
@@ -71,8 +91,9 @@ pub fn execute(
             eureka_fee,
             oracle_entry_address,
             oracle_callback_address,
-            timeout_timestamp_ibc,
-            timeout_timestamp_eureka,
+            source_channel,
+            eureka_fee_timeout_nano,
+            eureka_full_timeout_nano,
         ),
     }
 }
@@ -82,12 +103,13 @@ fn execute_transfer(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: cosmwasm_std::Coin,
+    amount: Coin,
     eureka_fee: EurekaFee,
     oracle_entry_address: String,
     oracle_callback_address: String,
-    timeout_timestamp_ibc: u64,
-    timeout_timestamp_eureka: u64,
+    source_channel: String,
+    eureka_fee_timeout_nano: u64,
+    eureka_full_timeout_nano: u64,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
 
@@ -105,10 +127,19 @@ fn execute_transfer(
 
     // Oracle address validation
     if oracle_entry_address != config.to_chain_entry_contract_address {
-        return Err(ContractError::OracleMismatch {});
+        return Err(ContractError::OracleMismatch {
+            value: oracle_entry_address,
+        });
     }
     if oracle_callback_address != config.to_chain_callback_contract_address {
-        return Err(ContractError::OracleMismatch {});
+        return Err(ContractError::OracleMismatch {
+            value: oracle_callback_address,
+        });
+    }
+    if source_channel != config.source_channel {
+        return Err(ContractError::OracleMismatch {
+            value: source_channel,
+        });
     }
 
     // Check if the transfer denom matches the config
@@ -118,7 +149,7 @@ fn execute_transfer(
         )));
     }
 
-    // Construct the complex memo
+    // Construct the callback memo for the transfer packet
     let memo = Memo {
         dest_callback: DestCallback {
             address: config.to_chain_entry_contract_address.clone(),
@@ -129,22 +160,22 @@ fn execute_transfer(
                 action: Action {
                     action: IbcTransferAction::IbcTransfer(IbcTransfer {
                         ibc_info: IbcInfo {
-                            encoding: "application/x-solidity-abi".to_string(),
+                            encoding: EUREKA_MEMO_ENCODING.to_string(),
                             eureka_fee: EurekaFee {
                                 coin: eureka_fee.coin.clone(),
                                 receiver: eureka_fee.receiver,
-                                timeout_timestamp: timeout_timestamp_eureka,
+                                timeout_timestamp: eureka_fee_timeout_nano,
                             },
                             memo: "".to_string(),
                             receiver: config.to_chain_receiver.clone(),
-                            recover_address: config.to_chain_recover_address.clone(),
-                            source_channel: config.to_chain_source_channel.clone(),
+                            recover_address: config.recover_address.clone(),
+                            source_channel: source_channel.clone(),
                         },
                     }),
                 },
-                exact_out: false,
+                exact_out: config.exact_out,
                 // Expects unix seconds instead of unix nano for some reason
-                timeout_timestamp: timeout_timestamp_eureka / 1_000_000_000,
+                timeout_timestamp: eureka_full_timeout_nano / 1_000_000_000,
             },
         },
     };
@@ -153,37 +184,39 @@ fn execute_transfer(
 
     // Construct the IBC Transfer message
     let transfer_msg = MsgTransfer {
-        source_port: "transfer".to_string(),
-        source_channel: config.to_chain_source_channel,
+        source_port: config.source_port,
+        source_channel: source_channel.clone(),
         sender: env.contract.address.to_string(),
-        receiver: config.to_chain_entry_contract_address, // The initial receiver on the dest chain
+        // The initial receiver on the dest chain
+        receiver: config.to_chain_entry_contract_address,
         token: Some(StdCoin {
-            denom: amount.denom,
+            denom: amount.denom.clone(),
             amount: amount.amount.to_string(),
         }),
         timeout_height: None,
-        timeout_timestamp: timeout_timestamp_ibc,
+        // We set this equal to the fee timeout to make sure that the fee is never expired
+        timeout_timestamp: eureka_fee_timeout_nano,
         memo: memo_str,
         // Will be soon deprecated
         fee: Some(Fee {
-            recv_fee: get_fee_item(
-                config.relay_fee.denom.clone(),
-                config.relay_fee.amount,
-            ),
-            ack_fee: get_fee_item(
-                config.relay_fee.denom.clone(),
-                config.relay_fee.amount,
-            ),
-            timeout_fee: get_fee_item(
-                config.relay_fee.denom.clone(),
-                config.relay_fee.amount,
-            ),
+            recv_fee: get_fee_item(config.relay_fee.denom.clone(), config.relay_fee.amount),
+            ack_fee: get_fee_item(config.relay_fee.denom.clone(), config.relay_fee.amount),
+            timeout_fee: get_fee_item(config.relay_fee.denom.clone(), config.relay_fee.amount),
         }),
     };
 
     Ok(Response::new()
         .add_message(transfer_msg)
-        .add_attribute("action", "ibc_transfer_to_ethereum"))
+        .add_attribute("action", "ibc_transfer_to_ethereum")
+        .add_attribute("sender", info.sender)
+        .add_attribute("amount", amount.to_string())
+        .add_attribute("eureka_fee_amount", eureka_fee.coin.to_string())
+        .add_attribute("eureka_fee_receiver", config.to_chain_receiver)
+        .add_attribute("oracle_entry_address", oracle_entry_address)
+        .add_attribute("oracle_callback_address", oracle_callback_address)
+        .add_attribute("source_channel", source_channel)
+        .add_attribute("eureka_fee_timeout_nano", eureka_fee_timeout_nano.to_string())
+        .add_attribute("eureka_full_timeout_nano", eureka_full_timeout_nano.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]

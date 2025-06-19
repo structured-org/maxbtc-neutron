@@ -12,8 +12,8 @@ pub enum ContractError {
     #[error("Fee amount exceeds the maximum allowed fee")]
     InvalidFee {},
 
-    #[error("Oracle address mismatch: The address provided by the oracle does not match the configured address")]
-    OracleMismatch {},
+    #[error("Oracle address mismatch: {value}")]
+    OracleMismatch { value: String },
 
     #[error("Invalid reply ID")]
     InvalidReplyID {},

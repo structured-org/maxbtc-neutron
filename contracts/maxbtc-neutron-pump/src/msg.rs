@@ -1,18 +1,20 @@
+use crate::state::Config;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Coin;
-use crate::state::Config;
 
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub transfer_denom: String,
-    pub to_chain_receiver: String,
-    pub to_chain_recover_address: String,
-    pub to_chain_source_channel: String,
+    pub receiver: String,
+    pub recover_address: String,
+    pub source_port: String,
+    pub source_channel: String,
     pub to_chain_entry_contract_address: String,
     pub to_chain_callback_contract_address: String,
     pub max_fee: Coin,
     pub oracle_address: String,
+    pub exact_out: bool,
     pub relay_fee: Coin,
 }
 
@@ -24,10 +26,11 @@ pub enum ExecuteMsg {
         // These are fetched from an oracle for security
         oracle_entry_address: String,
         oracle_callback_address: String,
+        source_channel: String,
         // Expected format: 1750089037000000000 (unix nano)
-        timeout_timestamp_ibc: u64,
+        eureka_fee_timeout_nano: u64,
         // Expected format: 1750089037000000000 (unix nano)
-        timeout_timestamp_eureka: u64,
+        eureka_full_timeout_nano: u64,
     },
 }
 
