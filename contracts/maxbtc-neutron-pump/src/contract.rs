@@ -30,14 +30,14 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     let owner = deps.api.addr_validate(&msg.owner)?;
-    let oracle_address = deps.api.addr_validate(&msg.oracle_address)?;
+    let oracle_address = deps.api.addr_validate(&msg.executor)?;
 
     let config = Config {
         owner,
         transfer_denom: msg.transfer_denom.clone(),
-        to_chain_receiver: msg.receiver.clone(),
+        to_chain_receiver: msg.eureka_fee_receiver.clone(),
         recover_address: msg.recover_address.clone(),
-        source_port: msg.source_port.clone(),
+        source_port: msg.neutron_source_port.clone(),
         eureka_source_channel: msg.eureka_source_channel.clone(),
         neutron_source_channel: msg.neutron_source_channel.clone(),
         to_chain_entry_contract_address: msg.to_chain_entry_contract_address.clone(),
@@ -52,9 +52,9 @@ pub fn instantiate(
         .add_attribute("method", "instantiate")
         .add_attribute("owner", msg.owner)
         .add_attribute("transfer_denom", msg.transfer_denom)
-        .add_attribute("receiver", msg.receiver)
+        .add_attribute("eureka_fee_receiver", msg.eureka_fee_receiver)
         .add_attribute("recover_address", msg.recover_address)
-        .add_attribute("source_port", msg.source_port)
+        .add_attribute("source_port", msg.neutron_source_port)
         .add_attribute("eureka_source_channel", msg.eureka_source_channel)
         .add_attribute("neutron_source_channel", msg.neutron_source_channel)
         .add_attribute(
@@ -66,7 +66,7 @@ pub fn instantiate(
             msg.to_chain_callback_contract_address,
         )
         .add_attribute("max_fee", msg.max_fee.to_string())
-        .add_attribute("oracle_address", msg.oracle_address)
+        .add_attribute("executor_address", msg.executor)
         .add_attribute("exact_out", msg.exact_out.to_string())
         .add_attribute("relay_fee", msg.relay_fee.to_string()))
 }

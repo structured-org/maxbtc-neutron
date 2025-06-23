@@ -7,33 +7,43 @@
     "title": "InstantiateMsg",
     "type": "object",
     "required": [
+      "eureka_fee_receiver",
+      "eureka_source_channel",
       "exact_out",
+      "executor",
       "max_fee",
-      "oracle_address",
+      "neutron_source_channel",
+      "neutron_source_port",
       "owner",
-      "receiver",
       "recover_address",
       "relay_fee",
-      "source_channel",
-      "source_port",
       "to_chain_callback_contract_address",
       "to_chain_entry_contract_address",
       "transfer_denom"
     ],
     "properties": {
+      "eureka_fee_receiver": {
+        "type": "string"
+      },
+      "eureka_source_channel": {
+        "type": "string"
+      },
       "exact_out": {
         "type": "boolean"
+      },
+      "executor": {
+        "type": "string"
       },
       "max_fee": {
         "$ref": "#/definitions/Coin"
       },
-      "oracle_address": {
+      "neutron_source_channel": {
+        "type": "string"
+      },
+      "neutron_source_port": {
         "type": "string"
       },
       "owner": {
-        "type": "string"
-      },
-      "receiver": {
         "type": "string"
       },
       "recover_address": {
@@ -41,12 +51,6 @@
       },
       "relay_fee": {
         "$ref": "#/definitions/Coin"
-      },
-      "source_channel": {
-        "type": "string"
-      },
-      "source_port": {
-        "type": "string"
       },
       "to_chain_callback_contract_address": {
         "type": "string"
@@ -99,9 +103,9 @@
               "eureka_fee",
               "eureka_fee_timeout_nano",
               "eureka_full_timeout_nano",
+              "eureka_source_channel",
               "oracle_callback_address",
-              "oracle_entry_address",
-              "source_channel"
+              "oracle_entry_address"
             ],
             "properties": {
               "amount": {
@@ -120,13 +124,13 @@
                 "format": "uint64",
                 "minimum": 0.0
               },
+              "eureka_source_channel": {
+                "type": "string"
+              },
               "oracle_callback_address": {
                 "type": "string"
               },
               "oracle_entry_address": {
-                "type": "string"
-              },
-              "source_channel": {
                 "type": "string"
               }
             },
@@ -208,13 +212,14 @@
       "title": "Config",
       "type": "object",
       "required": [
+        "eureka_source_channel",
         "exact_out",
         "max_fee",
+        "neutron_source_channel",
         "oracle_address",
         "owner",
         "recover_address",
         "relay_fee",
-        "source_channel",
         "source_port",
         "to_chain_callback_contract_address",
         "to_chain_entry_contract_address",
@@ -222,11 +227,17 @@
         "transfer_denom"
       ],
       "properties": {
+        "eureka_source_channel": {
+          "type": "string"
+        },
         "exact_out": {
           "type": "boolean"
         },
         "max_fee": {
           "$ref": "#/definitions/Coin"
+        },
+        "neutron_source_channel": {
+          "type": "string"
         },
         "oracle_address": {
           "$ref": "#/definitions/Addr"
@@ -239,9 +250,6 @@
         },
         "relay_fee": {
           "$ref": "#/definitions/Coin"
-        },
-        "source_channel": {
-          "type": "string"
         },
         "source_port": {
           "type": "string"

@@ -31,13 +31,14 @@ export interface MaxbtcNeutronPumpSchema {
     [k: string]: unknown;
 }
 export interface Config {
+    eureka_source_channel: string;
     exact_out: boolean;
     max_fee: Coin;
+    neutron_source_channel: string;
     oracle_address: Addr;
     owner: Addr;
     recover_address: string;
     relay_fee: Coin;
-    source_channel: string;
     source_port: string;
     to_chain_callback_contract_address: string;
     to_chain_entry_contract_address: string;
@@ -53,9 +54,9 @@ export interface PushArgs {
     eureka_fee: EurekaFee;
     eureka_fee_timeout_nano: number;
     eureka_full_timeout_nano: number;
+    eureka_source_channel: string;
     oracle_callback_address: string;
     oracle_entry_address: string;
-    source_channel: string;
 }
 export interface EurekaFee {
     coin: Coin;
@@ -63,15 +64,16 @@ export interface EurekaFee {
     timeout_timestamp: number;
 }
 export interface InstantiateMsg {
+    eureka_fee_receiver: string;
+    eureka_source_channel: string;
     exact_out: boolean;
+    executor: string;
     max_fee: Coin;
-    oracle_address: string;
+    neutron_source_channel: string;
+    neutron_source_port: string;
     owner: string;
-    receiver: string;
     recover_address: string;
     relay_fee: Coin;
-    source_channel: string;
-    source_port: string;
     to_chain_callback_contract_address: string;
     to_chain_entry_contract_address: string;
     transfer_denom: string;

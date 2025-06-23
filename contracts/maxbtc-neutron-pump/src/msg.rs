@@ -4,18 +4,37 @@ use cosmwasm_std::Coin;
 
 #[cw_serde]
 pub struct InstantiateMsg {
+    // The address that can change the configuration.
     pub owner: String,
+    // The address that can send the Push message.
+    pub executor: String,
+    // The denomination of the coin that needs to be sent to Ethereum.
     pub transfer_denom: String,
-    pub receiver: String,
+    // The eureka fee receiver address on Cosmos Hub.
+    pub eureka_fee_receiver: String,
+    // The recover address on Cosmos Hub.
     pub recover_address: String,
-    pub source_port: String,
-    pub eureka_source_channel: String,
+    // The source port on Neutron (usually "transfer").
+    pub neutron_source_port: String,
+    // The source port on Neutron (usually "channel-1").
     pub neutron_source_channel: String,
+    // The Eureka source channel on Cosmos Hub (usually "08-wasm-1369", but can be changed
+    // by Skip). Executor gets this value from Skip API and adds to the Push message, and we
+    // return an error in case this value is different to what we expect — just in case.
+    // Owner will need to reconfigure the contract with the new value to continue the operation.
+    pub eureka_source_channel: String,
+    // The contract on Cosmos Hub to which we send the original transfer. The comment to
+    // `eureka_source_channel` applies here as well.
     pub to_chain_entry_contract_address: String,
+    // The contract which is called by the entry contract on Cosmos Hub to actually process the
+    // transfer. The comment to `eureka_source_channel` applies here as well.
     pub to_chain_callback_contract_address: String,
+    // We refuse to pay more than `max_fee` for a Eureka transfer.
     pub max_fee: Coin,
-    pub oracle_address: String,
+    // Should always be false, but we keep this a parameter just in case something changes
+    // in how Eureka works.
     pub exact_out: bool,
+    // Fee for Neutron tIBC transfers, will be deprecated soon by the project.
     pub relay_fee: Coin,
 }
 

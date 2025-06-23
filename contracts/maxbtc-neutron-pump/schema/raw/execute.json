@@ -15,9 +15,9 @@
             "eureka_fee",
             "eureka_fee_timeout_nano",
             "eureka_full_timeout_nano",
+            "eureka_source_channel",
             "oracle_callback_address",
-            "oracle_entry_address",
-            "source_channel"
+            "oracle_entry_address"
           ],
           "properties": {
             "amount": {
@@ -36,13 +36,13 @@
               "format": "uint64",
               "minimum": 0.0
             },
+            "eureka_source_channel": {
+              "type": "string"
+            },
             "oracle_callback_address": {
               "type": "string"
             },
             "oracle_entry_address": {
-              "type": "string"
-            },
-            "source_channel": {
               "type": "string"
             }
           },

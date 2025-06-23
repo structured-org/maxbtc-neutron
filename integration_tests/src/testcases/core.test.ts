@@ -182,11 +182,25 @@ describe('Core', () => {
             1.5,
         );
         expect(res.codeId).toBeGreaterThan(0);
-        const instantiateRes = await MaxbtcNeutronLiquidationBuffer.Client.instantiate(
+        const instantiateRes = await MaxbtcNeutronPump.Client.instantiate(
             client,
             account.address,
             res.codeId,
-            {},
+            {
+                owner: account.address,
+                executor: account.address,
+                transfer_denom: "untrn",
+                eureka_fee_receiver: "0x1234567890123456789012345678901234567890", // Placeholder receiver address on destination chain
+                recover_address: "cosmos1h8vf3ueml7ah7m8z9e6vx09trq5lv2fwpxxhlw",
+                neutron_source_port: "transfer", // As per function logic, "transfer" is standard
+                neutron_source_channel: "channel-1", // Placeholder
+                eureka_source_channel: "08-wasm-1369", // Placeholder
+                to_chain_entry_contract_address: "cosmos1uq4ztnt3lrtwx0ryjtvy66ncxd2q92fdg78mgxcr76mm2582xkwsqwrjr4",
+                to_chain_callback_contract_address: "cosmos1nsuqsk6kh58ulczatwev87ttq2z6r3pusulg9r24mfj2fvtzd4uq5d9fg9",
+                max_fee: { amount: "100000", denom: "untrn" },
+                exact_out: false,
+                relay_fee: { amount: "1000", denom: "untrn" },
+            },
             'label',
             'auto',
             [],
