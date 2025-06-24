@@ -82,10 +82,9 @@ pub fn execute(
         ExecuteMsg::Push {
             amount,
             eureka_fee,
-            oracle_entry_address,
+            to_chain_entry_contract_address: oracle_entry_address,
             eureka_source_channel,
-            oracle_callback_address,
-            eureka_fee_timeout_nano,
+            to_chain_callback_contract_address: oracle_callback_address,
             eureka_full_timeout_nano,
         } => execute_transfer(
             deps,
@@ -96,7 +95,6 @@ pub fn execute(
             oracle_entry_address,
             oracle_callback_address,
             eureka_source_channel,
-            eureka_fee_timeout_nano,
             eureka_full_timeout_nano,
         ),
     }
@@ -112,7 +110,6 @@ fn execute_transfer(
     oracle_entry_address: String,
     oracle_callback_address: String,
     eureka_source_channel: String,
-    eureka_fee_timeout_nano: u64,
     eureka_full_timeout_nano: u64,
 ) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
@@ -165,11 +162,7 @@ fn execute_transfer(
                     action: IbcTransferAction::IbcTransfer(IbcTransfer {
                         ibc_info: IbcInfo {
                             encoding: EUREKA_MEMO_ENCODING.to_string(),
-                            eureka_fee: EurekaFee {
-                                coin: eureka_fee.coin.clone(),
-                                receiver: eureka_fee.receiver,
-                                timeout_timestamp: eureka_fee_timeout_nano,
-                            },
+                            eureka_fee: eureka_fee.clone(),
                             memo: "".to_string(),
                             receiver: config.to_chain_receiver.clone(),
                             recover_address: config.recover_address.clone(),
@@ -199,7 +192,7 @@ fn execute_transfer(
         }),
         timeout_height: None,
         // We set this equal to the fee timeout to make sure that the fee is never expired
-        timeout_timestamp: eureka_fee_timeout_nano,
+        timeout_timestamp: eureka_fee.timeout_timestamp.clone(),
         memo: memo_str,
         // Will be soon deprecated
         fee: Some(Fee {
@@ -221,7 +214,7 @@ fn execute_transfer(
         .add_attribute("source_channel", eureka_source_channel)
         .add_attribute(
             "eureka_fee_timeout_nano",
-            eureka_fee_timeout_nano.to_string(),
+            eureka_fee.timeout_timestamp.to_string(),
         )
         .add_attribute(
             "eureka_full_timeout_nano",

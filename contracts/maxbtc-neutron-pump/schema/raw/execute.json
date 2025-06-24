@@ -13,11 +13,10 @@
           "required": [
             "amount",
             "eureka_fee",
-            "eureka_fee_timeout_nano",
             "eureka_full_timeout_nano",
             "eureka_source_channel",
-            "oracle_callback_address",
-            "oracle_entry_address"
+            "to_chain_callback_contract_address",
+            "to_chain_entry_contract_address"
           ],
           "properties": {
             "amount": {
@@ -25,11 +24,6 @@
             },
             "eureka_fee": {
               "$ref": "#/definitions/EurekaFee"
-            },
-            "eureka_fee_timeout_nano": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
             },
             "eureka_full_timeout_nano": {
               "type": "integer",
@@ -39,10 +33,10 @@
             "eureka_source_channel": {
               "type": "string"
             },
-            "oracle_callback_address": {
+            "to_chain_callback_contract_address": {
               "type": "string"
             },
-            "oracle_entry_address": {
+            "to_chain_entry_contract_address": {
               "type": "string"
             }
           },

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "contracts/*",
+  "pump_executor"
 ]
 
 [workspace.dependencies]

@@ -41,14 +41,17 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     Push {
+        // How much to transfer.
         amount: Coin,
+        // The Eureka fee data that is retrieved from Skip API.
         eureka_fee: EurekaFee,
-        // These are fetched from an oracle for security
-        oracle_entry_address: String,
-        oracle_callback_address: String,
+        // The contract on Cosmos Hub to which we send the original transfer.
+        to_chain_entry_contract_address: String,
+        // The contract which is called by the entry contract on Cosmos Hub to actually process the
+        // transfer.
+        to_chain_callback_contract_address: String,
+        // The Eureka source channel on Cosmos Hub.
         eureka_source_channel: String,
-        // Expected format: 1750089037000000000 (unix nano)
-        eureka_fee_timeout_nano: u64,
         // Expected format: 1750089037000000000 (unix nano)
         eureka_full_timeout_nano: u64,
     },
@@ -115,5 +118,6 @@ pub struct IbcInfo {
 pub struct EurekaFee {
     pub coin: Coin,
     pub receiver: String,
+    // Expected format: 1750089037000000000 (unix nano)
     pub timeout_timestamp: u64,
 }

@@ -1,0 +1,17 @@
+[package]
+name    = "maxbtc_neutron_pump_executor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+valence-domain-clients               = { git = "https://github.com/timewave-computer/valence-domain-clients.git", branch = "main" }
+cosmwasm-schema = "2.2.0"
+cosmwasm-std = { version = "2.2.0", features = [
+    "cosmwasm_1_4",
+    # Enable this if you only deploy to chains that have CosmWasm 2.0 or higher
+     "cosmwasm_2_0",
+    # Or this if you only deploy to chains that have CosmWasm 2.1 or higher
+    # "cosmwasm_2_1",
+] }
+log = "0.4.27"
+tokio = { version = "1", features = ["full"] }

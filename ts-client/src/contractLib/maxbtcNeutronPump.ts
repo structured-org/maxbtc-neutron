@@ -53,11 +53,10 @@ export interface Coin {
 export interface PushArgs {
   amount: Coin;
   eureka_fee: EurekaFee;
-  eureka_fee_timeout_nano: number;
   eureka_full_timeout_nano: number;
   eureka_source_channel: string;
-  oracle_callback_address: string;
-  oracle_entry_address: string;
+  to_chain_callback_contract_address: string;
+  to_chain_entry_contract_address: string;
 }
 export interface EurekaFee {
   coin: Coin;
