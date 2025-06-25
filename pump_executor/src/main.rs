@@ -1,79 +1,118 @@
-use valence_domain_clients::clients::{
-    neutron::NeutronClient,
-};
-use valence_domain_clients::cosmos::wasm_client::WasmClient;
-use valence_domain_clients::cosmos::base_client::BaseClient;
-use cosmwasm_schema::{cw_serde};
+mod chain;
+mod config;
+mod error;
+mod skip_api;
+
+use crate::chain::{ChainClient, EurekaFee, ExecuteMsg};
+use crate::config::Config;
+use crate::error::AppError;
+use crate::skip_api::query_skip_api;
+use chrono::DateTime;
 use cosmwasm_std::{Coin, Uint128};
-
-#[cw_serde]
-pub enum ExecuteMsg {
-    Push {
-        // How much to transfer.
-        amount: Coin,
-        // The Eureka fee data that is retrieved from Skip API.
-        eureka_fee: EurekaFee,
-        // The contract on Cosmos Hub to which we send the original transfer.
-        to_chain_entry_contract_address: String,
-        // The contract which is called by the entry contract on Cosmos Hub to actually process the
-        // transfer.
-        to_chain_callback_contract_address: String,
-        // The Eureka source channel on Cosmos Hub.
-        eureka_source_channel: String,
-        // Expected format: 1750089037000000000 (unix nano)
-        eureka_full_timeout_nano: u64,
-    },
-}
-
-#[cw_serde]
-pub struct EurekaFee {
-    pub coin: Coin,
-    pub receiver: String,
-    // Expected format: 1750089037000000000 (unix nano)
-    pub timeout_timestamp: u64,
-}
-
+use std::time::Duration;
 
 #[tokio::main]
-async fn main() {
-    let neutron_client = NeutronClient::new(
-        "https://rpc.neutron.quokkastake.io",
-        "9090",
-        "stamp walnut alarm response kidney possible crack mass rent screen summer drastic junior spatial forest analyst prize insane okay unfair screen liar match blanket",
-        "neutron-1",
-    )
-        .await.unwrap();
-    let tx_resp = neutron_client
-        .execute_wasm(
-            "neutron1w798gp0zqv3s9hjl3jlnwxtwhykga6rn93p46q2crsdqhaj3y4gsum0096",
-            ExecuteMsg::Push {
-                amount: Coin{amount:Uint128::one(), denom:"some_denom".to_string()},
-                eureka_fee: EurekaFee {
-                    coin: Default::default(),
-                    receiver: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599".to_string(),
-                    timeout_timestamp: 1750089037000000000,
-                },
-                to_chain_entry_contract_address: "cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5".to_string(),
-                to_chain_callback_contract_address: "cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22".to_string(),
-                eureka_source_channel: "08-wasm-1369".to_string(),
-                eureka_full_timeout_nano: 1750089037000000000,
-            },
-            vec![],
-            None,
-        )
-        .await.unwrap();
+async fn main() -> Result<(), AppError> {
+    dotenv::dotenv().ok();
+    env_logger::init();
 
+    let config = Config::from_env()?;
+    log::info!("Configuration loaded successfully.");
 
-    let tx_result = neutron_client.poll_for_tx(&tx_resp.hash).await.unwrap();
-    println!("{:?}", tx_result.code);
+    let chain_client = ChainClient::new(&config).await?;
+    log::info!("Neutron client initialized.");
 
-    // returns u128
-    let balance_128 = neutron_client
-        .query_balance(
-            "neutron1w798gp0zqv3s9hjl3jlnwxtwhykga6rn93p46q2crsdqhaj3y4gsum0096",
-            "some_denom",
-        )
-        .await.unwrap();
-    println!("{:?}", balance_128);
+    loop {
+        log::info!("Starting new execution cycle...");
+        match run_cycle(&config, &chain_client).await {
+            Ok(_) => log::info!("Execution cycle completed successfully."),
+            Err(e) => log::error!("Execution cycle failed: {}", e),
+        }
+        log::info!("Sleeping for {} seconds.", config.execute_period);
+        tokio::time::sleep(Duration::from_secs(config.execute_period)).await;
+    }
 }
 
+async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), AppError> {
+    let mut balance = chain_client
+        .query_balance(&config.contract_address, &config.denom)
+        .await?;
+    log::info!(
+        "Queried balance for contract {}: {} {}",
+        config.contract_address,
+        balance,
+        config.denom
+    );
+
+    // if balance == 0 {
+    //     log::info!("Balance is zero, skipping transaction.");
+    //     return Ok(());
+    // }
+
+    balance = 100000;
+
+    let skip_response = query_skip_api(&config.denom, balance.to_string()).await?;
+
+    let eureka_transfer = skip_response
+        .operations
+        .into_iter()
+        .find_map(|op| op.eureka_transfer)
+        .ok_or_else(|| {
+            AppError::Chain("No eureka_transfer operation found in Skip API response".to_string())
+        })?;
+
+    log::debug!("Skip API eureka transfer info: {:?}", eureka_transfer);
+
+    let fee_quote = eureka_transfer.smart_relay_fee_quote;
+
+    if fee_quote.fee_denom != config.denom {
+        return Err(AppError::DenomMismatch {
+            expected: config.denom.clone(),
+            got: fee_quote.fee_denom,
+        });
+    }
+
+    let fee_amount = fee_quote
+        .fee_amount
+        .parse::<u128>()
+        .map_err(|_| AppError::Chain("Failed to parse fee amount from Skip API".to_string()))?;
+
+    // Parse the expiration timestamp and convert to nanoseconds
+    let timeout_timestamp_nano = DateTime::parse_from_rfc3339(&fee_quote.expiration)
+        .map_err(|e| AppError::Chain(format!("Failed to parse expiration timestamp: {}", e)))?
+        .timestamp_nanos_opt()
+        .unwrap() as u64;
+
+    let eureka_fee = EurekaFee {
+        coin: Coin {
+            denom: fee_quote.fee_denom,
+            amount: Uint128::from(fee_amount),
+        },
+        receiver: fee_quote.fee_payment_address,
+        timeout_timestamp: timeout_timestamp_nano,
+    };
+
+    let eureka_full_timeout_nano = (skip_response.estimated_route_duration_seconds + 120) // We add 2 minutes of buffer
+        * config.eureka_full_timeout_multiplier
+        * 1_000_000_000; // convert to nano
+
+    let msg = ExecuteMsg::Push {
+        amount: Coin {
+            denom: config.denom.clone(),
+            amount: Uint128::from(balance),
+        },
+        eureka_fee,
+        to_chain_entry_contract_address: eureka_transfer.to_chain_entry_contract_address,
+        to_chain_callback_contract_address: eureka_transfer.to_chain_callback_contract_address,
+        eureka_source_channel: eureka_transfer.source_client,
+        eureka_full_timeout_nano,
+    };
+
+    log::info!("Push message: {:?}", msg);
+
+    // chain_client
+    //     .execute_push_message(&config.contract_address, msg)
+    //     .await?;
+
+    Ok(())
+}
