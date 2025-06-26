@@ -223,30 +223,21 @@ describe('Core', () => {
         const instantiateMsg = {
             owner: account.address,
             processor: account.address,
-            // `config` corresponds to the `LibraryConfig` struct
             config: {
-                // Address on the source chain (Neutron) from which funds will be sent.
-                // Here, we use the deployer's account address.
                 input_addr: { library_account_addr: context.pumpContractAddress },
-                // Address on the destination chain that will receive the funds.
                 output_addr: { library_account_addr: "0x1234567890123456789012345678901234567890" },
-                // The denomination of the token to be transferred.
-                denom: { native: "untrn" },
-                // We specify to transfer the full available amount of the denom.
+                denom: { native: "ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E" },
                 amount: "full_amount",
-                // Memo for the IBC transfer. Can be empty.
                 memo: "",
-                // Information about the remote chain and IBC channel.
                 remote_chain_info: {
-                    channel_id: "channel-1", // Placeholder channel ID
+                    channel_id: "channel-1",
                 },
                 denom_to_pfm_map: {},
-                // This is required to use the `EurekaTransfer` function.
                 eureka_config: {
                     callback_contract: "cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22",
                     action_contract: "cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5",
                     recover_address: "cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26",
-                    source_channel: "08-wasm-1369" // Placeholder
+                    source_channel: "08-wasm-1369"
                 },
             },
         };

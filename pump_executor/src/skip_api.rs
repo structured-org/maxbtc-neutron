@@ -1,3 +1,4 @@
+use crate::config::Config; // Import the Config struct
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 
@@ -54,28 +55,32 @@ pub struct SmartRelayFeeQuote {
     pub fee_payment_address: String,
 }
 
-pub async fn query_skip_api(denom: &str, amount: String) -> Result<SkipRouteResponse, AppError> {
+pub async fn query_skip_api(
+    denom: &str,
+    amount: String,
+    config: &Config,
+) -> Result<SkipRouteResponse, AppError> {
     log::info!("Querying Skip API...");
     let client = reqwest::Client::new();
     let request_body = SkipRouteRequest {
         source_asset_denom: denom.to_string(),
-        source_asset_chain_id: "neutron-1".to_string(),
-        dest_asset_denom: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599".to_string(),
-        dest_asset_chain_id: "1".to_string(),
+        source_asset_chain_id: config.source_asset_chain_id.clone(),
+        dest_asset_denom: config.dest_asset_denom.clone(),
+        dest_asset_chain_id: config.dest_asset_chain_id.clone(),
         amount_in: amount,
-        allow_multi_tx: true,
-        allow_unsafe: true,
-        go_fast: true,
-        smart_relay: true,
-        experimental_features: vec!["eureka".to_string()],
+        allow_multi_tx: config.allow_multi_tx,
+        allow_unsafe: config.allow_unsafe,
+        go_fast: config.go_fast,
+        smart_relay: config.smart_relay,
+        experimental_features: config.experimental_features.clone(),
         smart_swap_options: SmartSwapOptions {
-            split_routes: true,
-            evm_swaps: true,
+            split_routes: config.split_routes,
+            evm_swaps: config.evm_swaps,
         },
     };
 
     let res = client
-        .post("https://go.skip.build/api/skip/v2/fungible/route")
+        .post(&config.skip_api_url)
         .header("Content-Type", "application/json")
         .json(&request_body)
         .send()
@@ -93,15 +98,14 @@ pub async fn query_skip_api(denom: &str, amount: String) -> Result<SkipRouteResp
     } else {
         // If the status is not success, try to parse the error body
         let error_text = res.text().await?;
-        log::error!("Skip API returned an error status ({}): {}", status, error_text);
-        Err(AppError::SkipError {error_message: error_text})
+        log::error!(
+            "Skip API returned an error status ({}): {}",
+            status,
+            error_text
+        );
+        Err(AppError::SkipError {
+            error_message: error_text,
+        })
     }
 }
 
-// Struct to deserialize the error response from Skip API
-#[derive(Debug, Deserialize)]
-pub struct SkipErrorResponse {
-    pub code: i32,
-    pub message: String,
-    pub details: Vec<serde_json::Value>, // Details can be diverse, so Value is flexible
-}

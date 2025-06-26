@@ -7,7 +7,7 @@ pub enum AppError {
     #[error("API request failed: {0}")]
     Api(#[from] reqwest::Error),
     #[error("API request failed: {error_message}")]
-    SkipError{error_message: String},
+    SkipError { error_message: String },
     #[error("Blockchain interaction failed: {0}")]
     Chain(String),
     #[error("I/O error: {0}")]

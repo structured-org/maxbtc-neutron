@@ -7,22 +7,17 @@ use valence_domain_clients::cosmos::base_client::BaseClient;
 use valence_domain_clients::cosmos::wasm_client::WasmClient;
 
 #[cw_serde]
-pub struct EurekaFee {
-    pub coin: Coin,
-    pub receiver: String,
-    pub timeout_timestamp: u64,
+pub enum ExecuteMsg {
+    IbcTransfer {},
+    EurekaTransfer { eureka_fee: EurekaFee },
 }
 
 #[cw_serde]
-pub enum ExecuteMsg {
-    Push {
-        amount: Coin,
-        eureka_fee: EurekaFee,
-        to_chain_entry_contract_address: String,
-        to_chain_callback_contract_address: String,
-        eureka_source_channel: String,
-        eureka_full_timeout_nano: u64,
-    },
+pub struct EurekaFee {
+    pub coin: Coin,
+    pub receiver: String,
+    // In nanoseconds
+    pub timeout_timestamp: u64,
 }
 
 pub struct ChainClient {
@@ -31,9 +26,14 @@ pub struct ChainClient {
 
 impl ChainClient {
     pub async fn new(config: &Config) -> Result<Self, AppError> {
-        let client = NeutronClient::new(&config.grpc_address, &config.grpc_port, &config.mnemonic, "neutron-1")
-            .await
-            .map_err(|e| AppError::Chain(e.to_string()))?;
+        let client = NeutronClient::new(
+            &config.grpc_address,
+            &config.grpc_port,
+            &config.mnemonic,
+            "neutron-1",
+        )
+        .await
+        .map_err(|e| AppError::Chain(e.to_string()))?;
         Ok(Self { client })
     }
 
@@ -44,7 +44,7 @@ impl ChainClient {
             .map_err(|e| AppError::Chain(e.to_string()))
     }
 
-    pub async fn execute_push_message(
+    pub async fn execute_message(
         &self,
         contract_address: &str,
         msg: ExecuteMsg,

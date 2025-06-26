@@ -35,13 +35,13 @@ async fn main() -> Result<(), AppError> {
 
 async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), AppError> {
     let mut balance = chain_client
-        .query_balance(&config.contract_address, &config.denom)
+        .query_balance(&config.contract_address, &config.neutron_denom)
         .await?;
     log::info!(
         "Queried balance for contract {}: {} {}",
         config.contract_address,
         balance,
-        config.denom
+        config.neutron_denom
     );
 
     // if balance == 0 {
@@ -51,7 +51,7 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
 
     balance = 100000;
 
-    let skip_response = query_skip_api(&config.denom, balance.to_string()).await?;
+    let skip_response = query_skip_api(&config.neutron_denom, balance.to_string(), &config).await?;
 
     let eureka_transfer = skip_response
         .operations
@@ -64,10 +64,9 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
     log::debug!("Skip API eureka transfer info: {:?}", eureka_transfer);
 
     let fee_quote = eureka_transfer.smart_relay_fee_quote;
-
-    if fee_quote.fee_denom != config.denom {
+    if fee_quote.fee_denom != config.hub_denom {
         return Err(AppError::DenomMismatch {
-            expected: config.denom.clone(),
+            expected: config.neutron_denom.clone(),
             got: fee_quote.fee_denom,
         });
     }
@@ -92,27 +91,13 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
         timeout_timestamp: timeout_timestamp_nano,
     };
 
-    let eureka_full_timeout_nano = (skip_response.estimated_route_duration_seconds + 120) // We add 2 minutes of buffer
-        * config.eureka_full_timeout_multiplier
-        * 1_000_000_000; // convert to nano
+    let msg = ExecuteMsg::EurekaTransfer { eureka_fee };
 
-    let msg = ExecuteMsg::Push {
-        amount: Coin {
-            denom: config.denom.clone(),
-            amount: Uint128::from(balance),
-        },
-        eureka_fee,
-        to_chain_entry_contract_address: eureka_transfer.to_chain_entry_contract_address,
-        to_chain_callback_contract_address: eureka_transfer.to_chain_callback_contract_address,
-        eureka_source_channel: eureka_transfer.source_client,
-        eureka_full_timeout_nano,
-    };
+    log::debug!("EurekaTransfer message: {:?}", msg);
 
-    log::info!("Push message: {:?}", msg);
-
-    // chain_client
-    //     .execute_push_message(&config.contract_address, msg)
-    //     .await?;
-
+    let tx_hash = chain_client
+        .execute_message(&config.contract_address, msg)
+        .await?;
+    log::info!("Transfer tx hash: {}", tx_hash);
     Ok(())
 }
