@@ -4,7 +4,6 @@ import {
     MaxbtcNeutronCollector,
     MaxbtcNeutronAumOracle,
     MaxbtcNeutronLiquidationBuffer,
-    MaxbtcNeutronPump
 } from 'maxbtc-neutron-ts-client';
 
 import {join} from 'path';
@@ -16,12 +15,12 @@ import {GasPrice} from '@cosmjs/stargate';
 import {setupPark} from '../testSuite';
 import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
+import {waitForTx} from "../helpers/waitForTx";
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
 const CollectorContractClient = MaxbtcNeutronCollector.Client;
 const AumOracleContractClient = MaxbtcNeutronAumOracle.Client;
 const LiquidationBufferContractClient = MaxbtcNeutronLiquidationBuffer.Client;
-const PumpContractClient = MaxbtcNeutronPump.Client;
 
 describe('Core', () => {
     const context: {
@@ -31,7 +30,6 @@ describe('Core', () => {
         collectorContractClient?: InstanceType<typeof CollectorContractClient>;
         aumOracleContractClient?: InstanceType<typeof AumOracleContractClient>;
         liquidationBufferContractClient?: InstanceType<typeof LiquidationBufferContractClient>;
-        pumpContractClient?: InstanceType<typeof PumpContractClient>;
 
         account?: AccountData;
         client?: SigningCosmWasmClient;
@@ -42,6 +40,7 @@ describe('Core', () => {
         aumOracleContractAddress?: string,
         liquidationBufferContractAddress?: string,
         pumpContractAddress?: string,
+        pumpLibraryContractAddress?: string,
 
         treasuryAddress?: string,
     } = {};
@@ -170,47 +169,116 @@ describe('Core', () => {
         );
     });
 
-    it('instantiate pump', async () => {
+    it('instantiate pump (valence base account)', async () => {
         const {client, account} = context;
         const res = await client.upload(
             account.address,
             Uint8Array.from(
                 fs.readFileSync(
-                    join(__dirname, '../../../artifacts/maxbtc_neutron_pump.wasm'),
+                    join(__dirname, '../../../artifacts/valence_base_account.wasm'),
                 ),
             ),
             1.5,
         );
         expect(res.codeId).toBeGreaterThan(0);
-        const instantiateRes = await MaxbtcNeutronPump.Client.instantiate(
-            client,
+
+        // The instantiation message for valence_neutron_ibc_transfer_library
+        // This structure corresponds to the `InstantiateMsg<LibraryConfig>` in the Rust contract.
+        const instantiateMsg = {
+            admin: account.address,
+            approved_libraries: []
+        };
+
+        const instantiateRes = await client.instantiate(
             account.address,
             res.codeId,
-            {
-                owner: account.address,
-                executor: account.address,
-                transfer_denom: "untrn",
-                eureka_fee_receiver: "0x1234567890123456789012345678901234567890", // Placeholder receiver address on destination chain
-                recover_address: "cosmos1h8vf3ueml7ah7m8z9e6vx09trq5lv2fwpxxhlw",
-                neutron_source_port: "transfer", // As per function logic, "transfer" is standard
-                neutron_source_channel: "channel-1", // Placeholder
-                eureka_source_channel: "08-wasm-1369", // Placeholder
-                to_chain_entry_contract_address: "cosmos1uq4ztnt3lrtwx0ryjtvy66ncxd2q92fdg78mgxcr76mm2582xkwsqwrjr4",
-                to_chain_callback_contract_address: "cosmos1nsuqsk6kh58ulczatwev87ttq2z6r3pusulg9r24mfj2fvtzd4uq5d9fg9",
-                max_fee: { amount: "100000", denom: "untrn" },
-                exact_out: false,
-                relay_fee: { amount: "1000", denom: "untrn" },
-            },
+            instantiateMsg,
             'label',
             'auto',
-            [],
         );
+
+        expect(instantiateRes.contractAddress).toBeTruthy();
         expect(instantiateRes.contractAddress).toHaveLength(66);
+
+        // Store the contract address for later use in other tests.
+        // The original context variable is named pumpContractAddress, we'll reuse it.
         context.pumpContractAddress = instantiateRes.contractAddress;
-        context.pumpContractClient = new MaxbtcNeutronPump.Client(
-            client,
-            context.pumpContractAddress,
+    });
+
+    it('instantiate pump library (valence ibc transfer library)', async () => {
+        const {client, account} = context;
+        const res = await client.upload(
+            account.address,
+            Uint8Array.from(
+                fs.readFileSync(
+                    join(__dirname, '../../../artifacts/valence_neutron_ibc_transfer_library.wasm'),
+                ),
+            ),
+            1.5,
         );
+        expect(res.codeId).toBeGreaterThan(0);
+
+        // The instantiation message for valence_neutron_ibc_transfer_library
+        // This structure corresponds to the `InstantiateMsg<LibraryConfig>` in the Rust contract.
+        const instantiateMsg = {
+            owner: account.address,
+            processor: account.address,
+            // `config` corresponds to the `LibraryConfig` struct
+            config: {
+                // Address on the source chain (Neutron) from which funds will be sent.
+                // Here, we use the deployer's account address.
+                input_addr: { library_account_addr: context.pumpContractAddress },
+                // Address on the destination chain that will receive the funds.
+                output_addr: { library_account_addr: "0x1234567890123456789012345678901234567890" },
+                // The denomination of the token to be transferred.
+                denom: { native: "untrn" },
+                // We specify to transfer the full available amount of the denom.
+                amount: "full_amount",
+                // Memo for the IBC transfer. Can be empty.
+                memo: "",
+                // Information about the remote chain and IBC channel.
+                remote_chain_info: {
+                    channel_id: "channel-1", // Placeholder channel ID
+                },
+                denom_to_pfm_map: {},
+                // This is required to use the `EurekaTransfer` function.
+                eureka_config: {
+                    callback_contract: "cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22",
+                    action_contract: "cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5",
+                    recover_address: "cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26",
+                    source_channel: "08-wasm-1369" // Placeholder
+                },
+            },
+        };
+
+        const instantiateRes = await client.instantiate(
+            account.address,
+            res.codeId,
+            instantiateMsg,
+            'label',
+            'auto',
+        );
+
+        expect(instantiateRes.contractAddress).toBeTruthy();
+        expect(instantiateRes.contractAddress).toHaveLength(66);
+
+        // Store the contract address for later use in other tests.
+        // The original context variable is named pumpContractAddress, we'll reuse it.
+        context.pumpLibraryContractAddress = instantiateRes.contractAddress;
+
+        // Approve the library for the base account
+        const approveRes = await client.execute(
+            account.address,
+            context.pumpContractAddress,
+            {
+              approve_library: {
+                library: context.pumpLibraryContractAddress,
+              }
+            },
+            'auto',
+        )
+        expect(approveRes.transactionHash).toHaveLength(64);
+        await waitForTx(client, approveRes.transactionHash);
     });
 
     it('instantiate core', async () => {
