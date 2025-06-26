@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MaxbtcNeutronPump = exports.MaxbtcNeutronLiquidationBuffer = exports.MaxbtcNeutronCore = exports.MaxbtcNeutronCollector = exports.MaxbtcNeutronAumOracle = void 0;
+exports.MaxbtcNeutronLiquidationBuffer = exports.MaxbtcNeutronCore = exports.MaxbtcNeutronCollector = exports.MaxbtcNeutronAumOracle = void 0;
 const _0 = __importStar(require("./maxbtcNeutronAumOracle"));
 exports.MaxbtcNeutronAumOracle = _0;
 const _1 = __importStar(require("./maxbtcNeutronCollector"));
@@ -32,5 +32,3 @@ const _2 = __importStar(require("./maxbtcNeutronCore"));
 exports.MaxbtcNeutronCore = _2;
 const _3 = __importStar(require("./maxbtcNeutronLiquidationBuffer"));
 exports.MaxbtcNeutronLiquidationBuffer = _3;
-const _4 = __importStar(require("./maxbtcNeutronPump"));
-exports.MaxbtcNeutronPump = _4;

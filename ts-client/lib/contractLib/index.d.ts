@@ -6,5 +6,3 @@ import * as _2 from './maxbtcNeutronCore';
 export declare const MaxbtcNeutronCore: typeof _2;
 import * as _3 from './maxbtcNeutronLiquidationBuffer';
 export declare const MaxbtcNeutronLiquidationBuffer: typeof _3;
-import * as _4 from './maxbtcNeutronPump';
-export declare const MaxbtcNeutronPump: typeof _4;
