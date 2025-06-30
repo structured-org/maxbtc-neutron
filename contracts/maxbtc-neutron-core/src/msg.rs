@@ -92,6 +92,8 @@ pub enum ExecuteMsg {
         /// (which the user can IBC-transfer out later).
         recipient: String,
     },
+    /// Triggers the execution of _process_cache
+    ProcessCache {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
 }

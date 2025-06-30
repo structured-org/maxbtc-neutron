@@ -15,7 +15,6 @@ use cosmwasm_std::{
     MessageInfo, QueryRequest, Response, StdResult, SupplyResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
-use neutron_std::types::cosmos::bank::v1beta1::BankQuerier;
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
 
@@ -134,6 +133,13 @@ pub fn execute(
         ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
         ExecuteMsg::ProcessActiveBatch {} => execute_process_active_batch(deps, env, info),
         ExecuteMsg::Claim { recipient } => execute_claim(deps, env, info, recipient),
+        ExecuteMsg::ProcessCache {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let msgs = _process_cache(deps, env, &cfg)?;
+            Ok(Response::new()
+                .add_messages(msgs)
+                .add_attribute("action", "process_cache"))
+        }
     }
 }
 
@@ -413,6 +419,7 @@ pub(crate) fn execute_withdraw(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Input funds validation happens here
@@ -422,8 +429,11 @@ pub(crate) fn execute_withdraw(
     )?;
 
     // Burn the maxBTC from user
-    let burn_msg =
-        create_tokenfactory_burn_msg(env.clone(), burned_amount.clone(), info.sender.to_string())?;
+    let burn_msg = create_tokenfactory_burn_msg(
+        env.clone(),
+        burned_amount.clone(),
+        env.contract.address.to_string(),
+    )?;
     msgs.push(burn_msg);
 
     // Update the maxbtc_burned amount in the active batch
@@ -436,19 +446,24 @@ pub(crate) fn execute_withdraw(
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = burned_amount.amount;
 
-    let tokenfactory_querier = BankQuerier::new(&deps.querier);
-    let redemption_denom = format!("redemption/batch/{}", active_batch.batch_id);
-    match tokenfactory_querier.denom_metadata(
-        cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id),
-    ) {
+    let redemption_denom_base = format!("redemption/batch/{}", active_batch.batch_id);
+    let redemption_denom_full =
+        cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id);
+    match deps
+        .querier
+        .query_denom_metadata(redemption_denom_full.clone())
+    {
         Ok(_) => {}
         Err(err) => {
-            if !err.to_string().contains("denom metadata not found") {
+            // TODO: is there a better way?
+            // TODO: comes from cosmos-sdk/types/errors/errors.go:
+            // TODO: ErrNotFound = errorsmod.Register(RootCodespace, 38, "not found")
+            if !err.to_string().contains("code: 38") {
                 return Err(ContractError::Std(err));
             }
             msgs.push(create_tokenfactory_create_denom_msg(
                 &env,
-                redemption_denom.clone(),
+                redemption_denom_base.clone(),
             )?)
         }
     }
@@ -459,7 +474,7 @@ pub(crate) fn execute_withdraw(
         info.sender.to_string(),
         Coin {
             amount: minted_redemption,
-            denom: redemption_denom.clone(),
+            denom: redemption_denom_full.clone(),
         },
     )?;
 
@@ -535,8 +550,10 @@ pub(crate) fn execute_process_active_batch(
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
     // deposit denom.
-    let btc_requested = er * Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?;
-    withdrawing_batch.btc_requested = btc_requested.atomics();
+    withdrawing_batch.btc_requested = dec_to_amount(
+        er * Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?,
+        cfg.deposit_decimals,
+    )?;
 
     // Save it in WITHDRAWING_BATCH
     WITHDRAWING_BATCH.save(deps.storage, &Some(withdrawing_batch.clone()))?;

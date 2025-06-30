@@ -68,6 +68,12 @@ class Client {
         }
         return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
     };
+    processCache = async (sender, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, { process_cache: {} }, fee || "auto", memo, funds);
+    };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

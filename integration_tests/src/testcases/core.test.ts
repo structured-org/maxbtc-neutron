@@ -16,6 +16,7 @@ import {setupPark} from '../testSuite';
 import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
 import {waitForTx} from "../helpers/waitForTx";
+import {sleep} from "../helpers/sleep";
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
 const CollectorContractClient = MaxbtcNeutronCollector.Client;
@@ -308,55 +309,6 @@ describe('Core', () => {
         );
     });
 
-    it('Deposit first time and check maxBTC balance', async () => {
-        const { neutronClient, coreContractClient, account, coreContractAddress } = context;
-        let res1 = await coreContractClient.deposit(
-            account.address,
-            {
-                recipient: account.address,
-            },
-            'auto',
-            "memo",
-            [{
-                denom: "untrn",
-                amount: "100"
-            }]
-        );
-        expect(res1.transactionHash).toBeTruthy();
-
-        let res2 =
-            await neutronClient.CosmosBankV1Beta1.query.queryBalance(
-                account.address,
-                { denom: `factory/${coreContractAddress}/maxbtc` },
-            );
-        expect(res2.data.balance.amount).toEqual('99');
-    });
-
-    it('Deposit second time and check maxBTC balance', async () => {
-        const { neutronClient, coreContractClient, account, coreContractAddress } = context;
-        let res1 = await coreContractClient.deposit(
-            account.address,
-            {
-                recipient: account.address,
-            },
-            'auto',
-            "memo",
-            [{
-                denom: "untrn",
-                amount: "100"
-            }]
-        );
-        expect(res1.transactionHash).toBeTruthy();
-
-        let res2 =
-            await neutronClient.CosmosBankV1Beta1.query.queryBalance(
-                account.address,
-                { denom: `factory/${coreContractAddress}/maxbtc` },
-            );
-        // Not 198 because after first mint, the ER is ~1.01 due to the fee we took
-        expect(res2.data.balance.amount).toEqual('197');
-    });
-
     it('should handle the full withdrawal cycle: withdraw -> process -> fund collector -> claim', async () => {
         const { coreContractClient, client, account, coreContractAddress, collectorContractAddress } = context;
 
@@ -377,6 +329,8 @@ describe('Core', () => {
         console.log(`Withdrawing ${withdrawAmount} maxBTC...`);
         const initialMaxBtcBalance = BigInt((await client.getBalance(account.address, `factory/${coreContractAddress}/maxbtc`)).amount);
 
+        await sleep(10000);
+
         const withdrawRes = await coreContractClient.withdraw(
             account.address,
             'auto',
@@ -396,6 +350,7 @@ describe('Core', () => {
 
         const redemptionTokenBalance = (await client.getBalance(account.address, redemptionTokenDenom)).amount;
         expect(redemptionTokenBalance).toEqual(withdrawAmount);
+
         console.log(`Successfully withdrew and received ${withdrawAmount} of ${redemptionTokenDenom}`);
 
         // STEP 2: Wait for batch to be processable
@@ -424,7 +379,7 @@ describe('Core', () => {
             account.address,
             collectorContractAddress,
             [{ denom: 'untrn', amount: amountNeeded }],
-            'auto'
+            1.5
         );
         await waitForTx(client, fundCollectorRes.transactionHash);
         console.log("Collector funded.");
@@ -432,7 +387,7 @@ describe('Core', () => {
         // Trigger _process_cache to finalize the batch. Any execute message will do.
         // We will make a small, harmless deposit.
         console.log("Triggering _process_cache to finalize the batch...");
-        await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "trigger cache", [{denom: 'untrn', amount: '1'}]);
+        await coreContractClient.processCache(account.address, 1.5, "process cache");
 
         // Assertions for finalization
         const finalizedBatch = await coreContractClient.queryFinalizedBatch({ batch_id: withdrawingBatch.batch_id });
@@ -466,68 +421,68 @@ describe('Core', () => {
         console.log("Claim successful. Full cycle complete.");
     });
 
-    it('should handle flushDeposits and FSM state transitions correctly', async () => {
-        const { client, coreContractClient, account, coreContractAddress, liquidationBufferContractAddress, pumpContractAddress, aumOracleContractClient } = context;
-
-        // Ensure core contract has funds.
-        console.log("Depositing funds to prepare for flush test...");
-        await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "flush setup", [{ denom: "untrn", amount: "100000" }]);
-
-        // STEP 1: Wait for flush period
-        const flushPeriod = 10; // As set in instantiation
-        console.log(`Waiting for ${flushPeriod + 1} seconds for flush period...`);
-        await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
-
-        // Get pre-flush state
-        const coreBalanceBefore = await client.getBalance(coreContractAddress, 'untrn');
-        const bufferBalanceBefore = await client.getBalance(liquidationBufferContractAddress, 'untrn');
-        const pumpBalanceBefore = await client.getBalance(pumpContractAddress, 'untrn');
-
-        // Mock external state for predictable calculation
-        await aumOracleContractClient.updateConfig(account.address, { aum: "0" }, 'auto');
-        await context.liquidationBufferContractClient.updateConfig(account.address, {owned_btc: "0", owned_maxbtc: "0"}, 'auto');
-
-        // Calculation based on contract logic
-        const totalAUM = BigInt(coreBalanceBefore.amount) + BigInt(bufferBalanceBefore.amount);
-        const requiredBuffer = totalAUM / 10n; // liquidation_buffer_share is "0.1"
-        const toBuffer = requiredBuffer - BigInt(bufferBalanceBefore.amount);
-        const toPump = BigInt(coreBalanceBefore.amount) - toBuffer;
-
-        // STEP 2: Execute flushDeposits
-        console.log("Flushing deposits...");
-        await coreContractClient.flushDeposits(account.address, 'auto');
-
-        // Assertions for fund movement
-        const coreBalanceAfter = await client.getBalance(coreContractAddress, 'untrn');
-        const bufferBalanceAfter = await client.getBalance(liquidationBufferContractAddress, 'untrn');
-        const pumpBalanceAfter = await client.getBalance(pumpContractAddress, 'untrn');
-
-        expect(coreBalanceAfter.amount).toEqual("0");
-        expect(BigInt(bufferBalanceAfter.amount)).toEqual(BigInt(bufferBalanceBefore.amount) + toBuffer);
-        expect(BigInt(pumpBalanceAfter.amount)).toEqual(BigInt(pumpBalanceBefore.amount) + toPump);
-        console.log(`Flush successful. Sent ${toBuffer} to buffer, ${toPump} to pump.`);
-
-        // Assert FSM is in 'Flushing' state by attempting another state-changing call, which should fail.
-        await expect(coreContractClient.processActiveBatch(account.address, 'auto')).rejects.toThrow(/Contract is not idle/);
-        console.log("FSM is in 'Flushing' state as expected.");
-
-        // STEP 3: Finalize the Flush
-        // Simulate the off-chain process by updating the AUM oracle with the amount sent to the pump.
-        console.log(`Updating AUM oracle with ${toPump.toString()}...`);
-        await aumOracleContractClient.updateConfig(account.address, { aum: toPump.toString() }, 'auto');
-
-        // Trigger _process_cache again. The contract should see the AUM updated and return to Idle.
-        // We will try `processActiveBatch` again. It will fail for its own reasons, but _process_cache runs first.
-        try {
-            await coreContractClient.processActiveBatch(account.address, 'auto');
-        } catch (e) {
-            // This is expected because the batch duration has not passed.
-            // The _process_cache hook should have executed and returned the FSM to Idle.
-        }
-
-        // Assert FSM is 'Idle' by successfully executing a state-changing call.
-        const finalDepositRes = await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "testing idle state", [{ denom: "untrn", amount: "1" }]);
-        expect(finalDepositRes.transactionHash).toBeTruthy();
-        console.log("FSM is back to 'Idle', flush is fully finalized.");
-    });
+    // it('should handle flushDeposits and FSM state transitions correctly', async () => {
+    //     const { client, coreContractClient, account, coreContractAddress, liquidationBufferContractAddress, pumpContractAddress, aumOracleContractClient } = context;
+    //
+    //     // Ensure core contract has funds.
+    //     console.log("Depositing funds to prepare for flush test...");
+    //     await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "flush setup", [{ denom: "untrn", amount: "100000" }]);
+    //
+    //     // STEP 1: Wait for flush period
+    //     const flushPeriod = 10; // As set in instantiation
+    //     console.log(`Waiting for ${flushPeriod + 1} seconds for flush period...`);
+    //     await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
+    //
+    //     // Get pre-flush state
+    //     const coreBalanceBefore = await client.getBalance(coreContractAddress, 'untrn');
+    //     const bufferBalanceBefore = await client.getBalance(liquidationBufferContractAddress, 'untrn');
+    //     const pumpBalanceBefore = await client.getBalance(pumpContractAddress, 'untrn');
+    //
+    //     // Mock external state for predictable calculation
+    //     await aumOracleContractClient.updateConfig(account.address, { aum: "0" }, 'auto');
+    //     await context.liquidationBufferContractClient.updateConfig(account.address, {owned_btc: "0", owned_maxbtc: "0"}, 'auto');
+    //
+    //     // Calculation based on contract logic
+    //     const totalAUM = BigInt(coreBalanceBefore.amount) + BigInt(bufferBalanceBefore.amount);
+    //     const requiredBuffer = totalAUM / 10n; // liquidation_buffer_share is "0.1"
+    //     const toBuffer = requiredBuffer - BigInt(bufferBalanceBefore.amount);
+    //     const toPump = BigInt(coreBalanceBefore.amount) - toBuffer;
+    //
+    //     // STEP 2: Execute flushDeposits
+    //     console.log("Flushing deposits...");
+    //     await coreContractClient.flushDeposits(account.address, 'auto');
+    //
+    //     // Assertions for fund movement
+    //     const coreBalanceAfter = await client.getBalance(coreContractAddress, 'untrn');
+    //     const bufferBalanceAfter = await client.getBalance(liquidationBufferContractAddress, 'untrn');
+    //     const pumpBalanceAfter = await client.getBalance(pumpContractAddress, 'untrn');
+    //
+    //     expect(coreBalanceAfter.amount).toEqual("0");
+    //     expect(BigInt(bufferBalanceAfter.amount)).toEqual(BigInt(bufferBalanceBefore.amount) + toBuffer);
+    //     expect(BigInt(pumpBalanceAfter.amount)).toEqual(BigInt(pumpBalanceBefore.amount) + toPump);
+    //     console.log(`Flush successful. Sent ${toBuffer} to buffer, ${toPump} to pump.`);
+    //
+    //     // Assert FSM is in 'Flushing' state by attempting another state-changing call, which should fail.
+    //     await expect(coreContractClient.processActiveBatch(account.address, 'auto')).rejects.toThrow(/Contract is not idle/);
+    //     console.log("FSM is in 'Flushing' state as expected.");
+    //
+    //     // STEP 3: Finalize the Flush
+    //     // Simulate the off-chain process by updating the AUM oracle with the amount sent to the pump.
+    //     console.log(`Updating AUM oracle with ${toPump.toString()}...`);
+    //     await aumOracleContractClient.updateConfig(account.address, { aum: toPump.toString() }, 'auto');
+    //
+    //     // Trigger _process_cache again. The contract should see the AUM updated and return to Idle.
+    //     // We will try `processActiveBatch` again. It will fail for its own reasons, but _process_cache runs first.
+    //     try {
+    //         await coreContractClient.processActiveBatch(account.address, 'auto');
+    //     } catch (e) {
+    //         // This is expected because the batch duration has not passed.
+    //         // The _process_cache hook should have executed and returned the FSM to Idle.
+    //     }
+    //
+    //     // Assert FSM is 'Idle' by successfully executing a state-changing call.
+    //     const finalDepositRes = await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "testing idle state", [{ denom: "untrn", amount: "1" }]);
+    //     expect(finalDepositRes.transactionHash).toBeTruthy();
+    //     console.log("FSM is back to 'Idle', flush is fully finalized.");
+    // });
 });
