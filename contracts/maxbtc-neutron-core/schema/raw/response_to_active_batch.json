@@ -17,7 +17,8 @@
         "batch_id",
         "btc_requested",
         "collected_amount",
-        "collector_historical_balance"
+        "collector_historical_balance",
+        "maxbtc_burned"
       ],
       "properties": {
         "batch_id": {
@@ -32,6 +33,9 @@
           "type": "string"
         },
         "collector_historical_balance": {
+          "type": "string"
+        },
+        "maxbtc_burned": {
           "type": "string"
         }
       },

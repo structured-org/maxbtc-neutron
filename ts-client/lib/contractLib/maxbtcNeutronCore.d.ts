@@ -39,6 +39,7 @@ export interface BatchResponse {
     btc_requested: string;
     collected_amount: string;
     collector_historical_balance: string;
+    maxbtc_burned: string;
 }
 /**
  * Response for querying config

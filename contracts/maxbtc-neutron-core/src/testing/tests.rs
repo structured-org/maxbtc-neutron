@@ -649,9 +649,14 @@ fn test_withdraw_success() {
     let res = execute_withdraw(deps.as_mut(), env.clone(), info.clone()).unwrap();
 
     // The happy-path should emit **exactly two** SubMsgs:
-    //   0. token-factory burn of `maxBTC`
-    //   1. token-factory mint of `redemption/batch/1`
-    assert_eq!(res.messages.len(), 2, "expected Burn+Mint messages");
+    //   0. token-factory create denom of `redemption/batch/1`
+    //   1. token-factory burn of `maxBTC`
+    //   2. token-factory mint of `redemption/batch/1`
+    assert_eq!(
+        res.messages.len(),
+        3,
+        "expected CreateDenom+Burn+Mint messages"
+    );
 
     // Response attributes
     let attr = |k: &str| -> Option<&str> {

@@ -138,6 +138,7 @@ pub struct BatchResponse {
     pub btc_requested: String,
     pub collected_amount: String,
     pub collector_historical_balance: String,
+    pub maxbtc_burned: String,
 }
 
 #[cw_serde]

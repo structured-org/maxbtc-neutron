@@ -32,8 +32,12 @@ export type Uint1281 = string;
 
 export interface MaxbtcNeutronAumOracleSchema {
   responses: Uint128;
+  execute: UpdateConfigArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
+}
+export interface UpdateConfigArgs {
+  aum: Uint1281;
 }
 export interface InstantiateMsg {
   aum?: Uint1281 | null;
@@ -87,5 +91,9 @@ export class Client {
   }
   queryGetAUM = async(): Promise<Uint128> => {
     return this.client.queryContractSmart(this.contractAddress, { get_a_u_m: {} });
+  }
+  updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, { update_config: args }, fee || "auto", memo, funds);
   }
 }

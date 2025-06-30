@@ -92,7 +92,6 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
     };
 
     let msg = ExecuteMsg::EurekaTransfer { eureka_fee };
-
     log::debug!("EurekaTransfer message: {:?}", msg);
 
     let tx_hash = chain_client

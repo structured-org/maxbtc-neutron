@@ -9,7 +9,13 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    ClawBack { amount: Coin },
+    ClawBack {
+        amount: Coin,
+    },
+    UpdateConfig {
+        owned_maxbtc: Uint128,
+        owned_btc: Uint128,
+    },
 }
 
 #[cw_serde]

@@ -40,6 +40,19 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::ClawBack { amount } => clawback(deps, env, info, amount),
+        ExecuteMsg::UpdateConfig {
+            owned_maxbtc,
+            owned_btc,
+        } => {
+            CONFIG.save(
+                deps.storage,
+                &Config {
+                    owned_maxbtc,
+                    owned_btc,
+                },
+            )?;
+            Ok(Response::new().add_attribute("action", "update_config"))
+        }
     }
 }
 

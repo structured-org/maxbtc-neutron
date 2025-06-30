@@ -44,7 +44,7 @@ export type Uint1281 = string;
 export type Uint1282 = string;
 export interface MaxbtcNeutronLiquidationBufferSchema {
     responses: Uint128 | Uint1281;
-    execute: ClawBackArgs;
+    execute: ClawBackArgs | UpdateConfigArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -54,6 +54,10 @@ export interface ClawBackArgs {
 export interface Coin {
     amount: Uint1282;
     denom: string;
+}
+export interface UpdateConfigArgs {
+    owned_btc: Uint1282;
+    owned_maxbtc: Uint1282;
 }
 export interface InstantiateMsg {
     owned_btc?: Uint1282 | null;
@@ -69,4 +73,5 @@ export declare class Client {
     queryGetBTCBalance: () => Promise<Uint128>;
     queryGetMaxBTCBalance: () => Promise<Uint128>;
     clawBack: (sender: string, args: ClawBackArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }
