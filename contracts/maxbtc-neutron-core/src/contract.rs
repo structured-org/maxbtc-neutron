@@ -335,21 +335,6 @@ pub(crate) fn execute_flush_deposits(
         cfg.deposit_decimals,
     )?;
 
-    // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
-    // in process_cache() to check whether the deposit reached Binance / Solana
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg, None)?;
-    CACHED_ER.save(
-        deps.storage,
-        &Some(CachedER {
-            er,
-            timeout: now + cfg.cached_er_ttl,
-            aum: Some(CachedAUM {
-                oracle_aum: aum.oracle_aum,
-                deposit_buffer: aum.deposit_buffer,
-            }),
-        }),
-    )?;
-
     // If liquidation buffer contract < required => send the difference
     if aum.liquidation_buffer_contract < required_buffer {
         let mut to_send_to_liquidation_buffer_contract =
@@ -385,6 +370,24 @@ pub(crate) fn execute_flush_deposits(
             amount_to_flush += to_recv.amount;
         }
     }
+
+    // Cache the exchange rate, oracle_aum and deposit_buffer value, because we need it
+    // in process_cache() to check whether the deposit reached Binance / Solana.
+    // Note: we store `amount_to_flush` to `deposit_buffer` because that's how much will
+    // reach the remote chain. Saving `aum.deposit_buffer` would lead to _process_cache_flushing()
+    // expect more than was actually flushed.
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg, None)?;
+    CACHED_ER.save(
+        deps.storage,
+        &Some(CachedER {
+            er,
+            timeout: now + cfg.cached_er_ttl,
+            aum: Some(CachedAUM {
+                oracle_aum: aum.oracle_aum,
+                deposit_buffer: amount_to_flush,
+            }),
+        }),
+    )?;
 
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
@@ -505,7 +508,10 @@ pub(crate) fn execute_process_active_batch(
     let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
 
     if now < active_start_time + cfg.batch_active_duration {
-        return Err(ContractError::CannotProcessActiveBatchYet {});
+        return Ok(Response::new()
+            .add_messages(msgs)
+            .add_attribute("action", "process_active_batch")
+            .add_attribute("status", "not_enough_time_elapsed"));
     }
 
     // If the active batch has no redemption tokens minted,
@@ -520,7 +526,6 @@ pub(crate) fn execute_process_active_batch(
     if redemption_token_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
         ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
-
         return Ok(Response::new()
             .add_messages(msgs)
             .add_attribute("action", "process_active_batch")
@@ -537,7 +542,6 @@ pub(crate) fn execute_process_active_batch(
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
-
     // Record collector_historical_balance
     let collector_balance = deps
         .querier
@@ -884,6 +888,10 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 maxbtc_burned: b.maxbtc_burned.to_string(),
             });
             Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::ContractState {} => {
+            let state = FSM.get_current_state(deps.storage)?;
+            Ok(to_json_binary(&state)?)
         }
     }
 }

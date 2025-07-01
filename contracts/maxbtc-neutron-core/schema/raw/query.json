@@ -68,6 +68,20 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Returns the current FSM state",
+      "type": "object",
+      "required": [
+        "contract_state"
+      ],
+      "properties": {
+        "contract_state": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   ]
 }

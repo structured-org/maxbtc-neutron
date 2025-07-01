@@ -8,6 +8,10 @@ export type NullableBatchResponse = BatchResponse | null;
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+/**
+ * Represents the contract state.
+ */
+export type ContractState = "idle" | "flushing" | "withdrawing";
 export type NullableBatchResponse1 = BatchResponse | null;
 export type NullableBatchResponse2 = BatchResponse | null;
 /**
@@ -26,7 +30,7 @@ export type NullableBatchResponse2 = BatchResponse | null;
 export type Uint128 = string;
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: NullableBatchResponse | ConfigResponse | NullableBatchResponse1 | NullableBatchResponse2;
+  responses: NullableBatchResponse | ConfigResponse | ContractState | NullableBatchResponse1 | NullableBatchResponse2;
   query: FinalizedBatchArgs;
   execute: DepositArgs | ClaimArgs | UpdateConfigArgs;
   instantiate?: InstantiateMsg;
@@ -216,6 +220,9 @@ export class Client {
   }
   queryFinalizedBatch = async(args: FinalizedBatchArgs): Promise<NullableBatchResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
+  }
+  queryContractState = async(): Promise<ContractState> => {
+    return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
   }
   deposit = async(sender:string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }

@@ -501,6 +501,20 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "description": "Returns the current FSM state",
+        "type": "object",
+        "required": [
+          "contract_state"
+        ],
+        "properties": {
+          "contract_state": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
@@ -622,6 +636,17 @@
           "type": "string"
         }
       }
+    },
+    "contract_state": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ContractState",
+      "description": "Represents the contract state.",
+      "type": "string",
+      "enum": [
+        "idle",
+        "flushing",
+        "withdrawing"
+      ]
     },
     "finalized_batch": {
       "$schema": "http://json-schema.org/draft-07/schema#",

@@ -1,3 +1,4 @@
+use crate::state::ContractState;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Uint128};
 
@@ -114,6 +115,9 @@ pub enum QueryMsg {
     /// Returns info for a finalized batch by id
     #[returns(Option<BatchResponse>)]
     FinalizedBatch { batch_id: u64 },
+    /// Returns the current FSM state
+    #[returns(ContractState)]
+    ContractState {},
 }
 
 /// Response for querying config
