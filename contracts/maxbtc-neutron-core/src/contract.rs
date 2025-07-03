@@ -46,7 +46,7 @@ pub fn instantiate(
         batch_withdrawing_duration: msg.batch_withdrawing_duration,
         collected_tolerance: msg.accepted_withdrawable_percentage,
         liquidation_buffer_share: msg.liquidation_buffer_share,
-        deposit_fee: msg.deposit_fee,
+        deposit_cost: msg.deposit_cost,
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_er_ttl,
         deposits_cap: msg.deposits_cap,
@@ -116,7 +116,7 @@ pub fn instantiate(
             "liquidation_buffer_share",
             cfg.liquidation_buffer_share.to_string(),
         )
-        .add_attribute("deposit_fee", cfg.deposit_fee.to_string()))
+        .add_attribute("deposit_cost", cfg.deposit_cost.to_string()))
 }
 
 #[entry_point]
@@ -193,8 +193,8 @@ fn execute_update_config(
     if let Some(v) = updates.liquidation_buffer_share {
         cfg.liquidation_buffer_share = v;
     }
-    if let Some(v) = updates.deposit_fee {
-        cfg.deposit_fee = v;
+    if let Some(v) = updates.deposit_cost {
+        cfg.deposit_cost = v;
     }
     if let Some(v) = updates.cached_aum_tolerance {
         cfg.deposit_buffer_tolerance = v;
@@ -256,7 +256,7 @@ pub(crate) fn execute_deposit(
         .map_err(|_| ContractError::InvalidDepositAmount {})?;
 
     // Apply the deposit fee and divide by exchange rate
-    let fee_multiplier = Decimal::one() - cfg.deposit_fee;
+    let fee_multiplier = Decimal::one() - cfg.deposit_cost;
 
     // CosmWasm's Decimal always uses 18 digits internally, so scale down
     // to match cfg.deposit_decimals (e.g., 6) before minting.
@@ -852,7 +852,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 batch_withdrawing_duration: cfg.batch_withdrawing_duration,
                 accepted_withdrawable_percentage: cfg.collected_tolerance,
                 liquidation_buffer_share: cfg.liquidation_buffer_share,
-                deposit_fee: cfg.deposit_fee,
+                deposit_cost: cfg.deposit_cost,
             };
             Ok(to_json_binary(&resp)?)
         }

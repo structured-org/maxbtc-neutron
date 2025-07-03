@@ -1,8 +1,9 @@
 use crate::msg::{LiquidationBufferContractQueryMsg, OracleQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, Empty, GrpcQuery,
-    OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, DenomMetadata,
+    DenomMetadataResponse, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
+    SystemResult, Uint128, WasmQuery,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,8 @@ pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
 
     supplies: HashMap<String, Uint128>,
+
+    redemption_tokens_denom_metadata: HashMap<String, bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -73,6 +76,7 @@ impl WasmMockQuerier {
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
+            redemption_tokens_denom_metadata: Default::default(),
         }
     }
 
@@ -125,6 +129,23 @@ impl WasmMockQuerier {
                 self.base
                     .handle_query(&QueryRequest::Bank(BankQuery::Supply { denom }))
             }
+            BankQuery::DenomMetadata { denom } => {
+                if self
+                    .redemption_tokens_denom_metadata
+                    .contains_key(denom.as_str())
+                {
+                    return SystemResult::Ok(ContractResult::Ok(
+                        to_json_binary(&DenomMetadataResponse::new(DenomMetadata::default()))
+                            .unwrap(),
+                    ));
+                }
+                SystemResult::Err(SystemError::InvalidRequest {
+                    // This is not the actual error, but this is part of what neutrond
+                    // will return
+                    error: "code: 38".to_string(),
+                    request: Default::default(),
+                })
+            }
             // For other queries, fallback to base
             _ => self.base.handle_query(&QueryRequest::Bank(query)),
         }
@@ -139,18 +160,6 @@ impl WasmMockQuerier {
             // For other variants (e.g. WasmQuery::Raw), fallback to base
             _ => self.base.handle_query(&QueryRequest::Wasm(wasm_query)),
         }
-    }
-
-    fn handle_grpc_query(&self, grpc_query: GrpcQuery) -> QuerierResult {
-        if grpc_query.path == "/cosmos.bank.v1beta1.Query/DenomMetadata" {
-            return SystemResult::Err(SystemError::InvalidRequest {
-                error: "client denom metadata not found".to_string(),
-                request: Default::default(),
-            });
-        }
-
-        // For other variants (e.g. WasmQuery::Raw), fallback to base
-        self.base.handle_query(&QueryRequest::Grpc(grpc_query))
     }
 
     /// Dispatches our recognized wasm queries to the correct mock data.
@@ -229,7 +238,6 @@ impl Querier for WasmMockQuerier {
         match request {
             QueryRequest::Bank(bank_query) => self.handle_bank_query(bank_query),
             QueryRequest::Wasm(wasm_query) => self.handle_wasm_query(wasm_query),
-            QueryRequest::Grpc(grpc_query) => self.handle_grpc_query(grpc_query),
             // Fallback for queries we don’t explicitly handle
             _ => self.base.handle_query(&request),
         }

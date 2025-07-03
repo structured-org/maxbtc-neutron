@@ -36,8 +36,8 @@ pub struct InstantiateMsg {
     /// Fraction of total AUM (Decimal) that the protocol keeps on the
     /// liquidation buffer contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
-    /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
-    pub deposit_fee: Decimal,
+    /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
+    pub deposit_cost: Decimal,
     /// Maximum tolerated relative difference (Decimal) between the
     /// deposit buffer sent for flushing and the amount observed on the
     /// custody chain
@@ -68,7 +68,7 @@ pub struct UpdateConfigMsg {
     pub batch_withdrawing_duration: Option<u64>,
     pub accepted_withdrawable_percentage: Option<Decimal>,
     pub liquidation_buffer_share: Option<Decimal>,
-    pub deposit_fee: Option<Decimal>,
+    pub deposit_cost: Option<Decimal>,
     pub cached_aum_tolerance: Option<Decimal>,
     pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
@@ -134,7 +134,7 @@ pub struct ConfigResponse {
     pub batch_withdrawing_duration: u64,
     pub accepted_withdrawable_percentage: Decimal,
     pub liquidation_buffer_share: Decimal,
-    pub deposit_fee: Decimal,
+    pub deposit_cost: Decimal,
 }
 
 /// Response for batch query

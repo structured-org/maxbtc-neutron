@@ -54,8 +54,8 @@ export interface ConfigResponse {
   aum_contract: string;
   batch_active_duration: number;
   batch_withdrawing_duration: number;
+  deposit_cost: Decimal;
   deposit_denom: string;
-  deposit_fee: Decimal;
   deposit_flush_period: number;
   liquidation_buffer_share: Decimal;
   liquidation_contract: string;
@@ -117,6 +117,10 @@ export interface InstantiateMsg {
    */
   collector_contract: string;
   /**
+   * One-off cost (Decimal) charged when a user deposits to mint maxBTC
+   */
+  deposit_cost: Decimal;
+  /**
    * Number of decimals carried by the `deposit_denom` asset
    */
   deposit_decimals: number;
@@ -124,10 +128,6 @@ export interface InstantiateMsg {
    * Denom for user deposits (e.g. IBC-transferred BTC)
    */
   deposit_denom: string;
-  /**
-   * One-off fee (Decimal) charged when a user deposits to mint maxBTC
-   */
-  deposit_fee: Decimal;
   /**
    * Minimum number of seconds that must elapse between two deposit-flush operations
    */

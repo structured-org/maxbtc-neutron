@@ -61,7 +61,7 @@ fn test_instantiate_success() {
             "liquidation_buffer_share",
             msg.liquidation_buffer_share.to_string(),
         ),
-        Attribute::new("deposit_fee", msg.deposit_fee.to_string()),
+        Attribute::new("deposit_cost", msg.deposit_cost.to_string()),
     ];
     for attr in expected_attributes {
         assert!(
@@ -121,7 +121,7 @@ fn test_first_deposit_success() {
         .update_liqbuffer_maxbtc_balance(Uint128::zero());
 
     // deposit_amount = 1 wBTC => deposit_coin.amount = 1 * 10^6 = 1_000_000
-    // deposit_fee = 1% => user effectively deposits 0.99 wBTC
+    // deposit_cost = 1% => user effectively deposits 0.99 wBTC
     // exchange_rate = 1 => minted = 0.99 => minted.atomics() = 990_000
     let deposit_amount: Uint128 = Uint128::from(1_000_000u128);
     let info = message_info(
@@ -346,7 +346,7 @@ fn test_deposit_minted_zero_below_er() {
     let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // Suppose the exchange rate is super high, e.g. ER=100.
-    // Then deposit of 50 wBTC => minted ~ 0.49 maxBTC if deposit_fee=1%,
+    // Then deposit of 50 wBTC => minted ~ 0.49 maxBTC if deposit_cost=1%,
     // which might floor to 0 in integer terms if decimals do not suffice.
     // Let’s try a scenario that results in minted=0 once we do integer trunc.
     deps.querier
@@ -873,9 +873,13 @@ fn test_process_active_batch_too_early() {
 
     // ACTIVE_BATCH_START_TIME is the current block time, so batch is *not* old enough
     let info = message_info(&deps.api.addr_make("eager_beaver"), &[]);
-    let err = execute_process_active_batch(deps.as_mut(), env.clone(), info).unwrap_err();
-
-    assert!(matches!(err, ContractError::CannotProcessActiveBatchYet {}));
+    let res = execute_process_active_batch(deps.as_mut(), env.clone(), info).unwrap();
+    let attr = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "status")
+        .expect("status attribute");
+    assert_eq!(attr.value, "not_enough_time_elapsed");
 
     // No state-change: FSM remains Idle
     assert_eq!(
@@ -1432,7 +1436,7 @@ fn test_idle_two_deposits_in_succession() {
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
     let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
 
-    cfg.deposit_fee = Decimal::zero();
+    cfg.deposit_cost = Decimal::zero();
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     deps.querier
@@ -1507,7 +1511,7 @@ fn test_idle_denominator_with_liq_buffer() {
     let (mut deps, env, _) = setup_contract();
     let cfg = CONFIG.load(&deps.storage).unwrap();
     let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-    assert_eq!(cfg.deposit_fee, Decimal::percent(1));
+    assert_eq!(cfg.deposit_cost, Decimal::percent(1));
 
     // Given:
     deps.querier
@@ -1549,7 +1553,7 @@ fn test_cached_deposit_while_flushing() {
     let (mut deps, mut env, _) = setup_contract();
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
     let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
-    cfg.deposit_fee = Decimal::percent(1);
+    cfg.deposit_cost = Decimal::percent(1);
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // Given: A pre-flush state with 2M in the contract
@@ -1775,7 +1779,7 @@ fn default_instantiate_msg(
         batch_withdrawing_duration: 86400,
         accepted_withdrawable_percentage: Decimal::percent(5),
         liquidation_buffer_share: Decimal::percent(10),
-        deposit_fee: Decimal::percent(1),
+        deposit_cost: Decimal::percent(1),
         cached_aum_tolerance: Decimal::percent(2),
         cached_er_ttl: 100u64,
         deposits_cap: None,

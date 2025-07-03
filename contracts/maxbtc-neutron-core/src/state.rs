@@ -39,8 +39,8 @@ pub struct Config {
     /// Fraction of total AUM (Decimal) that the protocol must keep in the
     /// liquidation buffer contract as an instant-liquidity buffer
     pub liquidation_buffer_share: Decimal,
-    /// One-off fee (Decimal) charged when a user deposits to mint maxBTC
-    pub deposit_fee: Decimal,
+    /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
+    pub deposit_cost: Decimal,
     /// Maximum tolerated relative difference (Decimal) between the deposit
     /// buffer sent for flushing and the amount observed on the custody chain
     pub deposit_buffer_tolerance: Decimal,

@@ -8,8 +8,8 @@
     "aum_contract",
     "batch_active_duration",
     "batch_withdrawing_duration",
+    "deposit_cost",
     "deposit_denom",
-    "deposit_fee",
     "deposit_flush_period",
     "liquidation_buffer_share",
     "liquidation_contract",
@@ -34,11 +34,11 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "deposit_cost": {
+      "$ref": "#/definitions/Decimal"
+    },
     "deposit_denom": {
       "type": "string"
-    },
-    "deposit_fee": {
-      "$ref": "#/definitions/Decimal"
     },
     "deposit_flush_period": {
       "type": "integer",

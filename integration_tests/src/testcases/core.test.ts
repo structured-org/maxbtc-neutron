@@ -291,7 +291,7 @@ describe('Core', () => {
                 cached_er_ttl: 20,
                 deposit_decimals: 6,
                 deposit_denom: "untrn",
-                deposit_fee: "0.01",
+                deposit_cost: "0.01",
                 deposit_flush_period: 10,
                 liquidation_buffer_share: "0.1",
                 maxbtc_denom: "maxbtc",

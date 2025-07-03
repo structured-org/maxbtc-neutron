@@ -15,9 +15,9 @@
       "cached_aum_tolerance",
       "cached_er_ttl",
       "collector_contract",
+      "deposit_cost",
       "deposit_decimals",
       "deposit_denom",
-      "deposit_fee",
       "deposit_flush_period",
       "deposit_pump_contract",
       "liquidation_buffer_contract",
@@ -68,6 +68,14 @@
         "description": "Collector contract that receives BTC shipped back from custody during the withdrawal process.",
         "type": "string"
       },
+      "deposit_cost": {
+        "description": "One-off cost (Decimal) charged when a user deposits to mint maxBTC",
+        "allOf": [
+          {
+            "$ref": "#/definitions/Decimal"
+          }
+        ]
+      },
       "deposit_decimals": {
         "description": "Number of decimals carried by the `deposit_denom` asset",
         "type": "integer",
@@ -77,14 +85,6 @@
       "deposit_denom": {
         "description": "Denom for user deposits (e.g. IBC-transferred BTC)",
         "type": "string"
-      },
-      "deposit_fee": {
-        "description": "One-off fee (Decimal) charged when a user deposits to mint maxBTC",
-        "allOf": [
-          {
-            "$ref": "#/definitions/Decimal"
-          }
-        ]
       },
       "deposit_flush_period": {
         "description": "Minimum number of seconds that must elapse between two deposit-flush operations",
@@ -342,7 +342,7 @@
               "null"
             ]
           },
-          "deposit_fee": {
+          "deposit_cost": {
             "anyOf": [
               {
                 "$ref": "#/definitions/Decimal"
@@ -576,8 +576,8 @@
         "aum_contract",
         "batch_active_duration",
         "batch_withdrawing_duration",
+        "deposit_cost",
         "deposit_denom",
-        "deposit_fee",
         "deposit_flush_period",
         "liquidation_buffer_share",
         "liquidation_contract",
@@ -602,11 +602,11 @@
           "format": "uint64",
           "minimum": 0.0
         },
+        "deposit_cost": {
+          "$ref": "#/definitions/Decimal"
+        },
         "deposit_denom": {
           "type": "string"
-        },
-        "deposit_fee": {
-          "$ref": "#/definitions/Decimal"
         },
         "deposit_flush_period": {
           "type": "integer",
