@@ -8,6 +8,10 @@ export type NullableBatchResponse = BatchResponse | null;
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+/**
+ * Represents the contract state.
+ */
+export type ContractState = "idle" | "flushing" | "withdrawing";
 export type NullableBatchResponse1 = BatchResponse | null;
 export type NullableBatchResponse2 = BatchResponse | null;
 /**
@@ -26,7 +30,7 @@ export type NullableBatchResponse2 = BatchResponse | null;
 export type Uint128 = string;
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: NullableBatchResponse | ConfigResponse | NullableBatchResponse1 | NullableBatchResponse2;
+  responses: NullableBatchResponse | ConfigResponse | ContractState | NullableBatchResponse1 | NullableBatchResponse2;
   query: FinalizedBatchArgs;
   execute: DepositArgs | ClaimArgs | UpdateConfigArgs;
   instantiate?: InstantiateMsg;
@@ -40,6 +44,7 @@ export interface BatchResponse {
   btc_requested: string;
   collected_amount: string;
   collector_historical_balance: string;
+  maxbtc_burned: string;
 }
 /**
  * Response for querying config
@@ -49,8 +54,8 @@ export interface ConfigResponse {
   aum_contract: string;
   batch_active_duration: number;
   batch_withdrawing_duration: number;
+  deposit_cost: Decimal;
   deposit_denom: string;
-  deposit_fee: Decimal;
   deposit_flush_period: number;
   liquidation_buffer_share: Decimal;
   liquidation_contract: string;
@@ -112,6 +117,10 @@ export interface InstantiateMsg {
    */
   collector_contract: string;
   /**
+   * One-off cost (Decimal) charged when a user deposits to mint maxBTC
+   */
+  deposit_cost: Decimal;
+  /**
    * Number of decimals carried by the `deposit_denom` asset
    */
   deposit_decimals: number;
@@ -119,10 +128,6 @@ export interface InstantiateMsg {
    * Denom for user deposits (e.g. IBC-transferred BTC)
    */
   deposit_denom: string;
-  /**
-   * One-off fee (Decimal) charged when a user deposits to mint maxBTC
-   */
-  deposit_fee: Decimal;
   /**
    * Minimum number of seconds that must elapse between two deposit-flush operations
    */
@@ -216,6 +221,9 @@ export class Client {
   queryFinalizedBatch = async(args: FinalizedBatchArgs): Promise<NullableBatchResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
   }
+  queryContractState = async(): Promise<ContractState> => {
+    return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
+  }
   deposit = async(sender:string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { deposit: args }, fee || "auto", memo, funds);
@@ -235,6 +243,10 @@ export class Client {
   claim = async(sender:string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
+  }
+  processCache = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, { process_cache: {} }, fee || "auto", memo, funds);
   }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }

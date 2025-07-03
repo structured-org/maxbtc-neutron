@@ -46,7 +46,7 @@ pub fn instantiate(
         batch_withdrawing_duration: msg.batch_withdrawing_duration,
         collected_tolerance: msg.accepted_withdrawable_percentage,
         liquidation_buffer_share: msg.liquidation_buffer_share,
-        deposit_fee: msg.deposit_fee,
+        deposit_cost: msg.deposit_cost,
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_er_ttl,
         deposits_cap: msg.deposits_cap,
@@ -81,7 +81,7 @@ pub fn instantiate(
 
     // Create the maxBTC denom
     let create_maxbtc_denom_msg =
-        create_tokenfactory_create_denom_msg(env.clone(), cfg.maxbtc_denom.clone())?;
+        create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
 
     // Initialise the FSM in the Idle state
     FSM.set_initial_state(deps.storage, ContractState::Idle)?;
@@ -116,7 +116,7 @@ pub fn instantiate(
             "liquidation_buffer_share",
             cfg.liquidation_buffer_share.to_string(),
         )
-        .add_attribute("deposit_fee", cfg.deposit_fee.to_string()))
+        .add_attribute("deposit_cost", cfg.deposit_cost.to_string()))
 }
 
 #[entry_point]
@@ -133,6 +133,13 @@ pub fn execute(
         ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
         ExecuteMsg::ProcessActiveBatch {} => execute_process_active_batch(deps, env, info),
         ExecuteMsg::Claim { recipient } => execute_claim(deps, env, info, recipient),
+        ExecuteMsg::ProcessCache {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let msgs = _process_cache(deps, env, &cfg)?;
+            Ok(Response::new()
+                .add_messages(msgs)
+                .add_attribute("action", "process_cache"))
+        }
     }
 }
 
@@ -186,8 +193,8 @@ fn execute_update_config(
     if let Some(v) = updates.liquidation_buffer_share {
         cfg.liquidation_buffer_share = v;
     }
-    if let Some(v) = updates.deposit_fee {
-        cfg.deposit_fee = v;
+    if let Some(v) = updates.deposit_cost {
+        cfg.deposit_cost = v;
     }
     if let Some(v) = updates.cached_aum_tolerance {
         cfg.deposit_buffer_tolerance = v;
@@ -249,7 +256,7 @@ pub(crate) fn execute_deposit(
         .map_err(|_| ContractError::InvalidDepositAmount {})?;
 
     // Apply the deposit fee and divide by exchange rate
-    let fee_multiplier = Decimal::one() - cfg.deposit_fee;
+    let fee_multiplier = Decimal::one() - cfg.deposit_cost;
 
     // CosmWasm's Decimal always uses 18 digits internally, so scale down
     // to match cfg.deposit_decimals (e.g., 6) before minting.
@@ -263,7 +270,7 @@ pub(crate) fn execute_deposit(
 
     // Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(
-        env.clone(),
+        &env.clone(),
         recipient.clone(),
         Coin {
             amount: minted_amount,
@@ -328,21 +335,6 @@ pub(crate) fn execute_flush_deposits(
         cfg.deposit_decimals,
     )?;
 
-    // Cache the exchange rate and oracle_aum + deposit_buffer value, because we need it
-    // in process_cache() to check whether the deposit reached Binance / Solana
-    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg, None)?;
-    CACHED_ER.save(
-        deps.storage,
-        &Some(CachedER {
-            er,
-            timeout: now + cfg.cached_er_ttl,
-            aum: Some(CachedAUM {
-                oracle_aum: aum.oracle_aum,
-                deposit_buffer: aum.deposit_buffer,
-            }),
-        }),
-    )?;
-
     // If liquidation buffer contract < required => send the difference
     if aum.liquidation_buffer_contract < required_buffer {
         let mut to_send_to_liquidation_buffer_contract =
@@ -379,6 +371,24 @@ pub(crate) fn execute_flush_deposits(
         }
     }
 
+    // Cache the exchange rate, oracle_aum and deposit_buffer value, because we need it
+    // in process_cache() to check whether the deposit reached Binance / Solana.
+    // Note: we store `amount_to_flush` to `deposit_buffer` because that's how much will
+    // reach the remote chain. Saving `aum.deposit_buffer` would lead to _process_cache_flushing()
+    // expect more than was actually flushed.
+    let er = get_exchange_rate(&deps.as_ref(), env.clone(), &cfg, None)?;
+    CACHED_ER.save(
+        deps.storage,
+        &Some(CachedER {
+            er,
+            timeout: now + cfg.cached_er_ttl,
+            aum: Some(CachedAUM {
+                oracle_aum: aum.oracle_aum,
+                deposit_buffer: amount_to_flush,
+            }),
+        }),
+    )?;
+
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
     // Eureka
     if !amount_to_flush.is_zero() {
@@ -412,6 +422,7 @@ pub(crate) fn execute_withdraw(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
     let mut msgs = _process_cache(deps.branch(), env.clone(), &cfg)?;
 
     // Input funds validation happens here
@@ -421,8 +432,11 @@ pub(crate) fn execute_withdraw(
     )?;
 
     // Burn the maxBTC from user
-    let burn_msg =
-        create_tokenfactory_burn_msg(env.clone(), burned_amount.clone(), info.sender.to_string())?;
+    let burn_msg = create_tokenfactory_burn_msg(
+        env.clone(),
+        burned_amount.clone(),
+        env.contract.address.to_string(),
+    )?;
     msgs.push(burn_msg);
 
     // Update the maxbtc_burned amount in the active batch
@@ -434,14 +448,36 @@ pub(crate) fn execute_withdraw(
 
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = burned_amount.amount;
+
+    let redemption_denom_base = format!("redemption/batch/{}", active_batch.batch_id);
+    let redemption_denom_full =
+        cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id);
+    match deps
+        .querier
+        .query_denom_metadata(redemption_denom_full.clone())
+    {
+        Ok(_) => {}
+        Err(err) => {
+            // TODO: is there a better way?
+            // TODO: comes from cosmos-sdk/types/errors/errors.go:
+            // TODO: ErrNotFound = errorsmod.Register(RootCodespace, 38, "not found")
+            if !err.to_string().contains("code: 38") {
+                return Err(ContractError::Std(err));
+            }
+            msgs.push(create_tokenfactory_create_denom_msg(
+                &env,
+                redemption_denom_base.clone(),
+            )?)
+        }
+    }
+
     // Construct a message to mint redemption tokens
-    let redemption_denom = format!("redemption/batch/{}", active_batch.batch_id);
     let mint_redemption_msg = create_tokenfactory_mint_msg(
-        env,
+        &env,
         info.sender.to_string(),
         Coin {
             amount: minted_redemption,
-            denom: redemption_denom.clone(),
+            denom: redemption_denom_full.clone(),
         },
     )?;
 
@@ -472,7 +508,10 @@ pub(crate) fn execute_process_active_batch(
     let active_start_time = ACTIVE_BATCH_START_TIME.load(deps.storage)?;
 
     if now < active_start_time + cfg.batch_active_duration {
-        return Err(ContractError::CannotProcessActiveBatchYet {});
+        return Ok(Response::new()
+            .add_messages(msgs)
+            .add_attribute("action", "process_active_batch")
+            .add_attribute("status", "not_enough_time_elapsed"));
     }
 
     // If the active batch has no redemption tokens minted,
@@ -487,7 +526,6 @@ pub(crate) fn execute_process_active_batch(
     if redemption_token_supply.is_zero() {
         // reset the start_time to now, so the next cycle begins
         ACTIVE_BATCH_START_TIME.save(deps.storage, &now)?;
-
         return Ok(Response::new()
             .add_messages(msgs)
             .add_attribute("action", "process_active_batch")
@@ -504,7 +542,6 @@ pub(crate) fn execute_process_active_batch(
         paid_amount: Uint128::zero(),
         collector_historical_balance: Uint128::zero(),
     };
-
     // Record collector_historical_balance
     let collector_balance = deps
         .querier
@@ -517,8 +554,10 @@ pub(crate) fn execute_process_active_batch(
     // The total BTC requested = total_redemption_supply * er.
     // Note: all of our tokens have the same number of decimals as the
     // deposit denom.
-    let btc_requested = er * Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?;
-    withdrawing_batch.btc_requested = btc_requested.atomics();
+    withdrawing_batch.btc_requested = dec_to_amount(
+        er * Decimal::from_atomics(redemption_token_supply, cfg.deposit_decimals)?,
+        cfg.deposit_decimals,
+    )?;
 
     // Save it in WITHDRAWING_BATCH
     WITHDRAWING_BATCH.save(deps.storage, &Some(withdrawing_batch.clone()))?;
@@ -813,7 +852,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 batch_withdrawing_duration: cfg.batch_withdrawing_duration,
                 accepted_withdrawable_percentage: cfg.collected_tolerance,
                 liquidation_buffer_share: cfg.liquidation_buffer_share,
-                deposit_fee: cfg.deposit_fee,
+                deposit_cost: cfg.deposit_cost,
             };
             Ok(to_json_binary(&resp)?)
         }
@@ -824,6 +863,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
+                maxbtc_burned: b.maxbtc_burned.to_string(),
             });
             Ok(to_json_binary(&resp)?)
         }
@@ -834,6 +874,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
+                maxbtc_burned: b.maxbtc_burned.to_string(),
             });
             Ok(to_json_binary(&resp)?)
         }
@@ -844,8 +885,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 btc_requested: b.btc_requested.to_string(),
                 collected_amount: b.collected_amount.to_string(),
                 collector_historical_balance: b.collector_historical_balance.to_string(),
+                maxbtc_burned: b.maxbtc_burned.to_string(),
             });
             Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::ContractState {} => {
+            let state = FSM.get_current_state(deps.storage)?;
+            Ok(to_json_binary(&state)?)
         }
     }
 }
@@ -877,7 +923,11 @@ fn query_maxbtc_supply(deps: &Deps, cfg: &Config, env: &Env) -> StdResult<Uint12
 }
 
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
-fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> StdResult<CosmosMsg> {
+fn create_tokenfactory_mint_msg(
+    env: &Env,
+    recipient: String,
+    amount: Coin,
+) -> StdResult<CosmosMsg> {
     Ok(Into::<CosmosMsg>::into(MsgMint {
         sender: env.contract.address.to_string(),
         amount: Some(BaseCoin::from(amount)),
@@ -886,7 +936,7 @@ fn create_tokenfactory_mint_msg(env: Env, recipient: String, amount: Coin) -> St
 }
 
 /// Creates a message to create a tokenfactory denom.
-fn create_tokenfactory_create_denom_msg(env: Env, denom: String) -> StdResult<CosmosMsg> {
+fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<CosmosMsg> {
     Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
         sender: env.contract.address.to_string(),
         subdenom: denom,

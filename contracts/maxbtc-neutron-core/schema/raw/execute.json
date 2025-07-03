@@ -91,6 +91,20 @@
       "additionalProperties": false
     },
     {
+      "description": "Triggers the execution of _process_cache",
+      "type": "object",
+      "required": [
+        "process_cache"
+      ],
+      "properties": {
+        "process_cache": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Owner-only message to update protocol configuration in-place",
       "type": "object",
       "required": [
@@ -173,7 +187,7 @@
             "null"
           ]
         },
-        "deposit_fee": {
+        "deposit_cost": {
           "anyOf": [
             {
               "$ref": "#/definitions/Decimal"

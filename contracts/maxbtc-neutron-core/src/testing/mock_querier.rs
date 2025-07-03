@@ -1,8 +1,9 @@
 use crate::msg::{LiquidationBufferContractQueryMsg, OracleQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, Empty, OwnedDeps,
-    Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, DenomMetadata,
+    DenomMetadataResponse, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
+    SystemResult, Uint128, WasmQuery,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,8 @@ pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
 
     supplies: HashMap<String, Uint128>,
+
+    redemption_tokens_denom_metadata: HashMap<String, bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -73,6 +76,7 @@ impl WasmMockQuerier {
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
+            redemption_tokens_denom_metadata: Default::default(),
         }
     }
 
@@ -125,6 +129,23 @@ impl WasmMockQuerier {
                 self.base
                     .handle_query(&QueryRequest::Bank(BankQuery::Supply { denom }))
             }
+            BankQuery::DenomMetadata { denom } => {
+                if self
+                    .redemption_tokens_denom_metadata
+                    .contains_key(denom.as_str())
+                {
+                    return SystemResult::Ok(ContractResult::Ok(
+                        to_json_binary(&DenomMetadataResponse::new(DenomMetadata::default()))
+                            .unwrap(),
+                    ));
+                }
+                SystemResult::Err(SystemError::InvalidRequest {
+                    // This is not the actual error, but this is part of what neutrond
+                    // will return
+                    error: "code: 38".to_string(),
+                    request: Default::default(),
+                })
+            }
             // For other queries, fallback to base
             _ => self.base.handle_query(&QueryRequest::Bank(query)),
         }
@@ -169,16 +190,16 @@ impl WasmMockQuerier {
         if contract_addr == "cosmwasm1cse2m3gz5qxynp4t5hh5sg0zyn9gskys3u9ac360qmftvhw6pqlqutnz9j" {
             let parsed: Result<LiquidationBufferContractQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
-                match q {
+                return match q {
                     LiquidationBufferContractQueryMsg::GetMaxBTCBalance {} => {
                         let val = self.liqbuffer_maxbtc_balance;
-                        return SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()));
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                     LiquidationBufferContractQueryMsg::GetBTCBalance {} => {
                         let val = self.liqbuffer_btc_balance;
-                        return SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()));
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
-                }
+                };
             }
             // If parse failed or unsupported => fallback
             return self

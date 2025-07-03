@@ -1,4 +1,4 @@
-import { CosmWasmClient, SigningCosmWasmClient, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
@@ -31,8 +31,12 @@ export type Uint128 = string;
 export type Uint1281 = string;
 export interface MaxbtcNeutronAumOracleSchema {
     responses: Uint128;
+    execute: UpdateConfigArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+export interface UpdateConfigArgs {
+    aum: Uint1281;
 }
 export interface InstantiateMsg {
     aum?: Uint1281 | null;
@@ -45,4 +49,5 @@ export declare class Client {
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     queryGetAUM: () => Promise<Uint128>;
+    updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

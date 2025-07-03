@@ -108,4 +108,3 @@ pub async fn query_skip_api(
         })
     }
 }
-

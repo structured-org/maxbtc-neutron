@@ -38,6 +38,9 @@ class Client {
     queryFinalizedBatch = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
     };
+    queryContractState = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
+    };
     deposit = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();
@@ -67,6 +70,12 @@ class Client {
             throw this.mustBeSigningClient();
         }
         return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
+    };
+    processCache = async (sender, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, { process_cache: {} }, fee || "auto", memo, funds);
     };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {

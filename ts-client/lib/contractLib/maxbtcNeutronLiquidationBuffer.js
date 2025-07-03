@@ -38,5 +38,11 @@ class Client {
         }
         return this.client.execute(sender, this.contractAddress, { claw_back: args }, fee || "auto", memo, funds);
     };
+    updateConfig = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, { update_config: args }, fee || "auto", memo, funds);
+    };
 }
 exports.Client = Client;

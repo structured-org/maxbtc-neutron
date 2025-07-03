@@ -22,6 +22,31 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "update_config"
+      ],
+      "properties": {
+        "update_config": {
+          "type": "object",
+          "required": [
+            "owned_btc",
+            "owned_maxbtc"
+          ],
+          "properties": {
+            "owned_btc": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "owned_maxbtc": {
+              "$ref": "#/definitions/Uint128"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {

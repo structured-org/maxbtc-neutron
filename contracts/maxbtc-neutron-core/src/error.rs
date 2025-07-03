@@ -30,9 +30,6 @@ pub enum ContractError {
     #[error("Batch not in FINALIZED state")]
     BatchNotFinalized {},
 
-    #[error("Cannot process active batch yet (still within active duration)")]
-    CannotProcessActiveBatchYet {},
-
     #[error("Cannot finalize withdrawing batch yet (still within withdrawing duration)")]
     CannotFinalizeWithdrawingBatchYet {},
 

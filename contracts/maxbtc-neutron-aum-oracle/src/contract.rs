@@ -32,12 +32,17 @@ pub fn instantiate(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    _msg: ExecuteMsg,
+    msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
-    unimplemented!()
+    match msg {
+        ExecuteMsg::UpdateConfig { aum } => {
+            CONFIG.save(deps.storage, &Config { aum })?;
+            Ok(Response::new().add_attribute("action", "update_config"))
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
