@@ -571,6 +571,16 @@ describe('Core', () => {
         const coreBalanceAfterNextFlush = await client.getBalance(coreContractAddress, 'untrn');
         expect(coreBalanceAfterNextFlush.amount).toEqual("0");
         console.log("Successfully flushed the deposit that was made during the previous flush cycle.");
+
+        console.log("Resetting the testing environment to IDLE...");
+        await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
+        await aumOracleContractClient.updateConfig(account.address, { aum: (flushedAmount + 36000).toString() }, 'auto');
+
+        // Trigger _process_cache to check the flush status and transition back to Idle
+        await coreContractClient.processCache(account.address, 1.5);
+        currentState = await coreContractClient.queryContractState();
+        expect(currentState).toEqual('idle');
+        console.log("Contract has returned to IDLE state.");
     });
 
     it('should reject new state transitions while not in IDLE state', async () => {
@@ -593,7 +603,7 @@ describe('Core', () => {
         // 2. Attempt to call flushDeposits (requires IDLE)
         console.log("Attempting to call flushDeposits from WITHDRAWING state (expected to fail)...");
         await expect(coreContractClient.flushDeposits(account.address, 'auto')).rejects.toThrow(
-            /Invalid contract state/
+            /This FSM transition is not allowed/
         );
         console.log("Correctly rejected flushDeposits.");
 
@@ -622,7 +632,7 @@ describe('Core', () => {
 
         console.log("Attempting to call processActiveBatch from FLUSHING state (expected to fail)...");
         await expect(coreContractClient.processActiveBatch(account.address, 'auto')).rejects.toThrow(
-            /Invalid contract state/
+            /This FSM transition is not allowed/
         );
         console.log("Correctly rejected processActiveBatch. Test complete.");
     });

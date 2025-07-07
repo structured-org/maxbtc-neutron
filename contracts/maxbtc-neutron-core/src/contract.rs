@@ -449,30 +449,17 @@ pub(crate) fn execute_withdraw(
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = burned_amount.amount;
 
-    deps.api.debug(">>>>>>>>>>>>>>>>>> 1");
     let redemption_denom_base = format!("redemption/batch/{}", active_batch.batch_id);
     let redemption_denom_full =
         cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id);
-    match deps
+    let total_redemption_supply = deps
         .querier
-        .query_denom_metadata(redemption_denom_full.clone())
-    {
-        Ok(_) => {}
-        Err(err) => {
-            deps.api.debug(">>>>>>>>>>>>>>>>>> 2");
-            deps.api.debug(format!(">>>>>>>>>>>>>>>>>> {:?} {}", err, redemption_denom_full).as_str());
-
-            // TODO: is there a better way?
-            // TODO: comes from cosmos-sdk/types/errors/errors.go:
-            // TODO: ErrNotFound = errorsmod.Register(RootCodespace, 38, "not found")
-            if !err.to_string().contains("code: 38") {
-                return Err(ContractError::Std(err));
-            }
-            msgs.push(create_tokenfactory_create_denom_msg(
-                &env,
-                redemption_denom_base.clone(),
-            )?)
-        }
+        .query_supply(redemption_denom_full.clone())?;
+    if total_redemption_supply.amount.is_zero() {
+        msgs.push(create_tokenfactory_create_denom_msg(
+            &env,
+            redemption_denom_base.clone(),
+        )?)
     }
 
     // Construct a message to mint redemption tokens

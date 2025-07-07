@@ -43,10 +43,9 @@ const networkConfigs = {
     "loglevel": "debug",
     "trace": true,
     "public": true,
-    "validators": 2,
+    "validators": 1,
     "validators_balance": [
       "1900000000",
-      "100000000"
     ],
     "upload": [
       "./artifacts/contracts",
