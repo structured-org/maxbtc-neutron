@@ -10,24 +10,10 @@ IBCATOMDENOM=${IBCATOMDENOM:-uibcatom}
 IBCUSDCDENOM=${IBCUSDCDENOM:-uibcusdc}
 CONTRACTS_BINARIES_DIR=${CONTRACTS_BINARIES_DIR:-/opt/contracts}
 THIRD_PARTY_CONTRACTS_DIR=${THIRD_PARTY_CONTRACTS_DIR:-/opt/contracts_thirdparty}
-FEEMARKET_ENABLED=false
-ADMIN_MODULE_ADDRESS="neutron1hxskfdxpp5hqgtjj6am6nkjefhfzj359x0ar3z"
-
 
 # DEMO_MNEMONIC_2="veteran try aware erosion drink dance decade comic dawn museum release episode original list ability owner size tuition surface ceiling depth seminar capable only"
 # echo "$DEMO_MNEMONIC_2" | $BINARY keys add demowallet2 --home "$CHAIN_DIR" --recover --keyring-backend=test
 # $BINARY add-genesis-account "$($BINARY --home "$CHAIN_DIR" keys show demowallet2 --keyring-backend test -a --home "$CHAIN_DIR")" "100000000000000$STAKEDENOM,100000000000000$IBCATOMDENOM,100000000000000$IBCUSDCDENOM"  --home "$CHAIN_DIR"
-
-# IMPORTANT! minimum_gas_prices should always contain at least one record, otherwise the chain will not start or halt
-# ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2 denom is required by intgration tests (test:tokenomics)
-MIN_GAS_PRICES_DEFAULT='[{"denom":"ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2","amount":"0"},{"denom":"untrn","amount":"0"}]'
-MIN_GAS_PRICES=${MIN_GAS_PRICES:-"$MIN_GAS_PRICES_DEFAULT"}
-
-BYPASS_MIN_FEE_MSG_TYPES_DEFAULT='["/ibc.core.channel.v1.Msg/RecvPacket", "/ibc.core.channel.v1.Msg/Acknowledgement", "/ibc.core.client.v1.Msg/UpdateClient"]'
-BYPASS_MIN_FEE_MSG_TYPES=${BYPASS_MIN_FEE_MSG_TYPES:-"$BYPASS_MIN_FEE_MSG_TYPES_DEFAULT"}
-
-MAX_TOTAL_BYPASS_MIN_FEE_MSG_GAS_USAGE_DEFAULT=1000000
-MAX_TOTAL_BYPASS_MIN_FEE_MSG_GAS_USAGE=${MAX_TOTAL_BYPASS_MIN_FEE_MSG_GAS_USAGE:-"$MAX_TOTAL_BYPASS_MIN_FEE_MSG_GAS_USAGE_DEFAULT"}
 
 GENESIS_PATH="$CHAIN_DIR/config/genesis.json"
 
@@ -56,18 +42,27 @@ SUBDAO_PRE_PROPOSE_CONTRACT=$CONTRACTS_BINARIES_DIR/cwd_subdao_pre_propose_singl
 SUBDAO_PROPOSAL_CONTRACT=$CONTRACTS_BINARIES_DIR/cwd_subdao_proposal_single.wasm
 CW4_VOTING_CONTRACT=$THIRD_PARTY_CONTRACTS_DIR/cw4_voting.wasm
 CW4_GROUP_CONTRACT=$THIRD_PARTY_CONTRACTS_DIR/cw4_group.wasm
+
 NEUTRON_CHAIN_MANAGER_CONTRACT=$CONTRACTS_BINARIES_DIR/neutron_chain_manager.wasm
 
+NEUTRON_STAKING_VAULT_CONTRACT=$CONTRACTS_BINARIES_DIR/neutron_staking_vault.wasm
+NEUTRON_STAKING_TRACKER_CONTRACT=$CONTRACTS_BINARIES_DIR/neutron_staking_tracker.wasm
+NEUTRON_STAKING_REWARDS_CONTRACT=$CONTRACTS_BINARIES_DIR/neutron_staking_rewards.wasm
+NEUTRON_STAKING_INFO_PROXY_CONTRACT=$CONTRACTS_BINARIES_DIR/neutron_staking_info_proxy.wasm
 
-echo "Add consumer section..."
-$BINARY add-consumer-section --home "$CHAIN_DIR"
+# Slinky genesis configs
+USE_CORE_MARKETS=${USE_CORE_MARKETS:-true}
+USE_RAYDIUM_MARKETS=${USE_RAYDIUM_MARKETS:-false}
+USE_UNISWAPV3_BASE_MARKETS=${USE_UNISWAPV3_BASE_MARKETS:-false}
+USE_COINGECKO_MARKETS=${USE_COINGECKO_MARKETS:-false}
+
+# echo "Add consumer section..."
+# $BINARY add-consumer-section --home "$CHAIN_DIR"
+# echo "Creating and collecting gentx..."
+# $BINARY  gentx val1 "1000000$STAKEDENOM" --home "$CHAIN_DIR" --chain-id "$CHAINID" --keyring-backend test
+# $BINARY  collect-gentxs --home "$CHAIN_DIR"
+
 ### PARAMETERS SECTION
-
-## slashing params
-SLASHING_SIGNED_BLOCKS_WINDOW=140000
-SLASHING_MIN_SIGNED=0.050000000000000000
-SLASHING_FRACTION_DOUBLE_SIGN=0.010000000000000000
-SLASHING_FRACTION_DOWNTIME=0.000100000000000000
 
 ##pre propose single parameters
 PRE_PROPOSAL_SINGLE_AMOUNT=1000
@@ -101,8 +96,6 @@ PROPOSAL_OVERRULE_CLOSE_PROPOSAL_ON_EXECUTION_FAILURE=false
 PROPOSAL_OVERRULE_THRESHOLD=0.005 # around 10 times lower than for regular proposals
 PROPOSAL_OVERRULE_LABEL="neutron.proposals.overrule"
 PRE_PROPOSE_OVERRULE_LABEL="neutron.proposals.overrule.pre_propose"
-NEUTRON_CHAIN_MANAGER_LABEL="neutron.chain.manager"
-
 
 ## Voting registry
 VOTING_REGISTRY_LABEL="neutron.voting"
@@ -150,6 +143,19 @@ SECURITY_SUBDAO_PROPOSAL_LABEL="neutron.subdaos.security.proposals.single"
 SECURITY_SUBDAO_PRE_PROPOSE_LABEL="neutron.subdaos.security.proposals.single.pre_propose"
 SECURITY_SUBDAO_VOTE_LABEL="neutron.subdaos.security.voting"
 
+NEUTRON_CHAIN_MANAGER_LABEL="neutron.chain.manager"
+
+NEUTRON_STAKING_VAULT_NAME="Neutron Staking Vault"
+NEUTRON_STAKING_VAULT_DESCRIPTION="Vault that gives voting power from a native delegations to validators"
+NEUTRON_STAKING_VAULT_LABEL="neutron.voting.vaults.staking"
+
+NEUTRON_STAKING_TRACKER_NAME="Neutron Staking Tracker"
+NEUTRON_STAKING_TRACKER_DESCRIPTION="Tracks the Staking module for querying historical voting power and notifying about staking changes"
+NEUTRON_STAKING_TRACKER_LABEL="neutron.staking_tracker"
+
+NEUTRON_STAKING_REWARDS_LABEL="neutron.staking_rewards"
+NEUTRON_STAKING_INFO_PROXY_LABEL="neutron.staking_proxy"
+
 echo "Initializing dao contract in genesis..."
 
 function store_binary() {
@@ -184,8 +190,13 @@ SUBDAO_PRE_PROPOSE_BINARY_ID=$(store_binary             "$SUBDAO_PRE_PROPOSE_CON
 SUBDAO_PROPOSAL_BINARY_ID=$(store_binary                "$SUBDAO_PROPOSAL_CONTRACT")
 CW4_VOTING_CONTRACT_BINARY_ID=$(store_binary            "$CW4_VOTING_CONTRACT")
 CW4_GROUP_CONTRACT_BINARY_ID=$(store_binary             "$CW4_GROUP_CONTRACT")
+
 NEUTRON_CHAIN_MANAGER_BINARY_ID=$(store_binary          "$NEUTRON_CHAIN_MANAGER_CONTRACT")
 
+NEUTRON_STAKING_TRACKER_BINARY_ID=$(store_binary        "$NEUTRON_STAKING_TRACKER_CONTRACT")
+NEUTRON_STAKING_VAULT_BINARY_ID=$(store_binary          "$NEUTRON_STAKING_VAULT_CONTRACT")
+NEUTRON_STAKING_REWARDS_BINARY_ID=$(store_binary        "$NEUTRON_STAKING_REWARDS_CONTRACT")
+NEUTRON_STAKING_INFO_PROXY_BINARY_ID=$(store_binary     "$NEUTRON_STAKING_INFO_PROXY_CONTRACT")
 
 # WARNING!
 # The following code is needed to pre-generate the contract addresses
@@ -235,8 +246,12 @@ GRANTS_SUBDAO_PROPOSAL_CONTRACT_ADDRESS=$(genaddr      "$SUBDAO_PROPOSAL_BINARY_
 GRANTS_SUBDAO_PRE_PROPOSE_CONTRACT_ADDRESS=$(genaddr   "$SUBDAO_PRE_PROPOSE_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
 GRANTS_SUBDAO_TIMELOCK_CONTRACT_ADDRESS=$(genaddr      "$SUBDAO_TIMELOCK_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
 GRANTS_SUBDAO_GROUP_CONTRACT_ADDRESS=$(genaddr         "$CW4_GROUP_CONTRACT_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
-NEUTRON_CHAIN_MANAGER_CONTRACT_ADDRESS=$(genaddr       "$NEUTRON_CHAIN_MANAGER_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
 
+NEUTRON_CHAIN_MANAGER_CONTRACT_ADDRESS=$(genaddr       "$NEUTRON_CHAIN_MANAGER_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
+NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS=$(genaddr     "$NEUTRON_STAKING_TRACKER_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
+NEUTRON_STAKING_VAULT_CONTRACT_ADDRESS=$(genaddr       "$NEUTRON_STAKING_VAULT_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
+NEUTRON_STAKING_REWARDS_CONTRACT_ADDRESS=$(genaddr     "$NEUTRON_STAKING_REWARDS_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
+NEUTRON_STAKING_INFO_PROXY_CONTRACT_ADDRESS=$(genaddr  "$NEUTRON_STAKING_INFO_PROXY_BINARY_ID") && (( INSTANCE_ID_COUNTER++ ))
 
 function check_json() {
   MSG=$1
@@ -374,7 +389,8 @@ VOTING_REGISTRY_INIT_MSG='{
   "owner": "'"$DAO_CONTRACT_ADDRESS"'",
   "voting_vaults": [
     "'"$NEUTRON_VAULT_CONTRACT_ADDRESS"'",
-    "'"$NEUTRON_INVESTORS_VAULT_CONTRACT_ADDRESS"'"
+    "'"$NEUTRON_INVESTORS_VAULT_CONTRACT_ADDRESS"'",
+    "'"$NEUTRON_STAKING_VAULT_CONTRACT_ADDRESS"'"
   ]
 }'
 VOTING_REGISTRY_INIT_MSG_BASE64=$(json_to_base64 "$VOTING_REGISTRY_INIT_MSG")
@@ -626,6 +642,39 @@ NEUTRON_CHAIN_MANAGER_INIT_MSG='{
   "initial_strategy_address": "'"$DAO_CONTRACT_ADDRESS"'"
 }'
 
+NEUTRON_STAKING_VAULT_INIT_MSG='{
+  "staking_tracker_contract_address": "'"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS"'",
+  "name": "'"$NEUTRON_STAKING_VAULT_NAME"'",
+  "description": "'"$NEUTRON_STAKING_VAULT_DESCRIPTION"'",
+  "owner": "'"$DAO_CONTRACT_ADDRESS"'"
+}'
+
+NEUTRON_STAKING_TRACKER_INIT_MSG='{
+  "name": "'"$NEUTRON_STAKING_TRACKER_NAME"'",
+  "description": "'"$NEUTRON_STAKING_TRACKER_DESCRIPTION"'",
+  "owner": "'"$DAO_CONTRACT_ADDRESS"'",
+  "denom": "untrn",
+  "staking_proxy_info_contract_address": "'"$NEUTRON_STAKING_INFO_PROXY_CONTRACT_ADDRESS"'"
+}'
+
+NEUTRON_STAKING_REWARDS_INIT_MSG='{
+  "owner": "'"$DAO_CONTRACT_ADDRESS"'",
+  "annual_reward_rate_bps": 300,
+  "blocks_per_year": 10512000,
+  "dao_address": "'"$DAO_CONTRACT_ADDRESS"'",
+  "security_address": "'"$DAO_CONTRACT_ADDRESS"'",
+  "staking_info_proxy": "'"$NEUTRON_STAKING_INFO_PROXY_CONTRACT_ADDRESS"'",
+  "staking_denom": "untrn"
+}'
+
+NEUTRON_STAKING_INFO_PROXY_INIT_MSG='{
+  "owner": "'"$DAO_CONTRACT_ADDRESS"'",
+  "staking_rewards": "'"$NEUTRON_STAKING_REWARDS_CONTRACT_ADDRESS"'",
+  "staking_denom": "untrn",
+  "providers": [
+    "'"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS"'"
+  ]
+}'
 
 echo "Instantiate contracts"
 
@@ -642,16 +691,19 @@ function init_contract() {
 # The following code is to add contracts instantiations messages to genesis
 # It affects the section of predicting contracts addresses at the beginning of the script
 # If you're to do any changes, please do it consistently in both sections
-init_contract "$NEUTRON_VAULT_CONTRACT_BINARY_ID"            "$NEUTRON_VAULT_INIT"             "$NEUTRON_VAULT_LABEL"
-init_contract "$NEUTRON_INVESTORS_VAULT_CONTRACT_BINARY_ID"  "$NEUTRON_INVESTORS_VAULT_INIT"   "$NEUTRON_INVESTORS_VAULT_LABEL"
-init_contract "$NEUTRON_VESTING_INVESTORS_BINARY_ID"         "$NEUTRON_VESTING_INVESTORS_INIT"  "$NEUTRON_VESTING_INVESTORS_LABEL"
-init_contract "$DAO_CONTRACT_BINARY_ID"                      "$DAO_INIT"                       "$DAO_CORE_LABEL"
-init_contract "$RESERVE_CONTRACT_BINARY_ID"                  "$RESERVE_INIT"                   "$RESERVE_LABEL"
-init_contract "$DISTRIBUTION_CONTRACT_BINARY_ID"             "$DISTRIBUTION_INIT"              "$DISTRIBUTION_LABEL"
-init_contract "$SUBDAO_CORE_BINARY_ID"                       "$SECURITY_SUBDAO_CORE_INIT_MSG"  "$SECURITY_SUBDAO_CORE_LABEL"
-init_contract "$SUBDAO_CORE_BINARY_ID"                       "$GRANTS_SUBDAO_CORE_INIT_MSG"    "$GRANTS_SUBDAO_CORE_LABEL"
-init_contract "$NEUTRON_CHAIN_MANAGER_BINARY_ID"             "$NEUTRON_CHAIN_MANAGER_INIT_MSG" "$NEUTRON_CHAIN_MANAGER_LABEL"
-
+init_contract "$NEUTRON_VAULT_CONTRACT_BINARY_ID"            "$NEUTRON_VAULT_INIT"               "$NEUTRON_VAULT_LABEL"
+init_contract "$NEUTRON_INVESTORS_VAULT_CONTRACT_BINARY_ID"  "$NEUTRON_INVESTORS_VAULT_INIT"     "$NEUTRON_INVESTORS_VAULT_LABEL"
+init_contract "$NEUTRON_VESTING_INVESTORS_BINARY_ID"         "$NEUTRON_VESTING_INVESTORS_INIT"   "$NEUTRON_VESTING_INVESTORS_LABEL"
+init_contract "$DAO_CONTRACT_BINARY_ID"                      "$DAO_INIT"                         "$DAO_CORE_LABEL"
+init_contract "$RESERVE_CONTRACT_BINARY_ID"                  "$RESERVE_INIT"                     "$RESERVE_LABEL"
+init_contract "$DISTRIBUTION_CONTRACT_BINARY_ID"             "$DISTRIBUTION_INIT"                "$DISTRIBUTION_LABEL"
+init_contract "$SUBDAO_CORE_BINARY_ID"                       "$SECURITY_SUBDAO_CORE_INIT_MSG"    "$SECURITY_SUBDAO_CORE_LABEL"
+init_contract "$SUBDAO_CORE_BINARY_ID"                       "$GRANTS_SUBDAO_CORE_INIT_MSG"      "$GRANTS_SUBDAO_CORE_LABEL"
+init_contract "$NEUTRON_CHAIN_MANAGER_BINARY_ID"             "$NEUTRON_CHAIN_MANAGER_INIT_MSG"   "$NEUTRON_CHAIN_MANAGER_LABEL"
+init_contract "$NEUTRON_STAKING_TRACKER_BINARY_ID"           "$NEUTRON_STAKING_TRACKER_INIT_MSG" "$NEUTRON_STAKING_TRACKER_LABEL"
+init_contract "$NEUTRON_STAKING_VAULT_BINARY_ID"             "$NEUTRON_STAKING_VAULT_INIT_MSG"   "$NEUTRON_STAKING_VAULT_LABEL"
+init_contract "$NEUTRON_STAKING_REWARDS_BINARY_ID"           "$NEUTRON_STAKING_REWARDS_INIT_MSG"    "$NEUTRON_STAKING_REWARDS_LABEL"
+init_contract "$NEUTRON_STAKING_INFO_PROXY_BINARY_ID"        "$NEUTRON_STAKING_INFO_PROXY_INIT_MSG" "$NEUTRON_STAKING_INFO_PROXY_LABEL"
 
 ADD_SUBDAOS_MSG='{
   "update_sub_daos": {
@@ -727,36 +779,41 @@ function convert_bech32_base64_esc() {
 DAO_CONTRACT_ADDRESS_B64=$(convert_bech32_base64_esc "$DAO_CONTRACT_ADDRESS")
 echo $DAO_CONTRACT_ADDRESS_B64
 
+echo "Adding marketmap into genesis..."
+go run network/slinky_genesis.go --use-core=$USE_CORE_MARKETS --use-raydium=$USE_RAYDIUM_MARKETS --use-uniswapv3-base=$USE_UNISWAPV3_BASE_MARKETS --use-coingecko=$USE_COINGECKO_MARKETS --temp-file=markets.json
+MARKETS=$(cat markets.json)
+
+NUM_MARKETS=$(echo "$MARKETS" | jq '.markets | length + 1')
+
+NUM_MARKETS=$NUM_MARKETS; jq --arg num "$NUM_MARKETS" '.app_state["oracle"]["next_id"] = $num' "$GENESIS_PATH" > genesis_tmp.json && mv genesis_tmp.json "$GENESIS_PATH"
+MARKETS=$MARKETS; jq --arg markets "$MARKETS" '.app_state["marketmap"]["market_map"] = ($markets | fromjson)' "$GENESIS_PATH" > genesis_tmp.json && mv genesis_tmp.json "$GENESIS_PATH"
+MARKETS=$MARKETS; jq --arg markets "$MARKETS" '.app_state["oracle"]["currency_pair_genesis"] += [$markets | fromjson | .markets | values | .[].ticker.currency_pair | {"currency_pair": {"Base": .Base, "Quote": .Quote}, "currency_pair_price": null, "nonce": 0} ]' "$GENESIS_PATH" > genesis_tmp.json && mv genesis_tmp.json "$GENESIS_PATH"
+MARKETS=$MARKETS; jq --arg markets "$MARKETS" '.app_state["oracle"]["currency_pair_genesis"] |= (to_entries | map(.value += {id: (.key + 1)} | .value))' "$GENESIS_PATH" > genesis_tmp.json && mv genesis_tmp.json "$GENESIS_PATH"
+
+rm markets.json
+
+echo "Setting the rest of Neutron genesis params..."
 set_genesis_param admins                                 "[\"$NEUTRON_CHAIN_MANAGER_CONTRACT_ADDRESS\"]"  # admin module
 set_genesis_param treasury_address                       "\"$DAO_CONTRACT_ADDRESS\""                      # feeburner
-set_genesis_param fee_collector_address                  "\"$DAO_CONTRACT_ADDRESS\","                      # tokenfactory
-set_genesis_param security_address                       "\"$SECURITY_SUBDAO_CORE_CONTRACT_ADDRESS\","    # cron
-set_genesis_param limit                                  5                                                # cron
-#set_genesis_param allow_messages                        "[\"*\"]"                                        # interchainaccounts
-set_genesis_param signed_blocks_window                   "\"$SLASHING_SIGNED_BLOCKS_WINDOW\","            # slashing
-set_genesis_param min_signed_per_window                  "\"$SLASHING_MIN_SIGNED\","                      # slashing
-set_genesis_param slash_fraction_double_sign             "\"$SLASHING_FRACTION_DOUBLE_SIGN\","            # slashing
-set_genesis_param slash_fraction_downtime                "\"$SLASHING_FRACTION_DOWNTIME\""                # slashing
-set_genesis_param minimum_gas_prices                     "$MIN_GAS_PRICES,"                               # globalfee
-set_genesis_param max_total_bypass_min_fee_msg_gas_usage "\"$MAX_TOTAL_BYPASS_MIN_FEE_MSG_GAS_USAGE\""    # globalfee
-set_genesis_param_jq ".app_state.globalfee.params.bypass_min_fee_msg_types" "$BYPASS_MIN_FEE_MSG_TYPES"   # globalfee
-set_genesis_param proposer_fee                          "\"0.25\""                                        # builder(POB)
-set_genesis_param escrow_account_address                "\"$DAO_CONTRACT_ADDRESS_B64\","                  # builder(POB)
-set_genesis_param sudo_call_gas_limit                   "\"1000000\""                                     # contractmanager
-set_genesis_param max_gas                               "\"1000000000\""                                  # consensus_params
-set_genesis_param vote_extensions_enable_height         "\"1\""                                           # consensus_params
-set_genesis_param_jq ".app_state.marketmap.params.admin" "\"$ADMIN_MODULE_ADDRESS\""                      # marketmap
-set_genesis_param_jq ".app_state.marketmap.params.market_authorities" "[\"$ADMIN_MODULE_ADDRESS\"]"       # marketmap
-set_genesis_param_jq ".app_state.feemarket.params.min_base_gas_price"    "\"0.0025\""                     # feemarket
-set_genesis_param_jq ".app_state.feemarket.params.fee_denom"       "\"untrn\""                            # feemarket
-set_genesis_param_jq ".app_state.feemarket.params.max_learning_rate" "\"0.5\""                            # feemarket
-set_genesis_param_jq ".app_state.feemarket.params.enabled" "$FEEMARKET_ENABLED"                            # feemarket
-set_genesis_param_jq ".app_state.feemarket.params.distribute_fees" "true"                                 # feemarket
-set_genesis_param_jq ".app_state.feemarket.state.base_gas_price" "\"0.0025\""                             # feemarket
-echo 5
+set_genesis_param fee_collector_address                  "\"$DAO_CONTRACT_ADDRESS\","                     # tokenfactory
+set_genesis_param escrow_account_address                 "\"$DAO_CONTRACT_ADDRESS_B64\","                 # builder(POB)
+set_genesis_param_jq ".app_state.cron.params.security_address" "\"$SECURITY_SUBDAO_CORE_CONTRACT_ADDRESS\"" # cron
+set_genesis_param_jq ".app_state.harpoon.hook_subscriptions" "[
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 1},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 3},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 4},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 5},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 8},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 9},
+                                                               {\"contract_addresses\": ["\"$NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS\""], \"hook_type\": 10}]"
+
 if ! jq -e . "$GENESIS_PATH" >/dev/null 2>&1; then
     echo "genesis appears to become incorrect json" >&2
     exit 1
 fi
 
 echo "DAO $DAO_CONTRACT_ADDRESS"
+echo "STAKING VAULT" $NEUTRON_STAKING_VAULT_CONTRACT_ADDRESS
+echo "STAKING TRACKER" $NEUTRON_STAKING_TRACKER_CONTRACT_ADDRESS
+echo "STAKING_REWARDS" $NEUTRON_STAKING_REWARDS_CONTRACT_ADDRESS
+echo "STAKING INFO PROXY" $NEUTRON_STAKING_INFO_PROXY_CONTRACT_ADDRESS

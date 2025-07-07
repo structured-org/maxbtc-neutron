@@ -449,6 +449,7 @@ pub(crate) fn execute_withdraw(
     // Mint the redemption tokens (1:1 maxBTC burned)
     let minted_redemption = burned_amount.amount;
 
+    deps.api.debug(">>>>>>>>>>>>>>>>>> 1");
     let redemption_denom_base = format!("redemption/batch/{}", active_batch.batch_id);
     let redemption_denom_full =
         cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id);
@@ -458,6 +459,9 @@ pub(crate) fn execute_withdraw(
     {
         Ok(_) => {}
         Err(err) => {
+            deps.api.debug(">>>>>>>>>>>>>>>>>> 2");
+            deps.api.debug(format!(">>>>>>>>>>>>>>>>>> {:?} {}", err, redemption_denom_full).as_str());
+
             // TODO: is there a better way?
             // TODO: comes from cosmos-sdk/types/errors/errors.go:
             // TODO: ErrNotFound = errorsmod.Register(RootCodespace, 38, "not found")

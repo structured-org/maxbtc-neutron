@@ -463,12 +463,8 @@ describe('Core', () => {
         expect(BigInt(pumpBalanceAfter.amount)).toEqual(BigInt(pumpBalanceBefore.amount) + toPump);
         console.log(`Flush successful. Sent ${toBuffer} to buffer, ${toPump} to pump.`);
 
-        // TODO: This assertion doesn't hold because before attempting a state transition,
-        // TODO: we check for many conditions to determine whether we actually need to flush.
-        // TODO: Probably makes sense to make this a separate test case.
-        // // Assert FSM is in 'Flushing' state by attempting another state-changing call, which should fail.
-        // await expect(coreContractClient.flushDeposits(account.address, 'auto')).rejects.toThrow(/Contract is not idle/);
-        // console.log("FSM is in 'Flushing' state as expected.");
+        expect(await coreContractClient.queryContractState()).toEqual('flushing');
+        console.log("FSM is in 'Flushing' state as expected.");
 
         // STEP 3: Finalize the Flush
         // Simulate the off-chain process by updating the AUM oracle with the amount sent to the pump.
@@ -487,5 +483,147 @@ describe('Core', () => {
         const finalDepositRes = await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "testing idle state", [{ denom: "untrn", amount: "1000" }]);
         expect(finalDepositRes.transactionHash).toBeTruthy();
         console.log("FSM is back to 'Idle', flush is fully finalized.");
+    });
+
+    it('should allow deposits and withdrawals while in the FLUSHING state', async () => {
+        const { client, coreContractClient, account, coreContractAddress, aumOracleContractClient } = context;
+
+        // Ensure we are starting from a clean 'Idle' state and with some maxBTC to withdraw
+        console.log("Depositing funds to prepare for the test...");
+        expect(await coreContractClient.queryContractState()).toEqual('idle');
+        await aumOracleContractClient.updateConfig(account.address, { aum: "0" }, 'auto');
+        await context.liquidationBufferContractClient.updateConfig(account.address, {owned_btc: "0", owned_maxbtc: "0"}, 'auto');
+        await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "setup deposit", [{ denom: "untrn", amount: "200000" }]);
+
+        const flushPeriod = 10; // As set in instantiation
+        console.log(`Waiting for ${flushPeriod + 1} seconds for the deposit to be flushable...`);
+        await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
+
+        // 1. Initiate the flush to move the contract to the 'Flushing' state
+        console.log("Executing flushDeposits to enter FLUSHING state...");
+        const flushRes = await coreContractClient.flushDeposits(account.address, 'auto');
+        await waitForTx(client, flushRes.transactionHash);
+
+        let currentState = await coreContractClient.queryContractState();
+        expect(currentState).toEqual('flushing');
+        console.log("Contract is now in FLUSHING state.");
+
+        // 2. Perform a deposit and a withdrawal while the contract is flushing
+        // These actions should be accepted but processed using cached data.
+        const depositAmountDuringFlush = "50000";
+        const withdrawAmountDuringFlush = "10000";
+
+        console.log(`Depositing ${depositAmountDuringFlush} untrn while contract is flushing...`);
+        const depositWhileFlushingRes = await coreContractClient.deposit(
+            account.address,
+            { recipient: account.address },
+            'auto',
+            "deposit during flush",
+            [{ denom: "untrn", amount: depositAmountDuringFlush }]
+        );
+        await waitForTx(client, depositWhileFlushingRes.transactionHash);
+
+        console.log(`Withdrawing ${withdrawAmountDuringFlush} maxBTC while contract is flushing...`);
+        const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
+        const withdrawWhileFlushingRes = await coreContractClient.withdraw(
+            account.address,
+            'auto',
+            "withdraw during flush",
+            [{ denom: maxBtcDenom, amount: withdrawAmountDuringFlush }]
+        );
+        await waitForTx(client, withdrawWhileFlushingRes.transactionHash);
+
+        // 3. Verify the state after these actions
+        // The deposit should be held in the core contract, not yet flushed.
+        const coreBalance = await client.getBalance(coreContractAddress, 'untrn');
+        expect(coreBalance.amount).toEqual(depositAmountDuringFlush);
+
+        // A new withdrawal batch should have been created.
+        const activeBatch = await coreContractClient.queryActiveBatch();
+        expect(activeBatch).toBeTruthy();
+        expect(activeBatch.maxbtc_burned).toEqual(withdrawAmountDuringFlush);
+        console.log("Deposit and withdrawal were successfully queued during the flush.");
+
+        // 4. Finalize the original flush to return to 'Idle'
+        // We simulate the off-chain part of the flush completing by updating the AUM oracle.
+        // For this test, we'll assume the entire initial 200k deposit was sent to the pump for simplicity.
+        const flushedAmount = "180000"; // 200k initial deposit minus 10% buffer share minus fees
+        console.log(`Simulating flush finalization by updating AUM oracle with ${flushedAmount}...`);
+        await aumOracleContractClient.updateConfig(account.address, { aum: flushedAmount }, 'auto');
+
+        // Trigger _process_cache to check the flush status and transition back to Idle
+        console.log("Triggering _process_cache to return to IDLE state...");
+        await coreContractClient.processCache(account.address, 1.5);
+
+        currentState = await coreContractClient.queryContractState();
+        expect(currentState).toEqual('idle');
+        console.log("Contract has returned to IDLE state.");
+
+        // 5. Verify the contract is fully operational after returning to Idle
+        // For example, the pending deposit is now part of the main balance that can be flushed again.
+        console.log("Waiting for another flush period to test the post-flush state...");
+        await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
+
+        const coreBalanceBeforeNextFlush = await client.getBalance(coreContractAddress, 'untrn');
+        expect(coreBalanceBeforeNextFlush.amount).toEqual(depositAmountDuringFlush);
+
+        await coreContractClient.flushDeposits(account.address, 'auto');
+        const coreBalanceAfterNextFlush = await client.getBalance(coreContractAddress, 'untrn');
+        expect(coreBalanceAfterNextFlush.amount).toEqual("0");
+        console.log("Successfully flushed the deposit that was made during the previous flush cycle.");
+    });
+
+    it('should reject new state transitions while not in IDLE state', async () => {
+        const { client, coreContractClient, account, collectorContractAddress } = context;
+
+        // 1. Go into WITHDRAWING state
+        console.log("Setting up for state transition rejection test...");
+        await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "setup", [{ denom: "untrn", amount: "50000" }]);
+        await coreContractClient.withdraw(account.address, 'auto', "setup", [{ denom: `factory/${context.coreContractAddress}/maxbtc`, amount: "1000" }]);
+
+        const batchActiveDuration = 10;
+        console.log(`Waiting ${batchActiveDuration + 1}s for batch to become processable...`);
+        await new Promise(resolve => setTimeout(resolve, (batchActiveDuration + 1) * 1000));
+
+        await coreContractClient.processActiveBatch(account.address, 'auto');
+        let state = await coreContractClient.queryContractState();
+        expect(state).toEqual('withdrawing');
+        console.log("Contract is in WITHDRAWING state.");
+
+        // 2. Attempt to call flushDeposits (requires IDLE)
+        console.log("Attempting to call flushDeposits from WITHDRAWING state (expected to fail)...");
+        await expect(coreContractClient.flushDeposits(account.address, 'auto')).rejects.toThrow(
+            /Invalid contract state/
+        );
+        console.log("Correctly rejected flushDeposits.");
+
+        // 3. Return to IDLE state
+        console.log("Returning to IDLE state to test the next scenario...");
+        const withdrawingBatch = await coreContractClient.queryWithdrawingBatch();
+        await client.sendTokens(account.address, collectorContractAddress, [{ denom: 'untrn', amount: withdrawingBatch.btc_requested }], 1.5);
+        await coreContractClient.processCache(account.address, 1.5);
+        state = await coreContractClient.queryContractState();
+        expect(state).toEqual('idle');
+        console.log("Contract is back in IDLE state.");
+
+        // 4. Go into FLUSHING state
+        await coreContractClient.deposit(account.address, { recipient: account.address }, 'auto', "setup", [{ denom: "untrn", amount: "50000" }]);
+        const flushPeriod = 10;
+        await new Promise(resolve => setTimeout(resolve, (flushPeriod + 1) * 1000));
+        await coreContractClient.flushDeposits(account.address, 'auto');
+        state = await coreContractClient.queryContractState();
+        expect(state).toEqual('flushing');
+        console.log("Contract is in FLUSHING state.");
+
+        // 5. Attempt to call processActiveBatch (requires IDLE)
+        // First, create a processable batch
+        await coreContractClient.withdraw(account.address, 'auto', "setup", [{ denom: `factory/${context.coreContractAddress}/maxbtc`, amount: "1000" }]);
+        await new Promise(resolve => setTimeout(resolve, (batchActiveDuration + 1) * 1000));
+
+        console.log("Attempting to call processActiveBatch from FLUSHING state (expected to fail)...");
+        await expect(coreContractClient.processActiveBatch(account.address, 'auto')).rejects.toThrow(
+            /Invalid contract state/
+        );
+        console.log("Correctly rejected processActiveBatch. Test complete.");
     });
 });

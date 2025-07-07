@@ -34,39 +34,108 @@ const redefinedParams =
         };
 
 const networkConfigs = {
-  neutron: {
-    binary: 'neutrond',
-    chain_id: 'ntrntest',
-    denom: 'untrn',
-    image: `${ORG}neutron-test${VERSION}`,
-    prefix: 'neutron',
-    loglevel: 'debug',
-    trace: true,
-    public: true,
-    type: 'ics',
-    upload: [
-      './artifacts/contracts',
-      './artifacts/contracts_thirdparty',
-      './artifacts/scripts/init-neutrond.sh',
+  "neutron": {
+    "binary": "neutrond",
+    "chain_id": "ntrntest",
+    "denom": "untrn",
+    "image": "neutron-test:1.0.8",
+    "prefix": "neutron",
+    "loglevel": "debug",
+    "trace": true,
+    "public": true,
+    "validators": 2,
+    "validators_balance": [
+      "1900000000",
+      "100000000"
     ],
-    post_init: ['CHAINID=ntrntest CHAIN_DIR=/opt /opt/init-neutrond.sh'],
-    genesis_opts: {
-      'app_state.crisis.constant_fee.denom': 'untrn',
+    "upload": [
+      "./artifacts/contracts",
+      "./artifacts/contracts_thirdparty",
+      "./artifacts/scripts/init-neutrond.sh"
+    ],
+    "post_init": [
+      "CHAINID=ntrntest CHAIN_DIR=/opt /opt/init-neutrond.sh"
+    ],
+    "genesis_opts": {
+      "app_state.auction.params.proposer_fee": "0.25",
+      "app_state.bank.denom_metadata": [
+        {
+          "description": "The native staking token of the Neutron network",
+          "denom_units": [
+            {
+              "denom": "untrn",
+              "exponent": 0,
+              "aliases": [
+                "microntrn"
+              ]
+            },
+            {
+              "denom": "ntrn",
+              "exponent": 6,
+              "aliases": [
+                "NTRN"
+              ]
+            }
+          ],
+          "base": "untrn",
+          "display": "ntrn",
+          "name": "Neutron",
+          "symbol": "NTRN"
+        }
+      ],
+      "app_state.contractmanager.params.sudo_call_gas_limit": "1000000",
+      "app_state.cron.params.limit": 5,
+      "app_state.feemarket.params.min_base_gas_price": "0.0025",
+      "app_state.feemarket.params.max_learning_rate": "0.5",
+      "app_state.feemarket.params.max_block_utilization": "1000000000",
+      "app_state.feemarket.params.fee_denom": "untrn",
+      "app_state.feemarket.params.enabled": false,
+      "app_state.feemarket.params.distribute_fees": true,
+      "app_state.feemarket.state.base_gas_price": "0.0025",
+      "app_state.globalfee.params.minimum_gas_prices": [
+        {
+          "denom": "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
+          "amount": "0"
+        },
+        {
+          "denom": "untrn",
+          "amount": "0"
+        }
+      ],
+      "app_state.globalfee.params.bypass_min_fee_msg_types": [
+        "/ibc.core.channel.v1.Msg/RecvPacket",
+        "/ibc.core.channel.v1.Msg/Acknowledgement",
+        "/ibc.core.client.v1.Msg/UpdateClient"
+      ],
+      "app_state.globalfee.params.max_total_bypass_min_fee_msg_gas_usage": "1000000",
+      "app_state.marketmap.params.market_authorities": [
+        "neutron1hxskfdxpp5hqgtjj6am6nkjefhfzj359x0ar3z"
+      ],
+      "app_state.marketmap.params.admin": "neutron1hxskfdxpp5hqgtjj6am6nkjefhfzj359x0ar3z",
+      "app_state.slashing.params.signed_blocks_window": "140000",
+      "app_state.slashing.params.min_signed_per_window": "0.050000000000000000",
+      "app_state.slashing.params.slash_fraction_double_sign": "0.010000000000000000",
+      "app_state.slashing.params.slash_fraction_downtime": "0.000100000000000000",
+      "app_state.staking.params.bond_denom": "untrn",
+      "consensus.params.block.max_gas": "1000000000",
+      "consensus.params.abci.vote_extensions_enable_height": "1"
     },
-    config_opts: {
-      'consensus.timeout_commit': '500ms',
-      'consensus.timeout_propose': '500ms',
+    "config_opts": {
+      "consensus.timeout_commit": "500ms",
+      "consensus.timeout_propose": "500ms"
     },
-    app_opts: {
-      'api.enable': 'true',
-      'api.address': 'tcp://0.0.0.0:1317',
-      'api.swagger': 'true',
-      'grpc.enable': 'true',
-      'grpc.address': '0.0.0.0:9090',
-      'minimum-gas-prices': '0.0025untrn',
-      'rosetta.enable': 'true',
-      'telemetry.prometheus-retention-time': 1000,
-    },
+    "app_opts": {
+      "api.enable": "true",
+      "api.address": "tcp://0.0.0.0:1317",
+      "api.swagger": "true",
+      "grpc.enable": "true",
+      "grpc.address": "0.0.0.0:9090",
+      "minimum-gas-prices": "0.0025untrn",
+      "rosetta.enable": "true",
+      "telemetry.prometheus-retention-time": 1000,
+      "oracle.enabled": true,
+      "oracle.oracle_address": "oracle:8080"
+    }
   },
 };
 
