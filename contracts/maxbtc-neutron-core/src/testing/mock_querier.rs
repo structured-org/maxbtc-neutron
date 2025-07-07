@@ -129,23 +129,6 @@ impl WasmMockQuerier {
                 self.base
                     .handle_query(&QueryRequest::Bank(BankQuery::Supply { denom }))
             }
-            BankQuery::DenomMetadata { denom } => {
-                if self
-                    .redemption_tokens_denom_metadata
-                    .contains_key(denom.as_str())
-                {
-                    return SystemResult::Ok(ContractResult::Ok(
-                        to_json_binary(&DenomMetadataResponse::new(DenomMetadata::default()))
-                            .unwrap(),
-                    ));
-                }
-                SystemResult::Err(SystemError::InvalidRequest {
-                    // This is not the actual error, but this is part of what neutrond
-                    // will return
-                    error: "code: 38".to_string(),
-                    request: Default::default(),
-                })
-            }
             // For other queries, fallback to base
             _ => self.base.handle_query(&QueryRequest::Bank(query)),
         }
