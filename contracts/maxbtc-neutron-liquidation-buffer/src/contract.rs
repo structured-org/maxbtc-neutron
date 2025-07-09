@@ -6,8 +6,8 @@ use crate::state::{Config, CONFIG};
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MessageInfo, QueryRequest, Response, StdResult, Uint128, WasmQuery,
+    to_json_binary, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo,
+    QueryRequest, Response, StdResult, Uint128, WasmQuery,
 };
 use cw2::set_contract_version;
 
@@ -159,11 +159,19 @@ pub fn clawback(
 
     // Send the specified amount of BTC back to the core contract
     let msg = CosmosMsg::Bank(BankMsg::Send {
-        to_address: config.core_contract_address,
+        to_address: config.core_contract_address.clone(),
         amount: vec![amount.clone()],
     });
 
     let remaining_btc = virtual_btc.checked_sub(amount.amount).unwrap_or_default();
+
+    // Query the exchange rate from the core contract
+    let exchange_rate: Decimal = deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.core_contract_address,
+        msg: to_json_binary(&CoreQueryMsg::ExchangeRate {})?,
+    }))?;
+
+    let deposit_price = get_deposit_price(exchange_rate, config.price_multiplier_basis_points)?;
 
     let dex_msg = Into::<CosmosMsg>::into(MsgPlaceLimitOrder {
         creator: env.contract.address.to_string(),
@@ -171,11 +179,11 @@ pub fn clawback(
         token_in: config.btc_denom.clone(),
         token_out: config.maxbtc_denom.clone(),
         tick_index_in_to_out: 0,
-        amount_in: virtual_btc.to_string(),
+        amount_in: remaining_btc.to_string(),
         order_type: LimitOrderType::GoodTilCancelled.into(),
         expiration_time: None,
         max_amount_out: None,
-        limit_sell_price: Some(remaining_btc.to_string()),
+        limit_sell_price: Some(deposit_price.to_string()),
         min_average_sell_price: None,
     });
 
