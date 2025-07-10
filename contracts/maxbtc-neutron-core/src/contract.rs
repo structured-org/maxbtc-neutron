@@ -12,7 +12,7 @@ use crate::state::{
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin, Aum};
 use cosmwasm_std::{
     entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QueryRequest, Response, StdResult, SupplyResponse, Uint128, WasmMsg,
+    MessageInfo, QueryRequest, Response, StdError, StdResult, SupplyResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
@@ -452,9 +452,7 @@ pub(crate) fn execute_withdraw(
     let redemption_denom_base = format!("redemption/batch/{}", active_batch.batch_id);
     let redemption_denom_full =
         cfg.get_redemption_denom(env.contract.address.to_string(), active_batch.batch_id);
-    let total_redemption_supply = deps
-        .querier
-        .query_supply(redemption_denom_full.clone())?;
+    let total_redemption_supply = deps.querier.query_supply(redemption_denom_full.clone())?;
     if total_redemption_supply.amount.is_zero() {
         msgs.push(create_tokenfactory_create_denom_msg(
             &env,
@@ -827,7 +825,7 @@ fn _process_cache_withdrawing(
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
@@ -883,6 +881,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         QueryMsg::ContractState {} => {
             let state = FSM.get_current_state(deps.storage)?;
             Ok(to_json_binary(&state)?)
+        }
+        QueryMsg::ExchangeRate {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let er = get_exchange_rate(&deps, env, &cfg, None).map_err(|e| {
+                StdError::generic_err(format!("failed to get_exchange_rate: {}", e))
+            })?;
+            Ok(to_json_binary(&er)?)
         }
     }
 }

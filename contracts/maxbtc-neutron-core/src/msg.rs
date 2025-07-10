@@ -118,6 +118,8 @@ pub enum QueryMsg {
     /// Returns the current FSM state
     #[returns(ContractState)]
     ContractState {},
+    #[returns(Decimal)]
+    ExchangeRate {},
 }
 
 /// Response for querying config
