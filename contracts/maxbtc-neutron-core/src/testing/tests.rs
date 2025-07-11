@@ -3,7 +3,9 @@ use crate::contract::{
     execute_process_active_batch, execute_withdraw, instantiate,
 };
 use crate::error::ContractError;
-use crate::msg::{CollectorExecuteMsg, ExecuteMsg, InstantiateMsg, LiquidationBufferExecuteMsg};
+use crate::msg::{
+    CollectorExecuteMsg, ExecuteMsg, FeeMinterParams, InstantiateMsg, LiquidationBufferExecuteMsg,
+};
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
     BATCH_ID_COUNTER, CACHED_ER, CONFIG, FINALIZED_BATCHES, FSM, LAST_DEPOSIT_FLUSH_TIME,
@@ -12,8 +14,8 @@ use crate::state::{
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
 use cosmwasm_std::{
-    coin, from_json, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo,
-    OwnedDeps, Response, SubMsg, Uint128, WasmMsg,
+    coin, from_json, Attribute, BankMsg, Binary, Coin, CosmosMsg, Decimal, DepsMut, Env,
+    MessageInfo, OwnedDeps, Response, SubMsg, Uint128, WasmMsg,
 };
 
 #[test]
@@ -29,8 +31,8 @@ fn test_instantiate_success() {
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
     // Assert: check response
-    // We expect 1 message: create_tokenfactory_create_denom_msg
-    assert_eq!(res.messages.len(), 1);
+    // We expect 2 message: instantiate2 msg for the fee collector, and create_tokenfactory_create_denom_msg
+    assert_eq!(res.messages.len(), 2);
     // Assert: check attributes
     let expected_attributes = vec![
         Attribute::new("action", "instantiate"),
@@ -1784,7 +1786,12 @@ fn default_instantiate_msg(
         cached_er_ttl: 100u64,
         deposits_cap: None,
         deposits_allowlist: None,
-        fee_minter_contract: deps.api.addr_make("fee_,minter").to_string(),
+        fee_collector_params: FeeMinterParams {
+            code_id: 0,                                       // Test
+            salt: Binary::from(vec![1, 2, 3, 4]),             // Test
+            fee_apy_reduction_percentage: Default::default(), // Test
+            collection_period_hours: 0,                       // Test
+        },
     }
 }
 

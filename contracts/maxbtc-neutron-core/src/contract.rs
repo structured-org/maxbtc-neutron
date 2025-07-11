@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use crate::msg::{
-    BatchResponse, CollectorExecuteMsg, ConfigResponse, ExecuteMsg, InstantiateMsg,
-    LiquidationBufferContractQueryMsg, LiquidationBufferExecuteMsg, OracleQueryMsg, QueryMsg,
-    UpdateConfigMsg,
+    BatchResponse, CollectorExecuteMsg, ConfigResponse, ExecuteMsg, FeeCollectorInstantiateMsg,
+    InstantiateMsg, LiquidationBufferContractQueryMsg, LiquidationBufferExecuteMsg, OracleQueryMsg,
+    QueryMsg, UpdateConfigMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -11,8 +11,9 @@ use crate::state::{
 };
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin, Aum};
 use cosmwasm_std::{
-    entry_point, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QueryRequest, Response, StdError, StdResult, SupplyResponse, Uint128, WasmMsg,
+    entry_point, instantiate2_address, to_json_binary, BankMsg, BankQuery, Coin, CosmosMsg,
+    Decimal, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult,
+    SupplyResponse, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
@@ -30,6 +31,22 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    // Get the checksum for the fee minter contract's code ID
+    let fee_minter_code_info = deps
+        .querier
+        .query_wasm_code_info(msg.fee_collector_params.code_id)?;
+    let fee_minter_checksum = fee_minter_code_info.checksum;
+
+    // Predict the fee minter contract address using Instantiate2
+    let canonical_creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+    let fee_minter_address = instantiate2_address(
+        fee_minter_checksum.as_slice(),
+        &canonical_creator, // The creator is this core contract
+        &msg.fee_collector_params.salt,
+    )
+    .map_err(|e| ContractError::Instantiate2Error(e))?;
+
+    // Build the Config, now with the predictable fee minter address
     let cfg = Config {
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
@@ -38,9 +55,9 @@ pub fn instantiate(
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
         collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
         treasury_address: deps.api.addr_validate(&msg.treasury_address)?,
-        deposit_denom: msg.deposit_denom,
+        deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
-        maxbtc_denom: msg.maxbtc_denom,
+        maxbtc_denom: msg.maxbtc_denom.clone(),
         deposit_flush_period: msg.deposit_flush_period,
         batch_active_duration: msg.batch_active_duration,
         batch_withdrawing_duration: msg.batch_withdrawing_duration,
@@ -58,16 +75,18 @@ pub fn instantiate(
                     .collect::<StdResult<_>>()
             })
             .transpose()?,
-        fee_minter_contract: deps.api.addr_validate(&msg.fee_minter_contract)?,
+        // Store the predicted address in the config
+        fee_minter_contract: deps.api.addr_humanize(&fee_minter_address)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
+
+    // (The rest of the state initialization remains the same)
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
     ACTIVE_BATCH_START_TIME.save(deps.storage, &env.block.time.seconds())?;
     CACHED_ER.save(deps.storage, &None)?;
 
-    // Create the first active batch
     let new_batch_id = 1u64;
     let new_batch = Batch {
         batch_id: new_batch_id,
@@ -80,15 +99,34 @@ pub fn instantiate(
     ACTIVE_BATCH.save(deps.storage, &Some(new_batch))?;
     BATCH_ID_COUNTER.save(deps.storage, &new_batch_id)?;
 
-    // Create the maxBTC denom
+    // Create the instantiate message for the fee collector contract
+    let instantiate_fee_collector_msg = WasmMsg::Instantiate2 {
+        admin: Some(cfg.owner.to_string()), // The core contract owner is admin
+        code_id: msg.fee_collector_params.code_id,
+        label: "maxBTC Fee Collector Contract".to_string(),
+        msg: to_json_binary(&FeeCollectorInstantiateMsg {
+            owner: msg.owner,                                // Same owner as the core contract
+            core_contract: env.contract.address.to_string(), // This contract's address
+            fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
+            collection_period_hours: msg.fee_collector_params.collection_period_hours,
+            fee_denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
+            maxbtc_decimals: cfg.deposit_decimals,
+        })?,
+        funds: vec![],
+        salt: msg.fee_collector_params.salt.clone(),
+    };
+
+    // Create the maxBTC denom via token factory
     let create_maxbtc_denom_msg =
         create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
 
-    // Initialise the FSM in the Idle state
+    // Initialise the FSM
     FSM.set_initial_state(deps.storage, ContractState::Idle)?;
 
+    // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
         .add_message(create_maxbtc_denom_msg)
+        .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
         .add_attribute("aum_contract", cfg.aum_oracle_contract.to_string())
@@ -100,6 +138,10 @@ pub fn instantiate(
         .add_attribute("treasury_address", cfg.treasury_address.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
+        .add_attribute(
+            "instantiated_fee_minter_address",
+            fee_minter_address.to_string(),
+        )
         .add_attribute("deposit_flush_period", cfg.deposit_flush_period.to_string())
         .add_attribute(
             "batch_active_duration",
@@ -246,7 +288,7 @@ fn execute_update_config(
             })
             .transpose()?;
     }
-    if let Some(addr) = updates.fee_minter_contract {
+    if let Some(addr) = updates.fee_collector_contract {
         cfg.fee_minter_contract = deps.api.addr_validate(&addr)?;
     }
 

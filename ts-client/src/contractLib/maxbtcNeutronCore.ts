@@ -1,6 +1,5 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
-import { Coin } from "@cosmjs/amino";
 export type NullableBatchResponse = BatchResponse | null;
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
@@ -34,6 +33,12 @@ export type NullableBatchResponse2 = BatchResponse | null;
  * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
  */
 export type Uint128 = string;
+/**
+ * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
+ *
+ * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
+ */
+export type Binary = string;
 
 export interface MaxbtcNeutronCoreSchema {
   responses:
@@ -44,7 +49,7 @@ export interface MaxbtcNeutronCoreSchema {
     | NullableBatchResponse1
     | NullableBatchResponse2;
   query: FinalizedBatchArgs;
-  execute: DepositArgs | ClaimArgs | UpdateConfigArgs;
+  execute: DepositArgs | ClaimArgs | UpdateConfigArgs | MintFeeArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -98,6 +103,13 @@ export interface UpdateConfigArgs {
   };
   additionalProperties?: never;
   required?: [];
+}
+export interface MintFeeArgs {
+  amount: Coin;
+}
+export interface Coin {
+  amount: Uint128;
+  denom: string;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
@@ -157,6 +169,10 @@ export interface InstantiateMsg {
    */
   deposits_cap?: Uint128 | null;
   /**
+   * Instantiation parameters for the fee collector.
+   */
+  fee_collector_params: FeeMinterParams;
+  /**
    * Address of the contract that manages the liquidation buffer.
    */
   liquidation_buffer_contract: string;
@@ -173,6 +189,27 @@ export interface InstantiateMsg {
    * Treasury account that receives protocol fees and surplus funds.
    */
   treasury_address: string;
+}
+/**
+ * New struct to hold parameters for instantiating the fee minter contract.
+ */
+export interface FeeMinterParams {
+  /**
+   * The code ID of the fee minter contract wasm.
+   */
+  code_id: number;
+  /**
+   * The duration in hours for each fee collection period.
+   */
+  collection_period_hours: number;
+  /**
+   * The percentage of APY to be taken as a fee.
+   */
+  fee_apy_reduction_percentage: Decimal;
+  /**
+   * A unique salt for generating a predictable address with Instantiate2.
+   */
+  salt: Binary;
 }
 
 
@@ -266,5 +303,9 @@ export class Client {
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { update_config: args }, fee || "auto", memo, funds);
+  }
+  mintFee = async(sender:string, args: MintFeeArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, { mint_fee: args }, fee || "auto", memo, funds);
   }
 }

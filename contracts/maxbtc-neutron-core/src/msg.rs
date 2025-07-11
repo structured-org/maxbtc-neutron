@@ -1,6 +1,6 @@
 use crate::state::ContractState;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Uint128};
+use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -51,9 +51,8 @@ pub struct InstantiateMsg {
     /// Optional allow-list of addresses that may mint maxBTC while the
     /// list is active (empty or `None` means open to everyone)
     pub deposits_allowlist: Option<Vec<String>>,
-    /// This contract is allowed to mint maxBTC to take a fee on the
-    /// accrued protocol APR
-    pub fee_minter_contract: String,
+    /// Instantiation parameters for the fee collector.
+    pub fee_collector_params: FeeMinterParams,
 }
 
 /// Message for updating configuration parameters (owner-only).
@@ -76,7 +75,7 @@ pub struct UpdateConfigMsg {
     pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub deposits_allowlist: Option<Option<Vec<String>>>,
-    pub fee_minter_contract: Option<String>,
+    pub fee_collector_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -176,4 +175,28 @@ pub enum LiquidationBufferExecuteMsg {
 #[cw_serde]
 pub enum CollectorExecuteMsg {
     Claim { amount: Coin },
+}
+
+// (This is the InstantiateMsg for the fee collector contract, shown for context)
+#[cw_serde]
+pub struct FeeCollectorInstantiateMsg {
+    pub owner: String,
+    pub core_contract: String,
+    pub fee_apy_reduction_percentage: Decimal,
+    pub collection_period_hours: u64,
+    pub fee_denom: String,
+    pub maxbtc_decimals: u32,
+}
+
+/// New struct to hold parameters for instantiating the fee minter contract.
+#[cw_serde]
+pub struct FeeMinterParams {
+    /// The code ID of the fee minter contract wasm.
+    pub code_id: u64,
+    /// A unique salt for generating a predictable address with Instantiate2.
+    pub salt: Binary,
+    /// The percentage of APY to be taken as a fee.
+    pub fee_apy_reduction_percentage: Decimal,
+    /// The duration in hours for each fee collection period.
+    pub collection_period_hours: u64,
 }

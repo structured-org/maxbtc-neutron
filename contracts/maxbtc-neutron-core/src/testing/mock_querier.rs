@@ -1,8 +1,9 @@
 use crate::msg::{LiquidationBufferContractQueryMsg, OracleQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, Empty, OwnedDeps,
-    Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+    coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
+    ContractResult, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
+    SystemResult, Uint128, WasmQuery,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -132,6 +133,15 @@ impl WasmMockQuerier {
 
     fn handle_wasm_query(&self, wasm_query: WasmQuery) -> QuerierResult {
         match wasm_query {
+            WasmQuery::CodeInfo { .. } => {
+                let query_result: ContractResult<Binary> = to_json_binary(&CodeInfoResponse::new(
+                    0,
+                    Addr::unchecked("creator"),
+                    Checksum::generate(&vec![1, 2, 3, 4, 5]),
+                ))
+                .into();
+                SystemResult::Ok(query_result)
+            }
             WasmQuery::Smart { contract_addr, msg } => {
                 // Attempt to decode into one of our known query message types
                 self.handle_wasm_smart_query(&contract_addr, &msg)

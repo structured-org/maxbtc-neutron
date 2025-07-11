@@ -1,4 +1,6 @@
-use cosmwasm_std::{DecimalRangeExceeded, DivideByZeroError, OverflowError, StdError};
+use cosmwasm_std::{
+    DecimalRangeExceeded, DivideByZeroError, Instantiate2AddressError, OverflowError, StdError,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -53,4 +55,6 @@ pub enum ContractError {
 
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),
+    #[error("{0}")]
+    Instantiate2Error(Instantiate2AddressError),
 }

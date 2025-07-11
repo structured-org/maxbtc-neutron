@@ -275,7 +275,7 @@
             }
           ]
         },
-        "fee_minter_contract": {
+        "fee_collector_contract": {
           "type": [
             "string",
             "null"

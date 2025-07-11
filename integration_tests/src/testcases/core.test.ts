@@ -42,6 +42,7 @@ describe('Core', () => {
         liquidationBufferContractAddress?: string,
         pumpContractAddress?: string,
         pumpLibraryContractAddress?: string,
+        fee_collector_code_id?: number,
 
         treasuryAddress?: string,
     } = {};
@@ -170,6 +171,22 @@ describe('Core', () => {
         );
     });
 
+    it('upload fee collector', async () => {
+        const {client, account} = context;
+        const res = await client.upload(
+            account.address,
+            Uint8Array.from(
+                fs.readFileSync(
+                    join(__dirname, '../../../artifacts/maxbtc_neutron_fee_collector.wasm'),
+                ),
+            ),
+            1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+
+        context.fee_collector_code_id = res.codeId;
+    });
+
     it('instantiate pump (valence base account)', async () => {
         const {client, account} = context;
         const res = await client.upload(
@@ -263,7 +280,7 @@ describe('Core', () => {
     });
 
     it('instantiate core', async () => {
-        const {client, account} = context;
+        const {client, account, fee_collector_code_id} = context;
         const res = await client.upload(
             account.address,
             Uint8Array.from(
@@ -296,6 +313,12 @@ describe('Core', () => {
                 liquidation_buffer_share: "0.1",
                 maxbtc_denom: "maxbtc",
                 owner: account.address,
+                fee_collector_params: {
+                    code_id: fee_collector_code_id,
+                    collection_period_hours: 1,
+                    fee_apy_reduction_percentage: "0.1",
+                    salt: "fee_collector_salt"
+                }
             },
             'label',
             'auto',
