@@ -194,7 +194,7 @@ export interface FeeMinterParams {
     /**
      * The duration in hours for each fee collection period.
      */
-    collection_period_hours: number;
+    collection_period_seconds: number;
     /**
      * The percentage of APY to be taken as a fee.
      */

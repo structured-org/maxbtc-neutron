@@ -108,7 +108,7 @@ pub fn instantiate(
             owner: msg.owner,                                // Same owner as the core contract
             core_contract: env.contract.address.to_string(), // This contract's address
             fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
-            collection_period_hours: msg.fee_collector_params.collection_period_hours,
+            collection_period_seconds: msg.fee_collector_params.collection_period_seconds,
             fee_denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
             maxbtc_decimals: cfg.deposit_decimals,
         })?,

@@ -165,7 +165,7 @@
         "type": "object",
         "required": [
           "code_id",
-          "collection_period_hours",
+          "collection_period_seconds",
           "fee_apy_reduction_percentage",
           "salt"
         ],
@@ -176,7 +176,7 @@
             "format": "uint64",
             "minimum": 0.0
           },
-          "collection_period_hours": {
+          "collection_period_seconds": {
             "description": "The duration in hours for each fee collection period.",
             "type": "integer",
             "format": "uint64",

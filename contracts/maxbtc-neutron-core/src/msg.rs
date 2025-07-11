@@ -183,7 +183,7 @@ pub struct FeeCollectorInstantiateMsg {
     pub owner: String,
     pub core_contract: String,
     pub fee_apy_reduction_percentage: Decimal,
-    pub collection_period_hours: u64,
+    pub collection_period_seconds: u64,
     pub fee_denom: String,
     pub maxbtc_decimals: u32,
 }
@@ -198,5 +198,5 @@ pub struct FeeMinterParams {
     /// The percentage of APY to be taken as a fee.
     pub fee_apy_reduction_percentage: Decimal,
     /// The duration in hours for each fee collection period.
-    pub collection_period_hours: u64,
+    pub collection_period_seconds: u64,
 }

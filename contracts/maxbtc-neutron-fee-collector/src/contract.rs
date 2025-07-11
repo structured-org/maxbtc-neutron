@@ -41,7 +41,7 @@ pub fn instantiate(
         owner,
         core_contract: core_contract.clone(),
         fee_apy_reduction_percentage: msg.fee_apy_reduction_percentage,
-        collection_period_seconds: msg.collection_period_hours * 60 * 60,
+        collection_period_seconds: msg.collection_period_seconds,
         fee_denom: msg.fee_denom,
         maxbtc_decimals: msg.maxbtc_decimals,
     };

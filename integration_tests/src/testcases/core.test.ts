@@ -315,7 +315,7 @@ describe('Core', () => {
                 owner: account.address,
                 fee_collector_params: {
                     code_id: fee_collector_code_id,
-                    collection_period_hours: 1,
+                    collection_period_seconds: 1,
                     fee_apy_reduction_percentage: "0.1",
                     salt: "fee_collector_salt"
                 }
