@@ -19,7 +19,6 @@ const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const MINT_FEE_REPLY_ID: u64 = 1;
 
-// --- INSTANTIATE ---
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -69,7 +68,6 @@ pub fn instantiate(
         ))
 }
 
-// --- EXECUTE ---
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -240,7 +238,6 @@ pub fn execute_update_config(
     Ok(response)
 }
 
-// --- REPLY ---
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
     if msg.id != MINT_FEE_REPLY_ID {
@@ -265,7 +262,6 @@ pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractEr
         .add_attribute("new_collection_timestamp", env.block.time.to_string()))
 }
 
-// --- QUERY ---
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
@@ -294,8 +290,6 @@ fn query_state(deps: Deps) -> StdResult<StateResponse> {
     })
 }
 
-// --- HELPERS ---
-
 /// Converts a [`Decimal`] (which stores fixed-point numbers in *atomics*) back
 /// into a concrete `Uint128` amount with the desired `decimals` precision.
 pub fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {
@@ -320,7 +314,7 @@ pub fn calculate_fee_to_mint(
         return Ok(Uint128::zero());
     }
 
-    // --- 1. Calculate the target exchange rate ---
+    // Calculate the target exchange rate
     let gain = rate_current - rate_old;
     // rate_target = rate_old + gain * (1 - fee_reduction_percentage)
     let retained_gain_percentage = Decimal::one() - fee_reduction_percentage;
@@ -331,8 +325,12 @@ pub fn calculate_fee_to_mint(
         return Ok(Uint128::zero());
     }
 
-    // --- 2. Calculate the fee amount in Decimal form ---
+    // Calculate the fee amount in Decimal form:
     // fee_amount = total_supply * (rate_current / rate_target - 1)
+    // This calculates how much more valuable the token is at the current rate compared to the
+    // target rate. For example, if current_rate is 1.1 and rate_target is 1.09, the rate_ratio is
+    // ~1.00917. This means the total supply needs to be ~1.00917 times larger to bring the rate
+    // down to 1.09.
     let rate_ratio = rate_current / rate_target;
     let factor = rate_ratio - Decimal::one();
 
@@ -342,7 +340,7 @@ pub fn calculate_fee_to_mint(
 
     let fee_amount_decimal = factor * total_supply_dec;
 
-    // --- 3. Convert the fee amount from Decimal back to atomic Uint128 ---
+    // Convert the fee amount from Decimal back to atomic Uint128
     dec_to_amount(fee_amount_decimal, maxbtc_decimals)
 }
 
@@ -361,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_calculate_fee_to_mint() {
-        // --- Case 1: Standard positive APY ---
+        // Case 1: Standard positive APY
         // Old rate: 1.0, Current rate: 1.1. Gain is 0.1.
         // Total supply: 1,000,000 satoshis (which is 1.0 maxBTC with 6 decimals)
         // Decimals: 6
@@ -394,7 +392,7 @@ mod tests {
         // New rate = Total assets / new_supply_dec = 1.1 / 1.009174 = 1.0900002...
         // This is very close to the target of 1.09.
 
-        // --- Case 2: No gain ---
+        // Case 2: No gain
         let rate_old_2 = Decimal::from_str("1.1").unwrap();
         let rate_current_2 = Decimal::from_str("1.1").unwrap();
         let fee_2 = calculate_fee_to_mint(
@@ -407,7 +405,7 @@ mod tests {
         .unwrap();
         assert_eq!(fee_2, Uint128::zero());
 
-        // --- Case 3: Negative APY (loss) ---
+        // Case 3: Negative APY (loss)
         let rate_old_3 = Decimal::from_str("1.1").unwrap();
         let rate_current_3 = Decimal::from_str("1.0").unwrap();
         let fee_3 = calculate_fee_to_mint(
@@ -420,7 +418,7 @@ mod tests {
         .unwrap();
         assert_eq!(fee_3, Uint128::zero());
 
-        // --- Case 4: Higher fee percentage (50%) ---
+        // Case 4: Higher fee percentage (50%)
         // Target rate = 1.0 + (0.1 * 0.5) = 1.05
         // fee_dec = 1.0 * (1.1 / 1.05 - 1)
         // fee_dec = 1.0 * (0.047619...)

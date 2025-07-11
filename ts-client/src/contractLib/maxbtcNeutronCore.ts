@@ -12,6 +12,12 @@ export type Decimal = string;
  * Represents the contract state.
  */
 export type ContractState = "idle" | "flushing" | "withdrawing";
+/**
+ * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ *
+ * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ */
+export type Decimal1 = string;
 export type NullableBatchResponse1 = BatchResponse | null;
 export type NullableBatchResponse2 = BatchResponse | null;
 /**
@@ -30,7 +36,13 @@ export type NullableBatchResponse2 = BatchResponse | null;
 export type Uint128 = string;
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: NullableBatchResponse | ConfigResponse | ContractState | NullableBatchResponse1 | NullableBatchResponse2;
+  responses:
+    | NullableBatchResponse
+    | ConfigResponse
+    | ContractState
+    | Decimal1
+    | NullableBatchResponse1
+    | NullableBatchResponse2;
   query: FinalizedBatchArgs;
   execute: DepositArgs | ClaimArgs | UpdateConfigArgs;
   instantiate?: InstantiateMsg;
@@ -223,6 +235,9 @@ export class Client {
   }
   queryContractState = async(): Promise<ContractState> => {
     return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
+  }
+  queryExchangeRate = async(): Promise<Decimal> => {
+    return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
   }
   deposit = async(sender:string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }

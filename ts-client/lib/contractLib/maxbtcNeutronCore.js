@@ -41,6 +41,9 @@ class Client {
     queryContractState = async () => {
         return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
     };
+    queryExchangeRate = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+    };
     deposit = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

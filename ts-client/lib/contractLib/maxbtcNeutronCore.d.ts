@@ -12,6 +12,12 @@ export type Decimal = string;
  * Represents the contract state.
  */
 export type ContractState = "idle" | "flushing" | "withdrawing";
+/**
+ * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ *
+ * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ */
+export type Decimal1 = string;
 export type NullableBatchResponse1 = BatchResponse | null;
 export type NullableBatchResponse2 = BatchResponse | null;
 /**
@@ -29,7 +35,7 @@ export type NullableBatchResponse2 = BatchResponse | null;
  */
 export type Uint128 = string;
 export interface MaxbtcNeutronCoreSchema {
-    responses: NullableBatchResponse | ConfigResponse | ContractState | NullableBatchResponse1 | NullableBatchResponse2;
+    responses: NullableBatchResponse | ConfigResponse | ContractState | Decimal1 | NullableBatchResponse1 | NullableBatchResponse2;
     query: FinalizedBatchArgs;
     execute: DepositArgs | ClaimArgs | UpdateConfigArgs;
     instantiate?: InstantiateMsg;
@@ -173,6 +179,7 @@ export declare class Client {
     queryWithdrawingBatch: () => Promise<NullableBatchResponse>;
     queryFinalizedBatch: (args: FinalizedBatchArgs) => Promise<NullableBatchResponse>;
     queryContractState: () => Promise<ContractState>;
+    queryExchangeRate: () => Promise<Decimal>;
     deposit: (sender: string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     flushDeposits: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     withdraw: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
