@@ -51,6 +51,9 @@ pub struct InstantiateMsg {
     /// Optional allow-list of addresses that may mint maxBTC while the
     /// list is active (empty or `None` means open to everyone)
     pub deposits_allowlist: Option<Vec<String>>,
+    /// This contract is allowed to mint maxBTC to take a fee on the
+    /// accrued protocol APR
+    pub fee_minter_contract: String,
 }
 
 /// Message for updating configuration parameters (owner-only).
@@ -73,6 +76,7 @@ pub struct UpdateConfigMsg {
     pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub deposits_allowlist: Option<Option<Vec<String>>>,
+    pub fee_minter_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -97,6 +101,9 @@ pub enum ExecuteMsg {
     ProcessCache {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
+    /// Mints the requested amount of fees to the fee minter address. Can only be
+    /// executed by the fee minter.
+    MintFee { amount: Coin },
 }
 
 /// QueryMsg for reading contract states.

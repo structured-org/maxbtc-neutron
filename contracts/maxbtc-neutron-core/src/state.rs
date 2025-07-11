@@ -53,6 +53,9 @@ pub struct Config {
     /// Optional allow-list of addresses that may mint maxBTC; `None` or an
     /// empty vector means deposits are open to everyone
     pub deposits_allowlist: Option<Vec<Addr>>,
+    /// This contract is allowed to mint maxBTC to take a fee on the
+    /// accrued protocol APR
+    pub fee_minter_contract: Addr,
 }
 
 impl Config {

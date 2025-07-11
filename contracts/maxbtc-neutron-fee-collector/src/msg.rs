@@ -1,8 +1,8 @@
+use crate::state::{Config, State};
+use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Timestamp};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
     pub core_contract: String,
@@ -12,8 +12,7 @@ pub struct InstantiateMsg {
     pub maxbtc_decimals: u32,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum ExecuteMsg {
     /// Triggers the fee collection process.
     CollectFee {},
@@ -29,17 +28,19 @@ pub enum ExecuteMsg {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
+#[derive(QueryResponses)]
 pub enum QueryMsg {
     /// Returns the current contract configuration.
+    #[returns(Config)]
     Config {},
     /// Returns the current contract state.
+    #[returns(State)]
     State {},
 }
 
 // Response for the Config query
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct ConfigResponse {
     pub owner: String,
     pub core_contract: String,
@@ -50,28 +51,26 @@ pub struct ConfigResponse {
 }
 
 // Response for the State query
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct StateResponse {
     pub last_collection_timestamp: Timestamp,
     pub last_exchange_rate: Decimal,
 }
 
 /// Query messages for the maxbtc-neutron-core contract.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum CoreQueryMsg {
     ExchangeRate {},
 }
 
 /// Response for the core contract's ExchangeRate query.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct ExchangeRateResponse {
     pub rate: Decimal,
 }
 
 /// Execute messages for the maxbtc-neutron-core contract.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-#[serde(rename_all = "snake_case")]
+#[cw_serde]
 pub enum CoreExecuteMsg {
     MintFee { amount: Coin },
 }

@@ -20,6 +20,7 @@
       "deposit_denom",
       "deposit_flush_period",
       "deposit_pump_contract",
+      "fee_minter_contract",
       "liquidation_buffer_contract",
       "liquidation_buffer_share",
       "maxbtc_denom",
@@ -116,6 +117,10 @@
             "type": "null"
           }
         ]
+      },
+      "fee_minter_contract": {
+        "description": "This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR",
+        "type": "string"
       },
       "liquidation_buffer_contract": {
         "description": "Address of the contract that manages the liquidation buffer.",
@@ -271,9 +276,47 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "description": "Mints the requested amount of fees to the fee minter address. Can only be executed by the fee minter.",
+        "type": "object",
+        "required": [
+          "mint_fee"
+        ],
+        "properties": {
+          "mint_fee": {
+            "type": "object",
+            "required": [
+              "amount"
+            ],
+            "properties": {
+              "amount": {
+                "$ref": "#/definitions/Coin"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ],
     "definitions": {
+      "Coin": {
+        "type": "object",
+        "required": [
+          "amount",
+          "denom"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/definitions/Uint128"
+          },
+          "denom": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Decimal": {
         "description": "A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0\n\nThe greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)",
         "type": "string"
@@ -390,6 +433,12 @@
               {
                 "type": "null"
               }
+            ]
+          },
+          "fee_minter_contract": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "liquidation_buffer_share": {

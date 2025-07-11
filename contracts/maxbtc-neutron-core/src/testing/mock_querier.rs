@@ -1,9 +1,8 @@
 use crate::msg::{LiquidationBufferContractQueryMsg, OracleQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, DenomMetadata,
-    DenomMetadataResponse, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
-    SystemResult, Uint128, WasmQuery,
+    coin, from_json, to_json_binary, BankQuery, Binary, Coin, ContractResult, Empty, OwnedDeps,
+    Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -43,8 +42,6 @@ pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
 
     supplies: HashMap<String, Uint128>,
-
-    redemption_tokens_denom_metadata: HashMap<String, bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -76,7 +73,6 @@ impl WasmMockQuerier {
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
-            redemption_tokens_denom_metadata: Default::default(),
         }
     }
 

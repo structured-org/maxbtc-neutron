@@ -361,7 +361,7 @@ mod tests {
     fn test_calculate_fee_to_mint() {
         // Case 1: Standard positive APY
         // Old rate: 1.0, Current rate: 1.1. Gain is 0.1.
-        // Total supply: 1,000,000 satoshis (which is 1.0 maxBTC with 6 decimals)
+        // Total supply: 1,000,000
         // Decimals: 6
         // Fee reduction: 10% (0.1)
         // We want to skim 10% of the 0.1 gain.

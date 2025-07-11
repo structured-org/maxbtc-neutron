@@ -16,6 +16,7 @@
     "deposit_denom",
     "deposit_flush_period",
     "deposit_pump_contract",
+    "fee_minter_contract",
     "liquidation_buffer_contract",
     "liquidation_buffer_share",
     "maxbtc_denom",
@@ -112,6 +113,10 @@
           "type": "null"
         }
       ]
+    },
+    "fee_minter_contract": {
+      "description": "This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR",
+      "type": "string"
     },
     "liquidation_buffer_contract": {
       "description": "Address of the contract that manages the liquidation buffer.",

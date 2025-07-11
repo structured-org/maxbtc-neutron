@@ -1784,6 +1784,7 @@ fn default_instantiate_msg(
         cached_er_ttl: 100u64,
         deposits_cap: None,
         deposits_allowlist: None,
+        fee_minter_contract: deps.api.addr_make("fee_,minter").to_string(),
     }
 }
 

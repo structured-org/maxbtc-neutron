@@ -58,6 +58,7 @@ pub fn instantiate(
                     .collect::<StdResult<_>>()
             })
             .transpose()?,
+        fee_minter_contract: deps.api.addr_validate(&msg.fee_minter_contract)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
     BATCH_ID_COUNTER.save(deps.storage, &0u64)?;
@@ -140,7 +141,38 @@ pub fn execute(
                 .add_messages(msgs)
                 .add_attribute("action", "process_cache"))
         }
+        ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
     }
+}
+
+fn execute_mint_fee(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    amount: Coin,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if info.sender != cfg.fee_minter_contract {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if amount.denom != cfg.maxbtc_denom {
+        return Err(ContractError::InvalidDepositDenom {
+            expected: cfg.maxbtc_denom.to_string(),
+            received: amount.denom.to_string(),
+        });
+    }
+
+    // Mint the maxBTC to the recipient
+    let mint_msg =
+        create_tokenfactory_mint_msg(&env.clone(), info.sender.to_string(), amount.clone())?;
+
+    // Return the response
+    Ok(Response::new()
+        .add_message(mint_msg)
+        .add_attribute("action", "execute_mint_fee")
+        .add_attribute("sender", info.sender)
+        .add_attribute("minted_maxbtc", amount.to_string()))
 }
 
 /// Owner-only handler that updates the configuration in-place.
@@ -213,6 +245,9 @@ fn execute_update_config(
                     .collect::<StdResult<_>>()
             })
             .transpose()?;
+    }
+    if let Some(addr) = updates.fee_minter_contract {
+        cfg.fee_minter_contract = deps.api.addr_validate(&addr)?;
     }
 
     CONFIG.save(deps.storage, &cfg)?;
