@@ -63,12 +63,6 @@ pub enum CoreQueryMsg {
     ExchangeRate {},
 }
 
-/// Response for the core contract's ExchangeRate query.
-#[cw_serde]
-pub struct ExchangeRateResponse {
-    pub rate: Decimal,
-}
-
 /// Execute messages for the maxbtc-neutron-core contract.
 #[cw_serde]
 pub enum CoreExecuteMsg {

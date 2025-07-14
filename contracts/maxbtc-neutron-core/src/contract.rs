@@ -140,7 +140,7 @@ pub fn instantiate(
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
         .add_attribute(
             "instantiated_fee_collector_address",
-            fee_collector_address.to_string(),
+            cfg.fee_collector_contract.to_string(),
         )
         .add_attribute("deposit_flush_period", cfg.deposit_flush_period.to_string())
         .add_attribute(
@@ -919,6 +919,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bin
                 accepted_withdrawable_percentage: cfg.collected_tolerance,
                 liquidation_buffer_share: cfg.liquidation_buffer_share,
                 deposit_cost: cfg.deposit_cost,
+                fee_collector_contract: cfg.fee_collector_contract.to_string(),
             };
             Ok(to_json_binary(&resp)?)
         }

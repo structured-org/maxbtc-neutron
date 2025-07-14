@@ -143,6 +143,7 @@ pub struct ConfigResponse {
     pub accepted_withdrawable_percentage: Decimal,
     pub liquidation_buffer_share: Decimal,
     pub deposit_cost: Decimal,
+    pub fee_collector_contract: String,
 }
 
 /// Response for batch query

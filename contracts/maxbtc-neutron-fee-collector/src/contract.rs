@@ -9,8 +9,8 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::{
-    ConfigResponse, CoreExecuteMsg, CoreQueryMsg::ExchangeRate, ExchangeRateResponse, ExecuteMsg,
-    InstantiateMsg, QueryMsg, StateResponse,
+    ConfigResponse, CoreExecuteMsg, CoreQueryMsg::ExchangeRate, ExecuteMsg, InstantiateMsg,
+    QueryMsg, StateResponse,
 };
 use crate::state::{Config, State, CONFIG, STATE};
 
@@ -48,13 +48,13 @@ pub fn instantiate(
     CONFIG.save(deps.storage, &config)?;
 
     // Query the core contract for the initial exchange rate to bootstrap the state
-    let initial_rate_response: ExchangeRateResponse = deps
+    let initial_rate_response: Decimal = deps
         .querier
         .query_wasm_smart(core_contract, &ExchangeRate {})?;
 
     let state = State {
         last_collection_timestamp: env.block.time,
-        last_exchange_rate: initial_rate_response.rate,
+        last_exchange_rate: initial_rate_response,
     };
     STATE.save(deps.storage, &state)?;
 
@@ -62,10 +62,7 @@ pub fn instantiate(
         .add_attribute("action", "instantiate")
         .add_attribute("owner", msg.owner)
         .add_attribute("core_contract", msg.core_contract)
-        .add_attribute(
-            "initial_exchange_rate",
-            initial_rate_response.rate.to_string(),
-        ))
+        .add_attribute("initial_exchange_rate", initial_rate_response.to_string()))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -345,11 +342,11 @@ pub fn calculate_fee_to_mint(
 }
 
 fn query_exchange_rate(querier: &QuerierWrapper, core_contract: &Addr) -> StdResult<Decimal> {
-    let res: ExchangeRateResponse = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+    let res: Decimal = querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
         contract_addr: core_contract.to_string(),
         msg: to_json_binary(&ExchangeRate {})?,
     }))?;
-    Ok(res.rate)
+    Ok(res)
 }
 
 #[cfg(test)]

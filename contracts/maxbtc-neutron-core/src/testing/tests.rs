@@ -1788,7 +1788,7 @@ fn default_instantiate_msg(
         deposits_allowlist: None,
         fee_collector_params: FeeMinterParams {
             code_id: 0,                                       // Test
-            salt: Binary::from(vec![1, 2, 3, 4]),        // Test
+            salt: Binary::from(vec![1, 2, 3, 4]),             // Test
             fee_apy_reduction_percentage: Default::default(), // Test
             collection_period_seconds: 0,                     // Test
         },
