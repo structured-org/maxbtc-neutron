@@ -191,11 +191,11 @@ export interface InstantiateMsg {
   treasury_address: string;
 }
 /**
- * New struct to hold parameters for instantiating the fee minter contract.
+ * New struct to hold parameters for instantiating the fee collector contract.
  */
 export interface FeeMinterParams {
   /**
-   * The code ID of the fee minter contract wasm.
+   * The code ID of the fee collector contract wasm.
    */
   code_id: number;
   /**

@@ -55,7 +55,7 @@ pub struct Config {
     pub deposits_allowlist: Option<Vec<Addr>>,
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
-    pub fee_minter_contract: Addr,
+    pub fee_collector_contract: Addr,
 }
 
 impl Config {

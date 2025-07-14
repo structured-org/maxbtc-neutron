@@ -118,7 +118,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Mints the requested amount of fees to the fee minter address. Can only be executed by the fee minter.",
+      "description": "Mints the requested amount of fees to the fee collector address. Can only be executed by the fee collector.",
       "type": "object",
       "required": [
         "mint_fee"

@@ -161,7 +161,7 @@
         "type": "string"
       },
       "FeeMinterParams": {
-        "description": "New struct to hold parameters for instantiating the fee minter contract.",
+        "description": "New struct to hold parameters for instantiating the fee collector contract.",
         "type": "object",
         "required": [
           "code_id",
@@ -171,7 +171,7 @@
         ],
         "properties": {
           "code_id": {
-            "description": "The code ID of the fee minter contract wasm.",
+            "description": "The code ID of the fee collector contract wasm.",
             "type": "integer",
             "format": "uint64",
             "minimum": 0.0
@@ -327,7 +327,7 @@
         "additionalProperties": false
       },
       {
-        "description": "Mints the requested amount of fees to the fee minter address. Can only be executed by the fee minter.",
+        "description": "Mints the requested amount of fees to the fee collector address. Can only be executed by the fee collector.",
         "type": "object",
         "required": [
           "mint_fee"

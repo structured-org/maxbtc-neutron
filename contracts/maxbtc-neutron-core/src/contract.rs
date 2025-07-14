@@ -31,22 +31,22 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // Get the checksum for the fee minter contract's code ID
-    let fee_minter_code_info = deps
+    // Get the checksum for the fee collector contract's code ID
+    let fee_collector_code_info = deps
         .querier
         .query_wasm_code_info(msg.fee_collector_params.code_id)?;
-    let fee_minter_checksum = fee_minter_code_info.checksum;
+    let fee_collector_checksum = fee_collector_code_info.checksum;
 
-    // Predict the fee minter contract address using Instantiate2
+    // Predict the fee collector contract address using Instantiate2
     let canonical_creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-    let fee_minter_address = instantiate2_address(
-        fee_minter_checksum.as_slice(),
+    let fee_collector_address = instantiate2_address(
+        fee_collector_checksum.as_slice(),
         &canonical_creator, // The creator is this core contract
         &msg.fee_collector_params.salt,
     )
     .map_err(|e| ContractError::Instantiate2Error(e))?;
 
-    // Build the Config, now with the predictable fee minter address
+    // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
@@ -76,7 +76,7 @@ pub fn instantiate(
             })
             .transpose()?,
         // Store the predicted address in the config
-        fee_minter_contract: deps.api.addr_humanize(&fee_minter_address)?,
+        fee_collector_contract: deps.api.addr_humanize(&fee_collector_address)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -139,8 +139,8 @@ pub fn instantiate(
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
         .add_attribute(
-            "instantiated_fee_minter_address",
-            fee_minter_address.to_string(),
+            "instantiated_fee_collector_address",
+            fee_collector_address.to_string(),
         )
         .add_attribute("deposit_flush_period", cfg.deposit_flush_period.to_string())
         .add_attribute(
@@ -194,7 +194,7 @@ fn execute_mint_fee(
     amount: Coin,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
-    if info.sender != cfg.fee_minter_contract {
+    if info.sender != cfg.fee_collector_contract {
         return Err(ContractError::Unauthorized {});
     }
 
@@ -289,7 +289,7 @@ fn execute_update_config(
             .transpose()?;
     }
     if let Some(addr) = updates.fee_collector_contract {
-        cfg.fee_minter_contract = deps.api.addr_validate(&addr)?;
+        cfg.fee_collector_contract = deps.api.addr_validate(&addr)?;
     }
 
     CONFIG.save(deps.storage, &cfg)?;

@@ -100,8 +100,8 @@ pub enum ExecuteMsg {
     ProcessCache {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
-    /// Mints the requested amount of fees to the fee minter address. Can only be
-    /// executed by the fee minter.
+    /// Mints the requested amount of fees to the fee collector address. Can only be
+    /// executed by the fee collector.
     MintFee { amount: Coin },
 }
 
@@ -188,10 +188,10 @@ pub struct FeeCollectorInstantiateMsg {
     pub maxbtc_decimals: u32,
 }
 
-/// New struct to hold parameters for instantiating the fee minter contract.
+/// New struct to hold parameters for instantiating the fee collector contract.
 #[cw_serde]
 pub struct FeeMinterParams {
-    /// The code ID of the fee minter contract wasm.
+    /// The code ID of the fee collector contract wasm.
     pub code_id: u64,
     /// A unique salt for generating a predictable address with Instantiate2.
     pub salt: Binary,
