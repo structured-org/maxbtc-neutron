@@ -11,7 +11,7 @@ CHAIN_ID="neutron-1"
 FEES="100000untrn"
 FROM="populator"
 GAS="3200000"
-DENOM="ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E"
+WBTC_DENOM="ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E"
 MAXBTC_DENOM="maxbtc"
 TREASURY_ADDRESS="neutron12nwelqw8vctn9rlktx6s4lq094e77htyf36ckc"
 ARTIFACTS_DIR="./artifacts"
@@ -220,8 +220,8 @@ run_setup() {
   "processor": "$SENDER_ADDRESS",
   "config": {
     "input_addr": { "library_account_addr": "$PUMP_CONTRACT_ADDRESS" },
-    "output_addr": { "library_account_addr": "0x1234567890123456789012345678901234567890" },
-    "denom": { "native": "$DENOM" },
+    "output_addr": { "library_account_addr": "0xd8cbA23cdaF8e969Fd17c8EAbeCF82a4f002ee8D" },
+    "denom": { "native": "$WBTC_DENOM" },
     "amount": "full_amount",
     "memo": "",
     "remote_chain_info": { "channel_id": "channel-1" },
@@ -256,14 +256,14 @@ EOF
   "liquidation_buffer_contract": "$LIQUIDATION_BUFFER_CONTRACT_ADDRESS",
   "deposit_pump_contract": "$PUMP_CONTRACT_ADDRESS",
   "accepted_withdrawable_percentage": "0.005",
-  "batch_active_duration": 10,
-  "batch_withdrawing_duration": 10,
+  "batch_active_duration": 30,
+  "batch_withdrawing_duration": 30,
   "cached_aum_tolerance": "0.02",
-  "cached_er_ttl": 20,
+  "cached_er_ttl": 120,
   "deposit_decimals": 6,
-  "deposit_denom": "untrn",
+  "deposit_denom": "$WBTC_DENOM",
   "deposit_cost": "0.01",
-  "deposit_flush_period": 10,
+  "deposit_flush_period": 30,
   "liquidation_buffer_share": "0.1",
   "maxbtc_denom": "$MAXBTC_DENOM",
   "owner": "$SENDER_ADDRESS",
@@ -369,16 +369,14 @@ handle_pump_library_command() {
 
     case "$sub_command" in
         eureka-transfer)
-            local amount=${1:?ERROR: Amount is required}
-            local denom=${2:?ERROR: Denom is required}
-            local receiver=${3:?ERROR: Receiver address is required}
-            # Timeout in seconds from now. Default: 600s (10 min)
-            local timeout_seconds=${4:-600}
-            local timeout_nanos=$(( ($(date +%s) + timeout_seconds) * 1000000000 ))
+            local fee_amount=${1:?ERROR: Amount is required}
+            local fee_denom=${2:?ERROR: Denom is required}
+            local fee_receiver=${3:?ERROR: Receiver address is required}
+            local timeout_timestamp=${4:?ERROR: Timeout timestamp is required}
+            msg=$(printf '{"process_function":{"eureka_transfer":{"eureka_fee":{"coin":{"amount":"%s","denom":"%s"},"receiver":"%s","timeout_timestamp":%s}}}}' \
+                "$fee_amount" "$fee_denom" "$fee_receiver" "$timeout_timestamp")
+            echo $msg
 
-            msg=$(printf '{"eureka_transfer":{"eureka_fee":{"coin":{"amount":"%s","denom":"%s"},"receiver":"%s","timeout_timestamp":"%s"}}}' \
-                "$amount" "$denom" "$receiver" "$timeout_nanos")
-            
             execute_and_wait "Pump Library: Eureka Transfer" "$PUMP_LIBRARY_CONTRACT_ADDRESS" "$msg"
             ;;
         *)
@@ -428,7 +426,7 @@ usage() {
     echo "  update-config '<json_payload>'            Update protocol config (owner only)."
     echo ""
     echo "Pump Library Sub-commands:"
-    echo "  eureka-transfer <amount> <denom> <receiver_addr> [timeout_sec]"
+    echo "  eureka-transfer <fee_amount> <fee_denom> <fee_receiver_addr> <timeout_nano>"
     echo "                                            Execute a Eureka transfer."
     echo ""
     echo "Fee Collector Sub-commands:"
