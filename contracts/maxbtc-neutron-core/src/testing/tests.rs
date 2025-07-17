@@ -195,7 +195,7 @@ fn test_deposit_contract_paused() {
     // Assert
     match err {
         ContractError::ContractPaused {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -231,7 +231,7 @@ fn test_deposit_exceeds_cap() {
     // Assert
     match err {
         ContractError::DepositCapExceeded {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -263,7 +263,7 @@ fn test_deposit_not_allowlisted() {
     // Assert
     match err {
         ContractError::Unauthorized {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -278,7 +278,7 @@ fn test_deposit_no_funds() {
 
     match err {
         ContractError::NoFundsSent {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -299,7 +299,7 @@ fn test_deposit_multiple_funds() {
 
     match err {
         ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -315,7 +315,7 @@ fn test_deposit_zero_amount() {
 
     match err {
         ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -337,7 +337,7 @@ fn test_deposit_wrong_denom() {
             assert_eq!(expected, "wBTC");
             assert_eq!(received, "ETH");
         }
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -1286,7 +1286,6 @@ fn test_cache_withdrawing_pending() {
 /// -----------------------------------------------------------------------------------------------
 /// Tests for ER
 /// -----------------------------------------------------------------------------------------------
-
 /// Verifies that the first deposit correctly uses an Exchange Rate of 1.0
 /// when the system has no prior assets or supply.
 #[test]
@@ -1739,7 +1738,6 @@ fn test_withdrawing_proportional_claim_with_shortfall() {
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
-
 /// Initializes the contract and sets up a "happy path" config in storage.
 /// Returns a mutable Deps and an Env, Info you can reuse in tests.
 fn setup_contract() -> (

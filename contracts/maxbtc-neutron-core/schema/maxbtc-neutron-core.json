@@ -690,6 +690,7 @@
         "deposit_cost",
         "deposit_denom",
         "deposit_flush_period",
+        "fee_collector_contract",
         "liquidation_buffer_share",
         "liquidation_contract",
         "maxbtc_denom",
@@ -723,6 +724,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "fee_collector_contract": {
+          "type": "string"
         },
         "liquidation_buffer_share": {
           "$ref": "#/definitions/Decimal"

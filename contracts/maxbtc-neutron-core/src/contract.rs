@@ -44,7 +44,7 @@ pub fn instantiate(
         &canonical_creator, // The creator is this core contract
         &msg.fee_collector_params.salt,
     )
-    .map_err(|e| ContractError::Instantiate2Error(e))?;
+    .map_err(ContractError::Instantiate2Error)?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
@@ -962,9 +962,8 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bin
         }
         QueryMsg::ExchangeRate {} => {
             let cfg = CONFIG.load(deps.storage)?;
-            let er = get_exchange_rate(&deps, env, &cfg, None).map_err(|e| {
-                StdError::generic_err(format!("failed to get_exchange_rate: {}", e))
-            })?;
+            let er = get_exchange_rate(&deps, env, &cfg, None)
+                .map_err(|e| StdError::generic_err(format!("failed to get_exchange_rate: {e}")))?;
             Ok(to_json_binary(&er)?)
         }
     }
@@ -973,7 +972,6 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bin
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
-
 /// Query the token supply for a given redemption token denom
 fn query_token_supply(deps: &Deps, denom: String) -> StdResult<Uint128> {
     let resp: SupplyResponse = deps

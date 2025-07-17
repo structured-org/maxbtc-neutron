@@ -137,7 +137,7 @@ impl WasmMockQuerier {
                 let query_result: ContractResult<Binary> = to_json_binary(&CodeInfoResponse::new(
                     0,
                     Addr::unchecked("creator"),
-                    Checksum::generate(&vec![1, 2, 3, 4, 5]),
+                    Checksum::generate(&[1, 2, 3, 4, 5]),
                 ))
                 .into();
                 SystemResult::Ok(query_result)
@@ -217,7 +217,7 @@ impl Querier for WasmMockQuerier {
             Ok(req) => req,
             Err(e) => {
                 return SystemResult::Err(SystemError::InvalidRequest {
-                    error: format!("Parsing query request: {}", e),
+                    error: format!("Parsing query request: {e}"),
                     request: bin_request.into(),
                 })
             }

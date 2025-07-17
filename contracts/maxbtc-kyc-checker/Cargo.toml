@@ -1,0 +1,26 @@
+[package]
+authors = ["Albert Andrejev <albert.andrejev@gmail.com>"]
+description = "MaxBTC KYC checker"
+edition = "2021"
+name = "maxbtc-kyc-checker"
+version = "1.0.0"
+
+exclude = [
+    "contract.wasm",
+    "hash.txt",
+]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+backtraces = []
+library = []
+
+[dependencies]
+cw2 = { workspace = true }
+cw-ownable = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cosmwasm-std = { workspace = true }
+cw-storage-plus = { version = "2.0.0", default-features = false }
+thiserror = { workspace = true }

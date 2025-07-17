@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use crate::state::ContractState;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
