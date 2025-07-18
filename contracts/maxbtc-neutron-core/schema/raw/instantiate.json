@@ -17,6 +17,7 @@
     "deposit_flush_period",
     "deposit_pump_contract",
     "fee_collector_params",
+    "kyc_checker_contract",
     "liquidation_buffer_contract",
     "liquidation_buffer_share",
     "maxbtc_denom",
@@ -121,6 +122,10 @@
           "$ref": "#/definitions/FeeMinterParams"
         }
       ]
+    },
+    "kyc_checker_contract": {
+      "description": "The address of the KYC checker contract and is used to check if a user has passed the KYC check",
+      "type": "string"
     },
     "liquidation_buffer_contract": {
       "description": "Address of the contract that manages the liquidation buffer.",

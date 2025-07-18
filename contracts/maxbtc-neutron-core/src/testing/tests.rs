@@ -236,13 +236,14 @@ fn test_deposit_exceeds_cap() {
 }
 
 #[test]
-fn test_deposit_not_allowlisted() {
+fn test_deposit_not_kyc_passed() {
     let (mut deps, env, _) = setup_contract();
 
     // Suppose we have an allowlist of ["alice", "bob"]
     let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    deps.querier.set_kyc_response(false);
+
     cfg.paused = false;
-    cfg.deposits_allowlist = Some(vec![deps.api.addr_make("alice"), deps.api.addr_make("bob")]);
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
 
     // We'll deposit from "charlie", who is not in the allowlist
@@ -1764,6 +1765,11 @@ fn setup_contract() -> (
 fn default_instantiate_msg(
     deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>,
 ) -> InstantiateMsg {
+    println!(
+        "kyc_checker_contract: {:?}",
+        deps.api.addr_make("kyc_checker_addr")
+    );
+
     InstantiateMsg {
         owner: deps.api.addr_make("owner_addr").to_string(),
         aum_contract: deps.api.addr_make("aum_addr").to_string(),
@@ -1790,6 +1796,7 @@ fn default_instantiate_msg(
             fee_apy_reduction_percentage: Default::default(), // Test
             collection_period_seconds: 0,                     // Test
         },
+        kyc_checker_contract: deps.api.addr_make("kyc_checker_addr").to_string(),
     }
 }
 

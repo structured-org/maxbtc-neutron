@@ -3974,6 +3974,7 @@ dependencies = [
  "cosmwasm-std 2.2.1",
  "cw-storage-plus",
  "cw2",
+ "maxbtc-kyc-checker",
  "neutron-std 5.0.0",
  "schemars",
  "serde",

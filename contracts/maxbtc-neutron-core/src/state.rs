@@ -50,12 +50,12 @@ pub struct Config {
     /// Optional upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// Optional allow-list of addresses that may mint maxBTC; `None` or an
-    /// empty vector means deposits are open to everyone
-    pub deposits_allowlist: Option<Vec<Addr>>,
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,
+    /// The address of the KYC checker contract
+    /// and is used to check if a user has passed the KYC check
+    pub kyc_checker_contract: Addr,
 }
 
 impl Config {

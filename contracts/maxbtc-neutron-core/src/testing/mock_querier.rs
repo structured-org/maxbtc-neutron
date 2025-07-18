@@ -43,6 +43,9 @@ pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
 
     supplies: HashMap<String, Uint128>,
+
+    /// Mocked KYC contract HasApproved response.
+    kyc_response: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -74,6 +77,7 @@ impl WasmMockQuerier {
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
+            kyc_response: true,
         }
     }
 
@@ -97,6 +101,10 @@ impl WasmMockQuerier {
 
     pub fn set_token_supply(&mut self, denom: &str, amount: Uint128) {
         self.supplies.insert(denom.into(), amount);
+    }
+
+    pub fn set_kyc_response(&mut self, val: bool) {
+        self.kyc_response = val;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -188,6 +196,29 @@ impl WasmMockQuerier {
                         let val = self.liqbuffer_btc_balance;
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
+                };
+            }
+            // If parse failed or unsupported => fallback
+            return self
+                .base
+                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
+                    contract_addr: contract_addr.into(),
+                    msg: msg.clone(),
+                }));
+        }
+
+        // 2. Check if it's the KYC checker contract
+        if contract_addr == "cosmwasm1zjgmsk05meg4r8pjzgfzgps7y4hl5vd7ee25z287jqv3q0f6xgfssx9v3j" {
+            let parsed: Result<maxbtc_kyc_checker::msgs::QueryMsg, _> = from_json(msg);
+            if let Ok(q) = parsed {
+                return match q {
+                    maxbtc_kyc_checker::msgs::QueryMsg::HasApproved { user: _ } => {
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&self.kyc_response).unwrap(),
+                        ))
+                    }
+                    maxbtc_kyc_checker::msgs::QueryMsg::GetConfig {} => unimplemented!(),
+                    maxbtc_kyc_checker::msgs::QueryMsg::Ownership {} => unimplemented!(),
                 };
             }
             // If parse failed or unsupported => fallback

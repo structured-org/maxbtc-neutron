@@ -46,5 +46,6 @@ schemars = "0.8.16"
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.12" }
 neutron-std = { git = "https://github.com/neutron-org/neutron-std", branch = "feat/respect-gogoproto-nullable" }
+maxbtc-kyc-checker = { path = "../maxbtc-kyc-checker", default-features = false }
 
 [dev-dependencies]
