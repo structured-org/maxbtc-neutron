@@ -269,6 +269,41 @@ fn test_deposit_not_kyc_passed() {
 }
 
 #[test]
+fn test_deposit_not_allowlisted_and_not_kyc_passed() {
+    let (mut deps, env, _) = setup_contract();
+
+    // Suppose we have an allowlist of ["alice", "bob"]
+    let mut cfg = CONFIG.load(&deps.storage).unwrap();
+    cfg.paused = false;
+    cfg.deposits_allowlist = Some(vec![deps.api.addr_make("alice"), deps.api.addr_make("bob")]);
+
+    CONFIG.save(&mut deps.storage, &cfg).unwrap();
+
+    deps.querier.set_kyc_response(false);
+
+    // We'll deposit from "charlie", who is not in the allowlist
+    let info = message_info(
+        &deps.api.addr_make("charlie"),
+        &[coin(1_000_000u128, "wBTC")],
+    ); // 1 wBTC
+
+    let recipient = deps.api.addr_make("recipient_addr").to_string();
+    let err = do_deposit(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        recipient.to_string(),
+    )
+    .expect_err("Should error if depositor not in allowlist");
+
+    // Assert
+    match err {
+        ContractError::Unauthorized {} => (),
+        e => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[test]
 fn test_deposit_no_funds() {
     let (mut deps, env, _) = setup_contract();
     let info = message_info(&deps.api.addr_make("depositor"), &[]); // no funds

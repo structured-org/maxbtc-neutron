@@ -67,6 +67,14 @@ pub fn instantiate(
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_er_ttl,
         deposits_cap: msg.deposits_cap,
+        deposits_allowlist: msg
+            .deposits_allowlist
+            .map(|v| {
+                v.into_iter()
+                    .map(|s| deps.api.addr_validate(&s))
+                    .collect::<StdResult<_>>()
+            })
+            .transpose()?,
         // Store the predicted address in the config
         fee_collector_contract: deps.api.addr_humanize(&fee_collector_address)?,
         kyc_checker_contract: deps.api.addr_validate(&msg.kyc_checker_contract)?,
@@ -271,6 +279,15 @@ fn execute_update_config(
     }
     if let Some(cap) = updates.deposits_cap {
         cfg.deposits_cap = cap;
+    }
+    if let Some(maybe_list) = updates.deposits_allowlist {
+        cfg.deposits_allowlist = maybe_list
+            .map(|v| {
+                v.into_iter()
+                    .map(|s| deps.api.addr_validate(&s))
+                    .collect::<StdResult<_>>()
+            })
+            .transpose()?;
     }
     if let Some(addr) = updates.fee_collector_contract {
         cfg.fee_collector_contract = deps.api.addr_validate(&addr)?;
@@ -1166,13 +1183,22 @@ fn check_deposit_cap(deps: &Deps, env: Env, cfg: &Config) -> Result<(), Contract
     Ok(())
 }
 
-/// Ensures that `recipient` was passed KYC check
+/// Ensures that `recipient` is present in the optional *allow-list* for
+/// deposits or passed the KYC check.
 fn check_deposits_allowlist(
     deps: &Deps,
     cfg: &Config,
     recipient: String,
 ) -> Result<(), ContractError> {
     let recipient = deps.api.addr_validate(&recipient)?;
+
+    if let Some(allowlist) = cfg.deposits_allowlist.clone() {
+        for addr in allowlist {
+            if addr == recipient {
+                return Ok(());
+            }
+        }
+    }
 
     let has_approved: bool = deps.querier.query_wasm_smart(
         cfg.kyc_checker_contract.clone(),
@@ -1181,9 +1207,9 @@ fn check_deposits_allowlist(
         },
     )?;
 
-    if !has_approved {
-        return Err(ContractError::Unauthorized {});
+    if has_approved {
+        return Ok(());
     }
 
-    Ok(())
+    Err(ContractError::Unauthorized {})
 }

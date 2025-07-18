@@ -78,6 +78,7 @@ pub struct UpdateConfigMsg {
     pub cached_aum_tolerance: Option<Decimal>,
     pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
+    pub deposits_allowlist: Option<Option<Vec<String>>>,
     pub fee_collector_contract: Option<String>,
     pub kyc_checker_contract: Option<String>,
 }
