@@ -39,42 +39,19 @@ The contract you see here coordinates these flows on Neutron.
 
 ## High-level Flow
 
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle -->|Deposit| Idle
-    Idle -->|FlushDeposits| Flushing
-    Flushing -->|Cache processed| Idle
-    Idle -->|Withdraw| ActiveBatch
-    ActiveBatch -->|ProcessActiveBatch| Withdrawing
-    Withdrawing -->|Funds received| Idle
-```
-
-1. **Deposit** – Users send the configured `deposit_denom` (e.g. `uusdc`) and instantly receive `maxBTC` minus a fee.
+1. **Deposit** – Users send the configured `deposit_denom` (e.g. `wBTC`) and instantly receive `maxBTC` minus a fee.
 2. **FlushDeposits** – Anyone may flush accumulated deposits:
-
     * A share is routed to the **liquidation buffer** (`liquidation_buffer_share` of AUM).
     * The rest is IBC-transferred to external BTC custody via a dedicated “deposit pump” contract.
-3. **Withdraw** – Users burn `maxBTC` and receive *redemption tokens* tied to the current batch.
-4. **ProcessActiveBatch** – Once the batch’s active period expires, it transitions to **Withdrawing**.
-5. **Claim** – After the BTC lands in the custody address, users redeem their share by burning redemption tokens.
+3. **Withdraw [DISABLED]** – Users burn `maxBTC` and receive *redemption tokens* tied to the current batch.
+4. **ProcessActiveBatch [DISABLED]** – Once the batch’s active period expires, it transitions to **Withdrawing**.
+5. **Claim [DISABLED]** – After the BTC lands in the custody address, users redeem their share by burning redemption tokens.
 
 Throughout, the contract caches an **exchange-rate (ER)** snapshot to bridge multi-block operations safely.
 
 ---
 
 ## Architecture
-
-### Key storage buckets
-
-| Item                    | Path              | Purpose                                                    |
-| ----------------------- | ----------------- | ---------------------------------------------------------- |
-| **`CONFIG`**            | singleton         | Global configuration & addresses                           |
-| **`ACTIVE_BATCH`**      | singleton         | Batch accepting withdrawals                                |
-| **`WITHDRAWING_BATCH`** | singleton         | Batch waiting for BTC top-up                               |
-| **`FINALIZED_BATCHES`** | map<`u64`, Batch> | Settled batches (users can still claim)                    |
-| **`FSM`**               | singleton         | Finite-state machine (`Idle` → `Flushing` / `Withdrawing`) |
-| **`CACHED_ER`**         | singleton         | Cached `ER` + AUM snapshot + expiry                        |
 
 ### Exchange-Rate formula
 
@@ -88,11 +65,11 @@ If the denominator is zero (bootstrap phase) the contract returns `1` to avoid d
 
 ### Finite-State Machine (FSM)
 
-| State           | Trigger In         | Trigger Out                 | Purpose                                     |
-| --------------- | ------------------ |-----------------------------| ------------------------------------------- |
-| **Idle**        | –                  | Deposit / Withdraw / Flush  | Normal operation                            |
-| **Flushing**    | FlushDeposits      | Money reached remote chain  | Ensures external custody received the funds |
-| **Withdrawing** | ProcessActiveBatch | BTC collected (≈ requested) | Waits for BTC top-up before claims          |
+| State                       | Trigger In         | Trigger Out                 | Purpose                                     |
+| ----------------------------| ------------------ |-----------------------------| ------------------------------------------- |
+| **Idle**                    | –                  | Deposit / Withdraw / Flush  | Normal operation                            |
+| **Flushing**                | FlushDeposits      | Money reached remote chain  | Ensures external custody received the funds |
+| **Withdrawing [DISABLED]**  | ProcessActiveBatch | BTC collected (≈ requested) | Waits for BTC top-up before claims          |
 
 ---
 
