@@ -43,6 +43,7 @@ fn test_instantiate_success() {
             msg.liquidation_buffer_contract.clone(),
         ),
         Attribute::new("collector_contract", msg.collector_contract.clone()),
+        Attribute::new("allowlist_contract", msg.allowlist_contract.clone()),
         Attribute::new("treasury_address", msg.treasury_address.clone()),
         Attribute::new("deposit_denom", msg.deposit_denom.clone()),
         Attribute::new("maxbtc_denom", msg.maxbtc_denom.clone()),
@@ -238,13 +239,7 @@ fn test_deposit_exceeds_cap() {
 #[test]
 fn test_deposit_not_allowlisted() {
     let (mut deps, env, _) = setup_contract();
-
-    // Suppose we have an allowlist of ["alice", "bob"]
-    let mut cfg = CONFIG.load(&deps.storage).unwrap();
-    cfg.paused = false;
-    cfg.deposits_allowlist = Some(vec![deps.api.addr_make("alice"), deps.api.addr_make("bob")]);
-    CONFIG.save(&mut deps.storage, &cfg).unwrap();
-
+    deps.querier.set_allowed_recipient(false);
     // We'll deposit from "charlie", who is not in the allowlist
     let info = message_info(
         &deps.api.addr_make("charlie"),
@@ -262,7 +257,7 @@ fn test_deposit_not_allowlisted() {
 
     // Assert
     match err {
-        ContractError::Unauthorized {} => (),
+        ContractError::AddressNotAllowed {} => (),
         e => panic!("Unexpected error: {:?}", e),
     }
 }
@@ -1785,7 +1780,7 @@ fn default_instantiate_msg(
         cached_aum_tolerance: Decimal::percent(2),
         cached_er_ttl: 100u64,
         deposits_cap: None,
-        deposits_allowlist: None,
+        allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_params: FeeMinterParams {
             code_id: 0,                                       // Test
             salt: Binary::from(vec![1, 2, 3, 4]),             // Test

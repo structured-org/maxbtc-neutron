@@ -179,6 +179,12 @@
             }
           ]
         },
+        "allowlist_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "aum_contract": {
           "type": [
             "string",
@@ -248,15 +254,6 @@
             "string",
             "null"
           ]
-        },
-        "deposits_allowlist": {
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "type": "string"
-          }
         },
         "deposits_cap": {
           "anyOf": [

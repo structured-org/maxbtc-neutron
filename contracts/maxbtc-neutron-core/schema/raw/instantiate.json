@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "accepted_withdrawable_percentage",
+    "allowlist_contract",
     "aum_contract",
     "batch_active_duration",
     "batch_withdrawing_duration",
@@ -31,6 +32,10 @@
           "$ref": "#/definitions/Decimal"
         }
       ]
+    },
+    "allowlist_contract": {
+      "description": "Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC",
+      "type": "string"
     },
     "aum_contract": {
       "type": "string"
@@ -92,16 +97,6 @@
     "deposit_pump_contract": {
       "description": "Contract that forwards freshly-received deposits to the custody chain.",
       "type": "string"
-    },
-    "deposits_allowlist": {
-      "description": "Optional allow-list of addresses that may mint maxBTC while the list is active (empty or `None` means open to everyone)",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "string"
-      }
     },
     "deposits_cap": {
       "description": "Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded",

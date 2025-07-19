@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use crate::msg::{
-    BatchResponse, CollectorExecuteMsg, ConfigResponse, ExecuteMsg, FeeCollectorInstantiateMsg,
-    InstantiateMsg, LiquidationBufferContractQueryMsg, LiquidationBufferExecuteMsg, OracleQueryMsg,
-    QueryMsg, UpdateConfigMsg,
+    AllowlistQueryMsg, BatchResponse, CollectorExecuteMsg, ConfigResponse, ExecuteMsg,
+    FeeCollectorInstantiateMsg, InstantiateMsg, LiquidationBufferContractQueryMsg,
+    LiquidationBufferExecuteMsg, OracleQueryMsg, QueryMsg, UpdateConfigMsg,
 };
 use crate::state::{
     Batch, CachedAUM, CachedER, Config, ContractState, ACTIVE_BATCH, ACTIVE_BATCH_START_TIME,
@@ -67,14 +67,7 @@ pub fn instantiate(
         deposit_buffer_tolerance: msg.cached_aum_tolerance,
         cached_er_ttl: msg.cached_er_ttl,
         deposits_cap: msg.deposits_cap,
-        deposits_allowlist: msg
-            .deposits_allowlist
-            .map(|v| {
-                v.into_iter()
-                    .map(|s| deps.api.addr_validate(&s))
-                    .collect::<StdResult<_>>()
-            })
-            .transpose()?,
+        allowlist_contract: deps.api.addr_validate(&msg.allowlist_contract)?,
         // Store the predicted address in the config
         fee_collector_contract: deps.api.addr_humanize(&fee_collector_address)?,
     };
@@ -135,6 +128,7 @@ pub fn instantiate(
             cfg.liquidation_buffer_contract.to_string(),
         )
         .add_attribute("collector_contract", cfg.collector_contract.to_string())
+        .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("treasury_address", cfg.treasury_address.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
@@ -279,14 +273,8 @@ fn execute_update_config(
     if let Some(cap) = updates.deposits_cap {
         cfg.deposits_cap = cap;
     }
-    if let Some(maybe_list) = updates.deposits_allowlist {
-        cfg.deposits_allowlist = maybe_list
-            .map(|v| {
-                v.into_iter()
-                    .map(|s| deps.api.addr_validate(&s))
-                    .collect::<StdResult<_>>()
-            })
-            .transpose()?;
+    if let Some(allowlist_contract) = updates.allowlist_contract {
+        cfg.allowlist_contract = deps.api.addr_validate(&allowlist_contract)?;
     }
     if let Some(addr) = updates.fee_collector_contract {
         cfg.fee_collector_contract = deps.api.addr_validate(&addr)?;
@@ -1190,16 +1178,16 @@ fn check_deposits_allowlist(
     cfg: &Config,
     recipient: String,
 ) -> Result<(), ContractError> {
-    let recipient = deps.api.addr_validate(&recipient)?;
-    if let Some(allowlist) = cfg.deposits_allowlist.clone() {
-        for addr in allowlist {
-            if addr == recipient {
-                return Ok(());
-            }
-        }
-
-        return Err(ContractError::Unauthorized {});
+    deps.api.addr_validate(&recipient)?;
+    let is_allowed: bool =
+        deps.querier
+            .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
+                contract_addr: cfg.allowlist_contract.to_string(),
+                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: recipient })?,
+            }))?;
+    if !is_allowed {
+        return Err(ContractError::AddressNotAllowed {});
+    } else {
+        Ok(())
     }
-
-    Ok(())
 }

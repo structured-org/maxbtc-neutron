@@ -1,4 +1,4 @@
-use crate::msg::{LiquidationBufferContractQueryMsg, OracleQueryMsg};
+use crate::msg::{AllowlistQueryMsg, LiquidationBufferContractQueryMsg, OracleQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
@@ -43,6 +43,8 @@ pub struct WasmMockQuerier {
     balances: HashMap<(String, String), Uint128>,
 
     supplies: HashMap<String, Uint128>,
+
+    allowed_recipient: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -74,6 +76,7 @@ impl WasmMockQuerier {
             liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
+            allowed_recipient: true,
         }
     }
 
@@ -97,6 +100,10 @@ impl WasmMockQuerier {
 
     pub fn set_token_supply(&mut self, denom: &str, amount: Uint128) {
         self.supplies.insert(denom.into(), amount);
+    }
+
+    pub fn set_allowed_recipient(&mut self, allowed: bool) {
+        self.allowed_recipient = allowed;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -153,6 +160,7 @@ impl WasmMockQuerier {
 
     /// Dispatches our recognized wasm queries to the correct mock data.
     fn handle_wasm_smart_query(&self, contract_addr: &str, msg: &Binary) -> QuerierResult {
+        println!("Handling wasm query for contract: {}", contract_addr);
         // 1. Check if it's the AUM contract
         if contract_addr == "cosmwasm1cytjkuu7je7h7tx7wa9u9fk9tca38zhv67kk5xgeez6jkjlrec9qk7w0nz" {
             // Try parse as OracleQueryMsg
@@ -186,6 +194,25 @@ impl WasmMockQuerier {
                     }
                     LiquidationBufferContractQueryMsg::GetBTCBalance {} => {
                         let val = self.liqbuffer_btc_balance;
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
+                    }
+                };
+            }
+            // If parse failed or unsupported => fallback
+            return self
+                .base
+                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
+                    contract_addr: contract_addr.into(),
+                    msg: msg.clone(),
+                }));
+        }
+        // 3. Check if it's the allowlist contract
+        if contract_addr == "cosmwasm1gpvxj2y5ungxeykk57hqthzuahfchunqjexzsflt962fjr8yc3cqyh0fg8" {
+            let parsed: Result<AllowlistQueryMsg, _> = from_json(msg);
+            if let Ok(q) = parsed {
+                return match q {
+                    AllowlistQueryMsg::IsAddressAllowed { .. } => {
+                        let val = self.allowed_recipient;
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };

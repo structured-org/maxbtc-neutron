@@ -9,6 +9,7 @@
     "type": "object",
     "required": [
       "accepted_withdrawable_percentage",
+      "allowlist_contract",
       "aum_contract",
       "batch_active_duration",
       "batch_withdrawing_duration",
@@ -35,6 +36,10 @@
             "$ref": "#/definitions/Decimal"
           }
         ]
+      },
+      "allowlist_contract": {
+        "description": "Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC",
+        "type": "string"
       },
       "aum_contract": {
         "type": "string"
@@ -96,16 +101,6 @@
       "deposit_pump_contract": {
         "description": "Contract that forwards freshly-received deposits to the custody chain.",
         "type": "string"
-      },
-      "deposits_allowlist": {
-        "description": "Optional allow-list of addresses that may mint maxBTC while the list is active (empty or `None` means open to everyone)",
-        "type": [
-          "array",
-          "null"
-        ],
-        "items": {
-          "type": "string"
-        }
       },
       "deposits_cap": {
         "description": "Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded",
@@ -388,6 +383,12 @@
               }
             ]
           },
+          "allowlist_contract": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "aum_contract": {
             "type": [
               "string",
@@ -457,15 +458,6 @@
               "string",
               "null"
             ]
-          },
-          "deposits_allowlist": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "type": "string"
-            }
           },
           "deposits_cap": {
             "anyOf": [
@@ -690,6 +682,7 @@
         "deposit_cost",
         "deposit_denom",
         "deposit_flush_period",
+        "fee_collector_contract",
         "liquidation_buffer_share",
         "liquidation_contract",
         "maxbtc_denom",
@@ -723,6 +716,9 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "fee_collector_contract": {
+          "type": "string"
         },
         "liquidation_buffer_share": {
           "$ref": "#/definitions/Decimal"

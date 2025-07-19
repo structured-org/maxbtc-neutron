@@ -48,9 +48,9 @@ pub struct InstantiateMsg {
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// Optional allow-list of addresses that may mint maxBTC while the
-    /// list is active (empty or `None` means open to everyone)
-    pub deposits_allowlist: Option<Vec<String>>,
+    /// Contract address of the allow-list contract that manages
+    /// the list of addresses allowed or passed KYC to mint maxBTC
+    pub allowlist_contract: String,
     /// Instantiation parameters for the fee collector.
     pub fee_collector_params: FeeMinterParams,
 }
@@ -74,7 +74,7 @@ pub struct UpdateConfigMsg {
     pub cached_aum_tolerance: Option<Decimal>,
     pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
-    pub deposits_allowlist: Option<Option<Vec<String>>>,
+    pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
 }
 
@@ -200,4 +200,11 @@ pub struct FeeMinterParams {
     pub fee_apy_reduction_percentage: Decimal,
     /// The duration in hours for each fee collection period.
     pub collection_period_seconds: u64,
+}
+
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum AllowlistQueryMsg {
+    #[returns(bool)]
+    IsAddressAllowed { address: String },
 }

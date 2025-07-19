@@ -26,6 +26,9 @@ pub enum ContractError {
     #[error("Invalid withdraw amount")]
     InvalidWithdrawAmount {},
 
+    #[error("Recipient address not allowed to mint maxBTC")]
+    AddressNotAllowed {},
+
     #[error("Batch not found or in incorrect state")]
     BatchStateError {},
 

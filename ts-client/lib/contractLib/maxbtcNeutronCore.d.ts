@@ -67,6 +67,7 @@ export interface ConfigResponse {
     deposit_cost: Decimal;
     deposit_denom: string;
     deposit_flush_period: number;
+    fee_collector_contract: string;
     liquidation_buffer_share: Decimal;
     liquidation_contract: string;
     maxbtc_denom: string;
@@ -112,6 +113,10 @@ export interface InstantiateMsg {
      * Minimum percentage (Decimal) of `btc_requested` that must be collected for a batch to finalize successfully
      */
     accepted_withdrawable_percentage: Decimal;
+    /**
+     * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
+     */
+    allowlist_contract: string;
     aum_contract: string;
     /**
      * Number of seconds an ACTIVE batch remains open before it can be promoted to WITHDRAWING
@@ -153,10 +158,6 @@ export interface InstantiateMsg {
      * Contract that forwards freshly-received deposits to the custody chain.
      */
     deposit_pump_contract: string;
-    /**
-     * Optional allow-list of addresses that may mint maxBTC while the list is active (empty or `None` means open to everyone)
-     */
-    deposits_allowlist?: string[] | null;
     /**
      * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
      */
