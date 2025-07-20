@@ -1094,7 +1094,7 @@ fn get_batch_id_from_redemption_coin(
 /// ```text
 /// ER = (oracle AUM + deposit buffer + liquidation buffer BTC)
 ///      ------------------------------------------------------
-///      (maxBTC supply + BTC requested for withdrawal
+///      (maxBTC supply + maxBTC burned within the batch
 ///                       – maxBTC held by liquidation buffer)
 /// ```
 ///
@@ -1131,7 +1131,8 @@ pub(crate) fn get_exchange_rate(
     let active_batch = ACTIVE_BATCH
         .load(deps.storage)?
         .ok_or(ContractError::BatchStateError {})?;
-    let er_denominator = maxbtc_supply + active_batch.btc_requested;
+    // let er_denominator = maxbtc_supply + active_batch.maxbtc_burned;
+    let er_denominator = maxbtc_supply + active_batch.maxbtc_burned;
 
     let er = if er_denominator.is_zero() {
         Decimal::one()

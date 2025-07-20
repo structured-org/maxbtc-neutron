@@ -1911,3 +1911,88 @@ fn load_cache(deps: &OwnedDeps<MockStorage, MockApi, WasmMockQuerier>) -> Cached
         .unwrap()
         .expect("cache must exist")
 }
+
+#[test]
+fn test_er_is_correct_after_withdraw() {
+    // This test is designed to catch a specific bug where the exchange rate (ER)
+    // denominator was calculated incorrectly after a withdrawal.
+    //
+    // The buggy code used `active_batch.btc_requested` (always 0 for an active batch)
+    // instead of `active_batch.maxbtc_burned`. This failed to account for burned
+    // maxBTC, artificially inflating the ER and causing new depositors to receive
+    // fewer maxBTC tokens than they should.
+    //
+    // Test Steps:
+    // 1. Set initial AUM and maxBTC supply to a 1:1 ratio (ER = 1.0).
+    // 2. A user withdraws/burns 10 maxBTC.
+    // 3. The `maxbtc_burned` counter in the active batch is now 10.
+    // 4. A new user deposits 1 wBTC.
+    // 5. The contract calculates the minted amount based on the ER.
+    //
+    // - Correct ER = (AUM) / (maxBTC Supply + maxBTC Burned) = 100 / (90 + 10) = 1.0
+    // - Buggy ER   = (AUM) / (maxBTC Supply + btc_requested) = 100 / (90 + 0) = 1.111...
+    //
+    // The test asserts that the minted amount corresponds to the correct ER.
+
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    let maxbtc_denom = cfg.get_maxbtc_denom(env.contract.address.to_string());
+
+    // 1. Set initial state: AUM = 100, maxBTC Supply = 100 => ER = 1.0
+    let initial_aum = Uint128::from(100_000_000u128);
+    let initial_supply = Uint128::from(100_000_000u128);
+    deps.querier.update_oracle_aum(initial_aum);
+    deps.querier.set_token_supply(&maxbtc_denom, initial_supply);
+    deps.querier
+        .update_liqbuffer_maxbtc_balance(Uint128::zero());
+
+    // 2. A user withdraws 10 maxBTC.
+    let withdraw_amount = Uint128::from(10_000_000u128);
+    let withdrawer = deps.api.addr_make("withdrawer");
+    let withdraw_info = message_info(&withdrawer, &[coin(withdraw_amount.u128(), &maxbtc_denom)]);
+    execute_withdraw(deps.as_mut(), env.clone(), withdraw_info).unwrap();
+
+    // 3. After the burn, the bank's supply of maxBTC is now 90.
+    //    The active batch's `maxbtc_burned` counter is now 10.
+    //    We simulate the result of the burn message by updating the querier.
+    let supply_after_burn = initial_supply - withdraw_amount;
+    deps.querier
+        .set_token_supply(&maxbtc_denom, supply_after_burn);
+
+    // 4. A new user deposits 1 wBTC.
+    let depositor = deps.api.addr_make("depositor");
+    let deposit_amount = Uint128::from(1_000_000u128);
+    let deposit_info = message_info(&depositor, &[coin(deposit_amount.u128(), "wBTC")]);
+
+    // Set the contract's balance to include the incoming deposit for the get_aum calculation.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    // Act: Perform the deposit, which will trigger get_exchange_rate().
+    let res = do_deposit(
+        deps.as_mut(),
+        env.clone(),
+        deposit_info.clone(),
+        depositor.to_string(),
+    )
+    .unwrap();
+
+    // Assert
+    // The deposit is 1 wBTC (1_000_000), fee is 1%, so net deposit is 0.99 (990_000).
+    // With the correct ER of 1.0, the minted amount should be 990,000.
+    // With the buggy ER of ~1.111, the minted amount would be ~891,000.
+    let minted_attr = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "minted_maxbtc")
+        .expect("minted_maxbtc attribute must be present");
+
+    assert_eq!(
+        minted_attr.value, "990000",
+        "Minted amount should be based on an ER of 1.0"
+    );
+}
