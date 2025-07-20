@@ -1,24 +1,6 @@
 use crate::error::ContractError;
 use cosmwasm_std::{Coin, Decimal, Uint128};
 
-/// Aggregate of all BTC holdings considered *AUM*.
-pub struct Aum {
-    /// BTC amount reported by the oracle.
-    pub oracle_aum: Uint128,
-    /// BTC temporarily kept in the contract before flushing.
-    pub deposit_buffer: Uint128,
-    /// BTC currently parked in the liquidation buffer contract.
-    pub liquidation_buffer_contract: Uint128,
-}
-
-impl Aum {
-    /// Returns the **total** AUM as `oracle + deposit_buffer + liquidation_buffer`.
-    #[inline]
-    pub fn total(&self) -> Uint128 {
-        self.oracle_aum + self.deposit_buffer + self.liquidation_buffer_contract
-    }
-}
-
 /// Converts a [`Decimal`] (which stores fixed-point numbers in *atomics*) back
 /// into a concrete `Uint128` amount with the desired `decimals` precision.
 pub fn dec_to_amount(dec: Decimal, decimals: u32) -> Result<Uint128, ContractError> {

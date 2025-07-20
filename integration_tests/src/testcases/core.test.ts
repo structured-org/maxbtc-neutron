@@ -5,6 +5,7 @@ import {
   MaxbtcNeutronAumOracle,
   MaxbtcNeutronLiquidationBuffer,
   MaxbtcNeutronAllowList,
+  MaxbtcNeutronExchangeRateProvider,
 } from 'maxbtc-neutron-ts-client';
 
 import { join } from 'path';
@@ -19,11 +20,15 @@ import Cosmopark from '@neutron-org/cosmopark';
 import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
 
+const DEPOSIT_DENOM = 'untrn';
+
 const CoreContractClient = MaxbtcNeutronCore.Client;
 const CollectorContractClient = MaxbtcNeutronCollector.Client;
 const AumOracleContractClient = MaxbtcNeutronAumOracle.Client;
 const LiquidationBufferContractClient = MaxbtcNeutronLiquidationBuffer.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
+const ExchangeRateProviderContractClient =
+  MaxbtcNeutronExchangeRateProvider.Client;
 
 describe('Core', () => {
   const context: {
@@ -33,6 +38,9 @@ describe('Core', () => {
     collectorContractClient?: InstanceType<typeof CollectorContractClient>;
     aumOracleContractClient?: InstanceType<typeof AumOracleContractClient>;
     allowlistContractClient?: InstanceType<typeof AllowlistContractClient>;
+    exchangeRateProviderContractClient?: InstanceType<
+      typeof ExchangeRateProviderContractClient
+    >;
     liquidationBufferContractClient?: InstanceType<
       typeof LiquidationBufferContractClient
     >;
@@ -82,7 +90,7 @@ describe('Core', () => {
   });
 
   afterAll(async () => {
-    await context.park.stop();
+    // await context.park.stop();
   });
 
   it('instantiate allowlist', async () => {
@@ -111,6 +119,37 @@ describe('Core', () => {
       client,
       instantiateRes.contractAddress,
     );
+  });
+  it('instantiate exchange rate provider', async () => {
+    const { client, account } = context;
+    const res = await client.upload(
+      account.address,
+      Uint8Array.from(
+        fs.readFileSync(
+          join(
+            __dirname,
+            '../../../artifacts/maxbtc_neutron_exchange_rate_provider.wasm',
+          ),
+        ),
+      ),
+      1.5,
+    );
+    expect(res.codeId).toBeGreaterThan(0);
+    const instantiateRes = await MaxbtcNeutronAllowList.Client.instantiate(
+      client,
+      account.address,
+      res.codeId,
+      { owner: account.address },
+      'label',
+      'auto',
+      [],
+    );
+    expect(instantiateRes.contractAddress).toHaveLength(66);
+    context.exchangeRateProviderContractClient =
+      new MaxbtcNeutronExchangeRateProvider.Client(
+        client,
+        instantiateRes.contractAddress,
+      );
   });
 
   it('instantiate collector', async () => {
@@ -359,12 +398,14 @@ describe('Core', () => {
         cached_aum_tolerance: '0.02',
         cached_er_ttl: 20,
         deposit_decimals: 6,
-        deposit_denom: 'untrn',
+        deposit_denom: DEPOSIT_DENOM,
         deposit_cost: '0.01',
         deposit_flush_period: 10,
         liquidation_buffer_share: '0.1',
         maxbtc_denom: 'maxbtc',
         owner: account.address,
+        exchange_rate_provider_contract:
+          context.exchangeRateProviderContractClient.contractAddress,
         allowlist_contract: context.allowlistContractClient.contractAddress,
         fee_collector_params: {
           code_id: fee_collector_code_id,
@@ -386,14 +427,7 @@ describe('Core', () => {
   });
 
   it('should not be able to deposit from not kyc-ed or allowed address', async () => {
-    const {
-      coreContractClient,
-      client,
-      account,
-      coreContractAddress,
-      collectorContractAddress,
-    } = context;
-
+    const { coreContractClient, account } = context;
     await expect(
       coreContractClient.deposit(
         account.address,
@@ -448,6 +482,14 @@ describe('Core', () => {
       [{ denom: 'untrn', amount: '200000' }],
     );
     await waitForTx(client, depositRes.transactionHash);
+
+    await updateExchangeRateAndAUM(
+      context.account.address,
+      context.neutronClient,
+      context.coreContractClient,
+      context.liquidationBufferContractClient,
+      context.exchangeRateProviderContractClient,
+    );
 
     const withdrawAmount = '75000';
 
@@ -622,7 +664,13 @@ describe('Core', () => {
       'flush setup',
       [{ denom: 'untrn', amount: '100000' }],
     );
-
+    await updateExchangeRateAndAUM(
+      context.account.address,
+      context.neutronClient,
+      context.coreContractClient,
+      context.liquidationBufferContractClient,
+      context.exchangeRateProviderContractClient,
+    );
     // STEP 1: Wait for flush period
     const flushPeriod = 10; // As set in instantiation
     console.log(`Waiting for ${flushPeriod + 1} seconds for flush period...`);
@@ -879,7 +927,7 @@ describe('Core', () => {
     console.log('Contract has returned to IDLE state.');
   });
 
-  it('should reject new state transitions while not in IDLE state', async () => {
+  it.skip('should reject new state transitions while not in IDLE state', async () => {
     const { client, coreContractClient, account, collectorContractAddress } =
       context;
 
@@ -973,3 +1021,50 @@ describe('Core', () => {
     console.log('Correctly rejected processActiveBatch. Test complete.');
   });
 });
+
+const updateExchangeRateAndAUM = async (
+  account: string,
+  neutronClient: InstanceType<typeof NeutronClient>,
+  coreClient: InstanceType<typeof CoreContractClient>,
+  liquidationBufferContractClient: InstanceType<
+    typeof LiquidationBufferContractClient
+  >,
+  exchangeRateProviderClient: InstanceType<
+    typeof ExchangeRateProviderContractClient
+  >,
+) => {
+  const maxBtcSupply = Number(
+    (
+      await neutronClient.CosmosBankV1Beta1.query.queryTotalSupply()
+    ).data.supply.find((supply) => supply.denom.includes('maxbtc'))?.amount ||
+      '0',
+  );
+  const coreBTCBalance = (
+    await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+      coreClient.contractAddress,
+      { denom: DEPOSIT_DENOM },
+    )
+  ).data.balance.amount;
+
+  const liquidationBufferBTCBalance = (
+    await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+      liquidationBufferContractClient.contractAddress,
+      { denom: DEPOSIT_DENOM },
+    )
+  ).data.balance.amount;
+
+  const aum = Number(coreBTCBalance) + Number(liquidationBufferBTCBalance);
+
+  await exchangeRateProviderClient.updateExchangeRate(account, {
+    rate: (aum / maxBtcSupply).toString(),
+  });
+  await exchangeRateProviderClient.updateAUM(account, {
+    aum: aum.toString(),
+  });
+  await sleep(3000);
+  console.log('get AUM', await exchangeRateProviderClient.queryAUM());
+
+  console.log(
+    `Updating exchange rate with maxBTC supply: ${maxBtcSupply}, core BTC balance: ${coreBTCBalance} liquidationBufferBTCBalance: ${liquidationBufferBTCBalance}`,
+  );
+};

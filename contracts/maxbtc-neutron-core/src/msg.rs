@@ -48,6 +48,8 @@ pub struct InstantiateMsg {
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
+    /// This contract provides the exchange rate for maxBTC
+    pub exchange_rate_provider_contract: String,
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: String,
@@ -156,11 +158,6 @@ pub struct BatchResponse {
     pub maxbtc_burned: String,
 }
 
-#[cw_serde]
-pub enum OracleQueryMsg {
-    GetAUM {},
-}
-
 /// Describes the queries that can be sent to the liquidation buffer contract.
 #[cw_serde]
 pub enum LiquidationBufferContractQueryMsg {
@@ -207,4 +204,13 @@ pub struct FeeMinterParams {
 pub enum AllowlistQueryMsg {
     #[returns(bool)]
     IsAddressAllowed { address: String },
+}
+
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum ExchangeRateProviderQueryMsg {
+    #[returns(Uint128)]
+    AUM {},
+    #[returns(Decimal)]
+    ExchangeRate {},
 }

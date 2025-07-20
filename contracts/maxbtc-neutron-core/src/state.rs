@@ -53,6 +53,8 @@ pub struct Config {
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: Addr,
+    /// This contract provides the exchange rate for maxBTC
+    pub exchange_rate_provider_contract: Addr,
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,
@@ -82,19 +84,6 @@ pub struct Batch {
     pub paid_amount: Uint128,
     /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
     pub collector_historical_balance: Uint128,
-}
-
-#[cw_serde]
-pub struct CachedER {
-    pub er: Decimal,
-    pub timeout: u64,
-    pub aum: Option<CachedAUM>,
-}
-
-#[cw_serde]
-pub struct CachedAUM {
-    pub oracle_aum: Uint128,
-    pub deposit_buffer: Uint128,
 }
 
 /// Represents the contract state.
@@ -149,6 +138,5 @@ pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_tim
 /// Tracks the time an active batch was initiated
 pub const ACTIVE_BATCH_START_TIME: Item<u64> = Item::new("active_batch_start_time");
 
-/// Cached assets under management value. Can be set when we trigger a deposits flush
-/// and when we move a batch to the WITHDRAWING state.
-pub const CACHED_ER: Item<Option<CachedER>> = Item::new("cached_er");
+/// Total amount of BTC deposited by the contract
+pub const TOTAL_DEPOSITED: Item<Uint128> = Item::new("total_deposited");

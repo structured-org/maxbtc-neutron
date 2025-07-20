@@ -17,6 +17,7 @@
     "deposit_denom",
     "deposit_flush_period",
     "deposit_pump_contract",
+    "exchange_rate_provider_contract",
     "fee_collector_params",
     "liquidation_buffer_contract",
     "liquidation_buffer_share",
@@ -108,6 +109,10 @@
           "type": "null"
         }
       ]
+    },
+    "exchange_rate_provider_contract": {
+      "description": "This contract provides the exchange rate for maxBTC",
+      "type": "string"
     },
     "fee_collector_params": {
       "description": "Instantiation parameters for the fee collector.",

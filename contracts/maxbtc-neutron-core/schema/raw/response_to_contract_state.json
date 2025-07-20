@@ -5,7 +5,6 @@
   "type": "string",
   "enum": [
     "idle",
-    "flushing",
     "withdrawing"
   ]
 }

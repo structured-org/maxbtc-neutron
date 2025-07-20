@@ -10,7 +10,7 @@ export type Decimal = string;
 /**
  * Represents the contract state.
  */
-export type ContractState = "idle" | "flushing" | "withdrawing";
+export type ContractState = "idle" | "withdrawing";
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
@@ -169,6 +169,10 @@ export interface InstantiateMsg {
    * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
    */
   deposits_cap?: Uint128 | null;
+  /**
+   * This contract provides the exchange rate for maxBTC
+   */
+  exchange_rate_provider_contract: string;
   /**
    * Instantiation parameters for the fee collector.
    */
