@@ -5,7 +5,7 @@ use crate::{
 use cosmwasm_std::{
     from_json,
     testing::{message_info, mock_dependencies, mock_env},
-    Addr, Decimal, Uint128,
+    Addr, Decimal,
 };
 
 #[test]
@@ -48,37 +48,6 @@ fn test_update_ownership() {
         res.attributes[1].value,
         "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
     );
-}
-
-#[test]
-fn test_set_aum() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
-    let info = message_info(
-        &Addr::unchecked("cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh"),
-        &[],
-    );
-    // Instantiate the contract
-    let msg = InstantiateMsg {
-        owner: "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
-    };
-    instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    // Set KYC for an address
-    let execute_msg = ExecuteMsg::UpdateAUM {
-        aum: Uint128::from(1000u128),
-    };
-    let res = execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
-    println!("{:?}", res);
-    assert_eq!(res.attributes.len(), 2);
-    assert_eq!(res.attributes[0].key, "action");
-    assert_eq!(res.attributes[0].value, "update_aum");
-    assert_eq!(res.attributes[1].key, "aum");
-    assert_eq!(res.attributes[1].value, "1000");
-    // Check AUM value
-    let query_msg = QueryMsg::AUM {};
-    let res = query(deps.as_ref(), env, query_msg).unwrap();
-    let aum: Uint128 = from_json(&res).unwrap();
-    assert_eq!(aum, Uint128::from(1000u128));
 }
 
 #[test]

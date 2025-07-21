@@ -40,71 +40,6 @@
       "additionalProperties": false
     },
     {
-      "description": "User requests a withdrawal of a certain amount of maxBTC",
-      "type": "object",
-      "required": [
-        "withdraw"
-      ],
-      "properties": {
-        "withdraw": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Permissionless handler to process the ACTIVE batch after `batch_active_duration`",
-      "type": "object",
-      "required": [
-        "process_active_batch"
-      ],
-      "properties": {
-        "process_active_batch": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "User claims their BTC from a finalized batch",
-      "type": "object",
-      "required": [
-        "claim"
-      ],
-      "properties": {
-        "claim": {
-          "type": "object",
-          "required": [
-            "recipient"
-          ],
-          "properties": {
-            "recipient": {
-              "description": "The user wants to receive BTC at `recipient` address on Neutron (which the user can IBC-transfer out later).",
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "description": "Triggers the execution of _process_cache",
-      "type": "object",
-      "required": [
-        "process_cache"
-      ],
-      "properties": {
-        "process_cache": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
       "description": "Owner-only message to update protocol configuration in-place",
       "type": "object",
       "required": [
@@ -169,61 +104,11 @@
       "description": "Message for updating configuration parameters (owner-only).",
       "type": "object",
       "properties": {
-        "accepted_withdrawable_percentage": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "allowlist_contract": {
           "type": [
             "string",
             "null"
           ]
-        },
-        "aum_contract": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "batch_active_duration": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "batch_withdrawing_duration": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "cached_aum_tolerance": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "cached_er_ttl": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
         },
         "collector_contract": {
           "type": [
@@ -273,22 +158,6 @@
           ]
         },
         "fee_collector_contract": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "liquidation_buffer_share": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "liquidation_contract": {
           "type": [
             "string",
             "null"

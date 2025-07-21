@@ -1,4 +1,3 @@
-use crate::state::ContractState;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 
@@ -7,8 +6,6 @@ use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 pub struct InstantiateMsg {
     pub owner: String,
     pub aum_contract: String,
-    /// Address of the contract that manages the liquidation buffer.
-    pub liquidation_buffer_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: String,
     /// Collector contract that receives BTC shipped back from custody
@@ -24,27 +21,8 @@ pub struct InstantiateMsg {
     pub maxbtc_denom: String,
     /// Minimum number of seconds that must elapse between two deposit-flush operations
     pub deposit_flush_period: u64,
-    /// Number of seconds an ACTIVE batch remains open before it can
-    /// be promoted to WITHDRAWING
-    pub batch_active_duration: u64,
-    /// Number of seconds a WITHDRAWING batch may remain open before it
-    /// must be finalized
-    pub batch_withdrawing_duration: u64,
-    /// Minimum percentage (Decimal) of `btc_requested` that must be
-    /// collected for a batch to finalize successfully
-    pub accepted_withdrawable_percentage: Decimal,
-    /// Fraction of total AUM (Decimal) that the protocol keeps on the
-    /// liquidation buffer contract as an instant-liquidity buffer
-    pub liquidation_buffer_share: Decimal,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
-    /// Maximum tolerated relative difference (Decimal) between the
-    /// deposit buffer sent for flushing and the amount observed on the
-    /// custody chain
-    pub cached_aum_tolerance: Decimal,
-    /// Lifetime, in seconds, of the cached ER/AUM snapshot that protects
-    /// the protocol while a multi-step operation is in flight
-    pub cached_er_ttl: u64,
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
@@ -62,19 +40,11 @@ pub struct InstantiateMsg {
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
     pub owner: Option<String>,
-    pub aum_contract: Option<String>,
-    pub liquidation_contract: Option<String>,
     pub deposit_pump_contract: Option<String>,
     pub collector_contract: Option<String>,
     pub treasury_address: Option<String>,
     pub deposit_flush_period: Option<u64>,
-    pub batch_active_duration: Option<u64>,
-    pub batch_withdrawing_duration: Option<u64>,
-    pub accepted_withdrawable_percentage: Option<Decimal>,
-    pub liquidation_buffer_share: Option<Decimal>,
     pub deposit_cost: Option<Decimal>,
-    pub cached_aum_tolerance: Option<Decimal>,
-    pub cached_er_ttl: Option<u64>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
@@ -88,18 +58,6 @@ pub enum ExecuteMsg {
     Deposit { recipient: String },
     /// Permissionless handler to flush deposits after `deposit_flush_period`
     FlushDeposits {},
-    /// User requests a withdrawal of a certain amount of maxBTC
-    Withdraw {},
-    /// Permissionless handler to process the ACTIVE batch after `batch_active_duration`
-    ProcessActiveBatch {},
-    /// User claims their BTC from a finalized batch
-    Claim {
-        /// The user wants to receive BTC at `recipient` address on Neutron
-        /// (which the user can IBC-transfer out later).
-        recipient: String,
-    },
-    /// Triggers the execution of _process_cache
-    ProcessCache {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
     /// Mints the requested amount of fees to the fee collector address. Can only be
@@ -114,18 +72,6 @@ pub enum QueryMsg {
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
-    /// Returns info about the current ACTIVE batch
-    #[returns(Option<BatchResponse>)]
-    ActiveBatch {},
-    /// Returns info about the current WITHDRAWING batch
-    #[returns(Option<BatchResponse>)]
-    WithdrawingBatch {},
-    /// Returns info for a finalized batch by id
-    #[returns(Option<BatchResponse>)]
-    FinalizedBatch { batch_id: u64 },
-    /// Returns the current FSM state
-    #[returns(ContractState)]
-    ContractState {},
     #[returns(Decimal)]
     ExchangeRate {},
 }
@@ -134,28 +80,12 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct ConfigResponse {
     pub owner: String,
-    pub aum_contract: String,
-    pub liquidation_contract: String,
     pub treasury_address: String,
     pub deposit_denom: String,
     pub maxbtc_denom: String,
     pub deposit_flush_period: u64,
-    pub batch_active_duration: u64,
-    pub batch_withdrawing_duration: u64,
-    pub accepted_withdrawable_percentage: Decimal,
-    pub liquidation_buffer_share: Decimal,
     pub deposit_cost: Decimal,
     pub fee_collector_contract: String,
-}
-
-/// Response for batch query
-#[cw_serde]
-pub struct BatchResponse {
-    pub batch_id: u64,
-    pub btc_requested: String,
-    pub collected_amount: String,
-    pub collector_historical_balance: String,
-    pub maxbtc_burned: String,
 }
 
 /// Describes the queries that can be sent to the liquidation buffer contract.
@@ -163,16 +93,6 @@ pub struct BatchResponse {
 pub enum LiquidationBufferContractQueryMsg {
     GetBTCBalance {},
     GetMaxBTCBalance {},
-}
-
-#[cw_serde]
-pub enum LiquidationBufferExecuteMsg {
-    ClawBack { amount: Coin },
-}
-
-#[cw_serde]
-pub enum CollectorExecuteMsg {
-    Claim { amount: Coin },
 }
 
 // (This is the InstantiateMsg for the fee collector contract, shown for context)
@@ -209,8 +129,6 @@ pub enum AllowlistQueryMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum ExchangeRateProviderQueryMsg {
-    #[returns(Uint128)]
-    AUM {},
     #[returns(Decimal)]
     ExchangeRate {},
 }

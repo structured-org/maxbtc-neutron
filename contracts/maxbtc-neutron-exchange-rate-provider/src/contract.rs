@@ -1,14 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, Uint128,
-};
+use cosmwasm_std::{to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 use cw_ownable::assert_owner;
 
 use crate::error::{ContractError, ContractResult};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{AUM, EXCHANGE_RATE};
+use crate::state::EXCHANGE_RATE;
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-allow-list";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -22,7 +20,6 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     cw_ownable::initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
-    AUM.save(deps.storage, &Uint128::zero())?;
     EXCHANGE_RATE.save(deps.storage, &Decimal::one())?;
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
@@ -35,13 +32,6 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> ContractResult<Response> {
     match msg {
-        ExecuteMsg::UpdateAUM { aum } => {
-            assert_owner(deps.storage, &info.sender)?;
-            AUM.save(deps.storage, &aum)?;
-            Ok(Response::new()
-                .add_attribute("action", "update_aum")
-                .add_attribute("aum", aum.to_string()))
-        }
         ExecuteMsg::UpdateExchangeRate { rate } => {
             assert_owner(deps.storage, &info.sender)?;
             EXCHANGE_RATE.save(deps.storage, &rate)?;
@@ -69,6 +59,5 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
                 .to_string(),
         )?,
         QueryMsg::ExchangeRate {} => to_json_binary(&EXCHANGE_RATE.load(deps.storage)?)?,
-        QueryMsg::AUM {} => to_json_binary(&AUM.load(deps.storage).unwrap_or(Uint128::zero()))?,
     })
 }

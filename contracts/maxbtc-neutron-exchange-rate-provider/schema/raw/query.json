@@ -27,19 +27,6 @@
         }
       },
       "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
-        "a_u_m"
-      ],
-      "properties": {
-        "a_u_m": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
     }
   ]
 }
