@@ -378,7 +378,7 @@ fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<C
 /// ```text
 /// ER = (oracle AUM + deposit buffer + liquidation buffer BTC)
 ///      ------------------------------------------------------
-///      (maxBTC supply + BTC requested for withdrawal
+///      (maxBTC supply + maxBTC burned within the batch
 ///                       – maxBTC held by liquidation buffer)
 /// ```
 ///
