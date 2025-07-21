@@ -1007,7 +1007,7 @@ fn get_batch_id_from_redemption_coin(
 /// ```text
 /// ER = (oracle AUM + deposit buffer + liquidation buffer BTC)
 ///      ------------------------------------------------------
-///      (maxBTC supply + BTC requested for withdrawal
+///      (maxBTC supply + maxBTC burned within the batch
 ///                       – maxBTC held by liquidation buffer)
 /// ```
 ///
