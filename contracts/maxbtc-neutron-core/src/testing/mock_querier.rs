@@ -84,10 +84,6 @@ impl WasmMockQuerier {
         self.allowed_recipient = allowed;
     }
 
-    pub fn set_exchange_rate(&mut self, er: Decimal) {
-        self.exchange_rate = er;
-    }
-
     // ---------- Implementation of the Querier trait ----------
     fn handle_bank_query(&self, query: BankQuery) -> QuerierResult {
         match query {

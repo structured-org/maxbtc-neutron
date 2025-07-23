@@ -38,7 +38,7 @@ pub fn instantiate(
         &canonical_creator, // The creator is this core contract
         &msg.fee_collector_params.salt,
     )
-    .map_err(|e| ContractError::Instantiate2Error(e))?;
+    .map_err(ContractError::Instantiate2Error)?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
@@ -162,40 +162,60 @@ fn execute_update_config(
     if info.sender != cfg.owner {
         return Err(ContractError::Unauthorized {});
     }
-    // Apply changes one field at a time.
+
+    // Initialize the response with standard attributes.
+    let mut res = Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("sender", info.sender.to_string());
+
+    // Apply changes one field at a time and add a corresponding attribute for each update.
     if let Some(paused) = updates.paused {
         cfg.paused = paused;
+        res = res.add_attribute("paused_updated", paused.to_string());
     }
     if let Some(owner) = updates.owner {
-        cfg.owner = deps.api.addr_validate(&owner)?;
+        let owner_addr = deps.api.addr_validate(&owner)?;
+        cfg.owner = owner_addr.clone();
+        res = res.add_attribute("owner_updated", owner_addr.to_string());
     }
     if let Some(addr) = updates.deposit_pump_contract {
-        cfg.deposit_pump_contract = deps.api.addr_validate(&addr)?;
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.deposit_pump_contract = validated_addr.clone();
+        res = res.add_attribute("deposit_pump_contract_updated", validated_addr.to_string());
     }
     if let Some(addr) = updates.collector_contract {
-        cfg.collector_contract = deps.api.addr_validate(&addr)?;
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.collector_contract = validated_addr.clone();
+        res = res.add_attribute("collector_contract_updated", validated_addr.to_string());
     }
     if let Some(addr) = updates.treasury_address {
-        cfg.treasury_address = deps.api.addr_validate(&addr)?;
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.treasury_address = validated_addr.clone();
+        res = res.add_attribute("treasury_address_updated", validated_addr.to_string());
     }
     if let Some(v) = updates.deposit_flush_period {
         cfg.deposit_flush_period = v;
+        res = res.add_attribute("deposit_flush_period_updated", v.to_string());
     }
     if let Some(cap) = updates.deposits_cap {
         cfg.deposits_cap = cap;
+        res = res.add_attribute("deposits_cap_updated", cap.unwrap());
     }
     if let Some(allowlist_contract) = updates.allowlist_contract {
-        cfg.allowlist_contract = deps.api.addr_validate(&allowlist_contract)?;
+        let validated_addr = deps.api.addr_validate(&allowlist_contract)?;
+        cfg.allowlist_contract = validated_addr.clone();
+        res = res.add_attribute("allowlist_contract_updated", validated_addr.to_string());
     }
     if let Some(addr) = updates.fee_collector_contract {
-        cfg.fee_collector_contract = deps.api.addr_validate(&addr)?;
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.fee_collector_contract = validated_addr.clone();
+        res = res.add_attribute("fee_collector_contract_updated", validated_addr.to_string());
     }
 
+    // Save the updated configuration.
     CONFIG.save(deps.storage, &cfg)?;
 
-    Ok(Response::new()
-        .add_attribute("action", "update_config")
-        .add_attribute("sender", info.sender))
+    Ok(res)
 }
 
 pub(crate) fn execute_deposit(
@@ -253,7 +273,7 @@ pub(crate) fn execute_deposit(
     )?;
     msgs.push(mint_msg);
     TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
-        Ok(total + Uint128::from(minted_amount))
+        Ok(total + minted_amount)
     })?;
 
     // Return the response
@@ -265,11 +285,11 @@ pub(crate) fn execute_deposit(
         .add_attribute("minted_maxbtc", minted_amount.to_string()))
 }
 
-/// Permissionless deposit flush
-/// - checks time has passed at least deposit_flush_period
-/// - if liquidation buffer contract holds less than liquidation_buffer_share of AUM, send enough
-/// - if liquidation buffer contract holds more, request some back (it will be processed next time)
-/// - then IBC Eureka transfer everything else to the custody
+
+/// Flushes the contract's accumulated deposit balance to the deposit pump contract.
+///
+/// This handler can be triggered by any account, but its execution is rate-limited
+/// by the `deposit_flush_period` defined in the contract's configuration.
 pub(crate) fn execute_flush_deposits(
     deps: DepsMut,
     env: Env,
@@ -297,7 +317,7 @@ pub(crate) fn execute_flush_deposits(
         .amount;
 
     // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
-    // Eureka
+    // Eureka though the valence library + base account combo
     if !amount_to_flush.is_zero() {
         LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
         let msg = CosmosMsg::Bank(BankMsg::Send {
@@ -345,9 +365,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
     }
 }
 
-/// -----------------------------------------------------------------------------------------------
-/// HELPER FUNCTIONS BELOW
-/// -----------------------------------------------------------------------------------------------
+/* -----------------------------------------------------------------------------------------------
+/ HELPER FUNCTIONS BELOW
+/ -----------------------------------------------------------------------------------------------*/
 
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
 fn create_tokenfactory_mint_msg(
@@ -370,20 +390,7 @@ fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<C
     }))
 }
 
-/// Computes or retrieves from cache the **exchange rate (ER)** between BTC
-/// *assets under management* (AUM) and circulating **maxBTC**.
-///
-/// The formula is:
-///
-/// ```text
-/// ER = (oracle AUM + deposit buffer + liquidation buffer BTC)
-///      ------------------------------------------------------
-///      (maxBTC supply + maxBTC burned within the batch
-///                       – maxBTC held by liquidation buffer)
-/// ```
-///
-/// If the denominator is zero (e.g. bootstrap state) the function returns `1`
-/// to avoid division by zero.
+/// Queries the exchange rate from the exchange rate provider contract.
 pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
     let er: Decimal = deps
         .querier
@@ -401,6 +408,7 @@ fn check_deposit_cap(
     deposit: Option<Uint128>,
 ) -> Result<(), ContractError> {
     if let Some(deposits_cap) = cfg.deposits_cap {
+        // Note: real assets under management can be different, but for now we don't care.
         let current_deposits = TOTAL_DEPOSITED.load(deps.storage)?;
         if current_deposits + deposit.unwrap_or_default() > deposits_cap {
             return Err(ContractError::DepositCapExceeded {});
@@ -410,10 +418,8 @@ fn check_deposit_cap(
     Ok(())
 }
 
-/// Ensures that `recipient` is present in the optional *allow-list* for
-/// deposits.
-///
-/// If the allow-list is **not** configured (`None`) everyone is allowed.
+/// Ensures that `recipient` is present in the *allow-list* for deposits by querying
+/// the allow-list contract.
 fn check_deposits_allowlist(
     deps: &Deps,
     cfg: &Config,
@@ -427,7 +433,7 @@ fn check_deposits_allowlist(
                 msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: recipient })?,
             }))?;
     if !is_allowed {
-        return Err(ContractError::AddressNotAllowed {});
+        Err(ContractError::AddressNotAllowed {})
     } else {
         Ok(())
     }
