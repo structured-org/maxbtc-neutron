@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{
     AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-    FeeCollectorInstantiateMsg, InstantiateMsg, QueryMsg, UpdateConfigMsg,
+    FeeCollectorInstantiateMsg, InstantiateMsg, QueryMsg, SimulateDepositResponse, UpdateConfigMsg,
 };
 use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin};
@@ -38,7 +38,7 @@ pub fn instantiate(
         &canonical_creator, // The creator is this core contract
         &msg.fee_collector_params.salt,
     )
-    .map_err(ContractError::Instantiate2Error)?;
+        .map_err(ContractError::Instantiate2Error)?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
@@ -237,25 +237,8 @@ pub(crate) fn execute_deposit(
     // We can't deposit if the recipient address is not allowlisted.
     check_deposits_allowlist(&deps.as_ref(), &cfg, recipient.clone())?;
 
-    let mut msgs = vec![];
-
-    // Input funds validation happens here.
-    let deposit_coin = get_deposit_coin(cfg.deposit_denom.clone(), info.funds)?;
-
-    // Get the exchange rate
-    let er = get_exchange_rate(&deps.as_ref(), &cfg.clone())?;
-
-    // Adjust for deposit fee
-    let deposit_amount = Decimal::from_atomics(deposit_coin.amount, cfg.deposit_decimals)
-        .map_err(|_| ContractError::InvalidDepositAmount {})?;
-
-    // Apply the deposit fee and divide by exchange rate
-    let fee_multiplier = Decimal::one() - cfg.deposit_cost;
-
-    // CosmWasm's Decimal always uses 18 digits internally, so scale down
-    // to match cfg.deposit_decimals (e.g., 6) before minting.
-    let minted_amount =
-        dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
+    // Calculate the amount of maxBTC to mint.
+    let minted_amount = calculate_mint_amount(deps.as_ref(), deposit_coin.amount)?;
 
     // Can be equal to zero if rounding kicks in with a very high ER.
     if minted_amount.is_zero() {
@@ -271,14 +254,14 @@ pub(crate) fn execute_deposit(
             denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
         },
     )?;
-    msgs.push(mint_msg);
+
     TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
         Ok(total + minted_amount)
     })?;
 
     // Return the response
     Ok(Response::new()
-        .add_messages(msgs)
+        .add_message(mint_msg)
         .add_attribute("action", "deposit")
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", recipient)
@@ -362,12 +345,51 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             })?;
             Ok(to_json_binary(&er)?)
         }
+        QueryMsg::SimulateDeposit { amount } => {
+            // Call the dedicated calculation function and map its error type to StdError
+            let minted_amount = calculate_mint_amount(deps, amount)
+                .map_err(|e| StdError::generic_err(format!("Calculation failed: {}", e)))?;
+
+            let resp = SimulateDepositResponse { minted_amount };
+            to_json_binary(&resp)
+        }
     }
 }
 
 /* -----------------------------------------------------------------------------------------------
 / HELPER FUNCTIONS BELOW
 / -----------------------------------------------------------------------------------------------*/
+
+/// Calculates the amount of maxBTC to be minted for a given deposit amount.
+/// This function encapsulates the core logic used in both deposits and simulations.
+fn calculate_mint_amount(
+    deps: Deps,
+    deposit_amount_raw: Uint128,
+) -> Result<Uint128, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Get the current exchange rate
+    let er = get_exchange_rate(&deps, &cfg)?;
+
+    // A zero exchange rate is an invalid state and would cause a division by zero error.
+    if er.is_zero() {
+        // We use InvalidDepositAmount here as a zero exchange rate makes any deposit invalid.
+        return Err(ContractError::InvalidDepositAmount {});
+    }
+
+    // Convert the raw input amount to a Decimal using the deposit asset's decimals
+    let deposit_amount = Decimal::from_atomics(deposit_amount_raw, cfg.deposit_decimals)
+        .map_err(|_| ContractError::InvalidDepositAmount {})?;
+
+    // Apply the deposit fee (cost)
+    let fee_multiplier = Decimal::one() - cfg.deposit_cost;
+
+    // Calculate the final amount of maxBTC to be minted after fees and exchange rate conversion
+    let minted_amount =
+        dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
+
+    Ok(minted_amount)
+}
 
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
 fn create_tokenfactory_mint_msg(

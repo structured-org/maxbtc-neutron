@@ -74,6 +74,14 @@ pub enum QueryMsg {
     Config {},
     #[returns(Decimal)]
     ExchangeRate {},
+    /// Simulates a deposit and returns the amount of maxBTC that would be minted.
+    #[returns(SimulateDepositResponse)]
+    SimulateDeposit { amount: Uint128 },
+}
+
+#[cw_serde]
+pub struct SimulateDepositResponse {
+    pub minted_amount: Uint128,
 }
 
 /// Response for querying config
