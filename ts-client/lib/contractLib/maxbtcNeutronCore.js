@@ -29,18 +29,6 @@ class Client {
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
     };
-    queryActiveBatch = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { active_batch: {} });
-    };
-    queryWithdrawingBatch = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
-    };
-    queryFinalizedBatch = async (args) => {
-        return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
-    };
-    queryContractState = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
-    };
     queryExchangeRate = async () => {
         return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
     };
@@ -55,30 +43,6 @@ class Client {
             throw this.mustBeSigningClient();
         }
         return this.client.execute(sender, this.contractAddress, { flush_deposits: {} }, fee || "auto", memo, funds);
-    };
-    withdraw = async (sender, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, { withdraw: {} }, fee || "auto", memo, funds);
-    };
-    processActiveBatch = async (sender, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, { process_active_batch: {} }, fee || "auto", memo, funds);
-    };
-    claim = async (sender, args, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
-    };
-    processCache = async (sender, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, { process_cache: {} }, fee || "auto", memo, funds);
     };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {

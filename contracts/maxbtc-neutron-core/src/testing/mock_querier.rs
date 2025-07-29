@@ -1,8 +1,8 @@
-use crate::msg::{AllowlistQueryMsg, LiquidationBufferContractQueryMsg, OracleQueryMsg};
+use crate::msg::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
-    ContractResult, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
+    ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
     SystemResult, Uint128, WasmQuery,
 };
 use schemars::JsonSchema;
@@ -29,15 +29,6 @@ pub struct WasmMockQuerier {
     /// The standard cosmwasm mock querier (handles most queries by default).
     base: MockQuerier<Empty>,
 
-    /// Mocked AUM value for `OracleQueryMsg::GetAUM {}` queries.
-    oracle_aum: Uint128,
-
-    /// Mocked liquidation buffer contract's `GetMaxBTCBalance`.
-    liqbuffer_maxbtc_balance: Uint128,
-
-    /// Mocked liquidation buffer contract's `GetBTCBalance`.
-    liqbuffer_btc_balance: Uint128,
-
     /// Optional map of `(address, denom) -> balance` for your own bank queries
     /// (used in `BankQuery::Balance { address, denom }`).
     balances: HashMap<(String, String), Uint128>,
@@ -45,6 +36,8 @@ pub struct WasmMockQuerier {
     supplies: HashMap<String, Uint128>,
 
     allowed_recipient: bool,
+
+    exchange_rate: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -71,26 +64,11 @@ impl WasmMockQuerier {
     pub fn new(base: MockQuerier<Empty>) -> Self {
         WasmMockQuerier {
             base,
-            oracle_aum: Uint128::zero(),
-            liqbuffer_maxbtc_balance: Uint128::zero(),
-            liqbuffer_btc_balance: Uint128::zero(),
             balances: HashMap::new(),
             supplies: Default::default(),
             allowed_recipient: true,
+            exchange_rate: Decimal::one(),
         }
-    }
-
-    // ---------- Update methods for mocking specific values ----------
-    pub fn update_oracle_aum(&mut self, val: Uint128) {
-        self.oracle_aum = val;
-    }
-
-    pub fn update_liqbuffer_maxbtc_balance(&mut self, val: Uint128) {
-        self.liqbuffer_maxbtc_balance = val;
-    }
-
-    pub fn update_liqbuffer_btc_balance(&mut self, val: Uint128) {
-        self.liqbuffer_btc_balance = val;
     }
 
     /// Allows you to store any arbitrary `(address, denom) -> amount` for `BankQuery::Balance`.
@@ -161,39 +139,13 @@ impl WasmMockQuerier {
     /// Dispatches our recognized wasm queries to the correct mock data.
     fn handle_wasm_smart_query(&self, contract_addr: &str, msg: &Binary) -> QuerierResult {
         println!("Handling wasm query for contract: {}", contract_addr);
-        // 1. Check if it's the AUM contract
-        if contract_addr == "cosmwasm1cytjkuu7je7h7tx7wa9u9fk9tca38zhv67kk5xgeez6jkjlrec9qk7w0nz" {
-            // Try parse as OracleQueryMsg
-            let parsed: Result<OracleQueryMsg, _> = from_json(msg);
-            if let Ok(q) = parsed {
-                return match q {
-                    OracleQueryMsg::GetAUM {} => {
-                        // Return the mocked `aum` value
-                        let val = self.oracle_aum;
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
-                    }
-                };
-            }
-            // If parse failed or unsupported query => fallback
-            return self
-                .base
-                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
-                    contract_addr: contract_addr.into(),
-                    msg: msg.clone(),
-                }));
-        }
 
-        // 2. Check if it's the Liquidation Buffer contract
-        if contract_addr == "cosmwasm1cse2m3gz5qxynp4t5hh5sg0zyn9gskys3u9ac360qmftvhw6pqlqutnz9j" {
-            let parsed: Result<LiquidationBufferContractQueryMsg, _> = from_json(msg);
+        if contract_addr == "cosmwasm1qugtqqz3w5yqdt7z56nx5aj0umrtz2q4r8escthjpgkvmhdjkypq9umkdq" {
+            let parsed: Result<ExchangeRateProviderQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
                 return match q {
-                    LiquidationBufferContractQueryMsg::GetMaxBTCBalance {} => {
-                        let val = self.liqbuffer_maxbtc_balance;
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
-                    }
-                    LiquidationBufferContractQueryMsg::GetBTCBalance {} => {
-                        let val = self.liqbuffer_btc_balance;
+                    ExchangeRateProviderQueryMsg::ExchangeRate {} => {
+                        let val = self.exchange_rate;
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };
@@ -206,7 +158,8 @@ impl WasmMockQuerier {
                     msg: msg.clone(),
                 }));
         }
-        // 3. Check if it's the allowlist contract
+
+        // 2. Check if it's the allowlist contract
         if contract_addr == "cosmwasm1gpvxj2y5ungxeykk57hqthzuahfchunqjexzsflt962fjr8yc3cqyh0fg8" {
             let parsed: Result<AllowlistQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
