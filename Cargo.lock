@@ -1948,6 +1948,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw-address-like"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73553ee4dad5b1678977ff603e72c3fdd41518ca2b0bd9b245b21e4c72eafa9e"
+dependencies = [
+ "cosmwasm-std 2.2.1",
+]
+
+[[package]]
 name = "cw-multi-test"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1965,6 +1974,32 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "cw-ownable"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed2f8ee96ac5342c795a0610410998fc075a95af8c796b6d16479cdffd2471f1"
+dependencies = [
+ "cosmwasm-schema 2.2.1",
+ "cosmwasm-std 2.2.1",
+ "cw-address-like",
+ "cw-ownable-derive",
+ "cw-storage-plus",
+ "cw-utils",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "cw-ownable-derive"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e69178d27793063dd13812777709cf7d7860ba35a598094d4bd89e1b30c9341"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3892,6 +3927,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
 
 [[package]]
+name = "maxbtc-neutron-allow-list"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema 2.2.1",
+ "cosmwasm-std 2.2.1",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw2",
+ "neutron-std 5.0.0",
+ "schemars",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "maxbtc-neutron-aum-oracle"
 version = "0.1.0"
 dependencies = [
@@ -3925,6 +3975,21 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
+ "cw-storage-plus",
+ "cw2",
+ "neutron-std 5.0.0",
+ "schemars",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-neutron-exchange-rate-provider"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema 2.2.1",
+ "cosmwasm-std 2.2.1",
+ "cw-ownable",
  "cw-storage-plus",
  "cw2",
  "neutron-std 5.0.0",
@@ -4646,7 +4711,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.98",

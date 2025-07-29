@@ -1,6 +1,5 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
-export type NullableBatchResponse = BatchResponse | null;
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
@@ -8,17 +7,11 @@ export type NullableBatchResponse = BatchResponse | null;
  */
 export type Decimal = string;
 /**
- * Represents the contract state.
- */
-export type ContractState = "idle" | "flushing" | "withdrawing";
-/**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal1 = string;
-export type NullableBatchResponse1 = BatchResponse | null;
-export type NullableBatchResponse2 = BatchResponse | null;
 /**
  * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
  *
@@ -41,55 +34,24 @@ export type Uint128 = string;
 export type Binary = string;
 
 export interface MaxbtcNeutronCoreSchema {
-  responses:
-    | NullableBatchResponse
-    | ConfigResponse
-    | ContractState
-    | Decimal1
-    | NullableBatchResponse1
-    | NullableBatchResponse2;
-  query: FinalizedBatchArgs;
-  execute: DepositArgs | ClaimArgs | UpdateConfigArgs | MintFeeArgs;
+  responses: ConfigResponse | Decimal1;
+  execute: DepositArgs | UpdateConfigArgs | MintFeeArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
-}
-/**
- * Response for batch query
- */
-export interface BatchResponse {
-  batch_id: number;
-  btc_requested: string;
-  collected_amount: string;
-  collector_historical_balance: string;
-  maxbtc_burned: string;
 }
 /**
  * Response for querying config
  */
 export interface ConfigResponse {
-  accepted_withdrawable_percentage: Decimal;
-  aum_contract: string;
-  batch_active_duration: number;
-  batch_withdrawing_duration: number;
   deposit_cost: Decimal;
   deposit_denom: string;
   deposit_flush_period: number;
-  liquidation_buffer_share: Decimal;
-  liquidation_contract: string;
+  fee_collector_contract: string;
   maxbtc_denom: string;
   owner: string;
   treasury_address: string;
 }
-export interface FinalizedBatchArgs {
-  batch_id: number;
-}
 export interface DepositArgs {
-  recipient: string;
-}
-export interface ClaimArgs {
-  /**
-   * The user wants to receive BTC at `recipient` address on Neutron (which the user can IBC-transfer out later).
-   */
   recipient: string;
 }
 /**
@@ -116,26 +78,10 @@ export interface Coin {
  */
 export interface InstantiateMsg {
   /**
-   * Minimum percentage (Decimal) of `btc_requested` that must be collected for a batch to finalize successfully
+   * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
    */
-  accepted_withdrawable_percentage: Decimal;
+  allowlist_contract: string;
   aum_contract: string;
-  /**
-   * Number of seconds an ACTIVE batch remains open before it can be promoted to WITHDRAWING
-   */
-  batch_active_duration: number;
-  /**
-   * Number of seconds a WITHDRAWING batch may remain open before it must be finalized
-   */
-  batch_withdrawing_duration: number;
-  /**
-   * Maximum tolerated relative difference (Decimal) between the deposit buffer sent for flushing and the amount observed on the custody chain
-   */
-  cached_aum_tolerance: Decimal;
-  /**
-   * Lifetime, in seconds, of the cached ER/AUM snapshot that protects the protocol while a multi-step operation is in flight
-   */
-  cached_er_ttl: number;
   /**
    * Collector contract that receives BTC shipped back from custody during the withdrawal process.
    */
@@ -161,25 +107,17 @@ export interface InstantiateMsg {
    */
   deposit_pump_contract: string;
   /**
-   * Optional allow-list of addresses that may mint maxBTC while the list is active (empty or `None` means open to everyone)
-   */
-  deposits_allowlist?: string[] | null;
-  /**
    * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
    */
   deposits_cap?: Uint128 | null;
   /**
+   * This contract provides the exchange rate for maxBTC
+   */
+  exchange_rate_provider_contract: string;
+  /**
    * Instantiation parameters for the fee collector.
    */
   fee_collector_params: FeeMinterParams;
-  /**
-   * Address of the contract that manages the liquidation buffer.
-   */
-  liquidation_buffer_contract: string;
-  /**
-   * Fraction of total AUM (Decimal) that the protocol keeps on the liquidation buffer contract as an instant-liquidity buffer
-   */
-  liquidation_buffer_share: Decimal;
   /**
    * The token-factory sub-denom used for the maxBTC token
    */
@@ -261,18 +199,6 @@ export class Client {
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
-  queryActiveBatch = async(): Promise<NullableBatchResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { active_batch: {} });
-  }
-  queryWithdrawingBatch = async(): Promise<NullableBatchResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
-  }
-  queryFinalizedBatch = async(args: FinalizedBatchArgs): Promise<NullableBatchResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
-  }
-  queryContractState = async(): Promise<ContractState> => {
-    return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
-  }
   queryExchangeRate = async(): Promise<Decimal> => {
     return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
   }
@@ -283,22 +209,6 @@ export class Client {
   flushDeposits = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, { flush_deposits: {} }, fee || "auto", memo, funds);
-  }
-  withdraw = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { withdraw: {} }, fee || "auto", memo, funds);
-  }
-  processActiveBatch = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { process_active_batch: {} }, fee || "auto", memo, funds);
-  }
-  claim = async(sender:string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { claim: args }, fee || "auto", memo, funds);
-  }
-  processCache = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { process_cache: {} }, fee || "auto", memo, funds);
   }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }

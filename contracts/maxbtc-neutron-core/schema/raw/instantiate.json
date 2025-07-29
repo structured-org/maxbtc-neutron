@@ -4,62 +4,27 @@
   "description": "InstantiateMsg configures the contract on initialization.",
   "type": "object",
   "required": [
-    "accepted_withdrawable_percentage",
+    "allowlist_contract",
     "aum_contract",
-    "batch_active_duration",
-    "batch_withdrawing_duration",
-    "cached_aum_tolerance",
-    "cached_er_ttl",
     "collector_contract",
     "deposit_cost",
     "deposit_decimals",
     "deposit_denom",
     "deposit_flush_period",
     "deposit_pump_contract",
+    "exchange_rate_provider_contract",
     "fee_collector_params",
-    "liquidation_buffer_contract",
-    "liquidation_buffer_share",
     "maxbtc_denom",
     "owner",
     "treasury_address"
   ],
   "properties": {
-    "accepted_withdrawable_percentage": {
-      "description": "Minimum percentage (Decimal) of `btc_requested` that must be collected for a batch to finalize successfully",
-      "allOf": [
-        {
-          "$ref": "#/definitions/Decimal"
-        }
-      ]
+    "allowlist_contract": {
+      "description": "Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC",
+      "type": "string"
     },
     "aum_contract": {
       "type": "string"
-    },
-    "batch_active_duration": {
-      "description": "Number of seconds an ACTIVE batch remains open before it can be promoted to WITHDRAWING",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "batch_withdrawing_duration": {
-      "description": "Number of seconds a WITHDRAWING batch may remain open before it must be finalized",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "cached_aum_tolerance": {
-      "description": "Maximum tolerated relative difference (Decimal) between the deposit buffer sent for flushing and the amount observed on the custody chain",
-      "allOf": [
-        {
-          "$ref": "#/definitions/Decimal"
-        }
-      ]
-    },
-    "cached_er_ttl": {
-      "description": "Lifetime, in seconds, of the cached ER/AUM snapshot that protects the protocol while a multi-step operation is in flight",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     },
     "collector_contract": {
       "description": "Collector contract that receives BTC shipped back from custody during the withdrawal process.",
@@ -93,16 +58,6 @@
       "description": "Contract that forwards freshly-received deposits to the custody chain.",
       "type": "string"
     },
-    "deposits_allowlist": {
-      "description": "Optional allow-list of addresses that may mint maxBTC while the list is active (empty or `None` means open to everyone)",
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "string"
-      }
-    },
     "deposits_cap": {
       "description": "Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded",
       "anyOf": [
@@ -114,23 +69,15 @@
         }
       ]
     },
+    "exchange_rate_provider_contract": {
+      "description": "This contract provides the exchange rate for maxBTC",
+      "type": "string"
+    },
     "fee_collector_params": {
       "description": "Instantiation parameters for the fee collector.",
       "allOf": [
         {
           "$ref": "#/definitions/FeeMinterParams"
-        }
-      ]
-    },
-    "liquidation_buffer_contract": {
-      "description": "Address of the contract that manages the liquidation buffer.",
-      "type": "string"
-    },
-    "liquidation_buffer_share": {
-      "description": "Fraction of total AUM (Decimal) that the protocol keeps on the liquidation buffer contract as an instant-liquidity buffer",
-      "allOf": [
-        {
-          "$ref": "#/definitions/Decimal"
         }
       ]
     },

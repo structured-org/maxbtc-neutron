@@ -51,7 +51,7 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
 
     balance = 100000;
 
-    let skip_response = query_skip_api(&config.neutron_denom, balance.to_string(), &config).await?;
+    let skip_response = query_skip_api(&config.neutron_denom, balance.to_string(), config).await?;
 
     let eureka_transfer = skip_response
         .operations
