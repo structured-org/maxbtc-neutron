@@ -181,38 +181,34 @@ run_setup() {
     echo "Sender Address: $SENDER_ADDRESS"
     echo ""
 
-    # 1. Collector Contract
-    echo "--- [1/8] Deploying Collector Contract ---"
-    COLLECTOR_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_collector.wasm")
-    COLLECTOR_CONTRACT_ADDRESS=$(instantiate_contract "$COLLECTOR_CODE_ID" '{}' "maxbtc-collector")
+    # 0. Fee Collector Contract
+    echo "--- [0/6] Uploading Fee Collector Contract ---"
+    ALLOW_LIST_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_allow_list.wasm")
+    ALLOW_LIST_INIT_MSG=$(printf '{"owner": "%s"}' "$SENDER_ADDRESS")
+    ALLOW_LIST_CONTRACT_ADDRESS=$(instantiate_contract "$ALLOW_LIST_CODE_ID" "$ALLOW_LIST_INIT_MSG" "maxbtc-neutron-exchange-allow-list")
     echo ""
 
-    # 2. AUM Oracle Contract
-    echo "--- [2/8] Deploying AUM Oracle Contract ---"
-    AUM_ORACLE_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_aum_oracle.wasm")
-    AUM_ORACLE_CONTRACT_ADDRESS=$(instantiate_contract "$AUM_ORACLE_CODE_ID" '{"aum": "0"}' "maxbtc-aum-oracle")
+    # 1. Fee Collector Contract
+    echo "--- [1/6] Uploading Fee Collector Contract ---"
+    EXCHANGE_RATE_PROVIDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_exchange_rate_provider.wasm")
+    EXCHANGE_RATE_PROVIDER_INIT_MSG=$(printf '{"owner": "%s"}' "$SENDER_ADDRESS")
+    EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$(instantiate_contract "$EXCHANGE_RATE_PROVIDER_CODE_ID" "$EXCHANGE_RATE_PROVIDER_INIT_MSG" "maxbtc-neutron-exchange-rate-provider")
     echo ""
 
-    # 3. Liquidation Buffer Contract
-    echo "--- [3/8] Deploying Liquidation Buffer Contract ---"
-    LIQUIDATION_BUFFER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_liquidation_buffer.wasm")
-    LIQUIDATION_BUFFER_CONTRACT_ADDRESS=$(instantiate_contract "$LIQUIDATION_BUFFER_CODE_ID" '{"owned_maxbtc": "0", "owned_btc": "0"}' "maxbtc-liquidation-buffer")
-    echo ""
-
-    # 4. Fee Collector Contract (Upload only)
-    echo "--- [4/8] Uploading Fee Collector Contract ---"
+    # 2. Fee Collector Contract (Upload only)
+    echo "--- [2/6] Uploading Fee Collector Contract ---"
     FEE_COLLECTOR_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_fee_collector.wasm")
     echo ""
 
-    # 5. Pump Contract (Valence Base Account)
-    echo "--- [5/8] Deploying Pump Contract (Valence Base Account) ---"
+    # 3. Pump Contract (Valence Base Account)
+    echo "--- [3/6] Deploying Pump Contract (Valence Base Account) ---"
     PUMP_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_base_account.wasm")
     PUMP_INIT_MSG=$(printf '{"admin": "%s", "approved_libraries": []}' "$SENDER_ADDRESS")
     PUMP_CONTRACT_ADDRESS=$(instantiate_contract "$PUMP_CODE_ID" "$PUMP_INIT_MSG" "valence-pump")
     echo ""
 
-    # 6. Pump Library Contract (Valence IBC Transfer Library)
-    echo "--- [6/8] Deploying Pump Library Contract ---"
+    # 4. Pump Library Contract (Valence IBC Transfer Library)
+    echo "--- [4/6] Deploying Pump Library Contract ---"
     PUMP_LIBRARY_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_neutron_ibc_transfer_library.wasm")
     PUMP_LIBRARY_INIT_MSG=$(jq -c . <<EOF
 {
@@ -239,32 +235,27 @@ EOF
     PUMP_LIBRARY_CONTRACT_ADDRESS=$(instantiate_contract "$PUMP_LIBRARY_CODE_ID" "$PUMP_LIBRARY_INIT_MSG" "valence-pump-library")
     echo ""
 
-    # 7. Approve Pump Library
-    echo "--- [7/8] Approving Pump Library ---"
+    # 5. Approve Pump Library
+    echo "--- [5/6] Approving Pump Library ---"
     APPROVE_MSG=$(printf '{"approve_library":{"library":"%s"}}' "$PUMP_LIBRARY_CONTRACT_ADDRESS")
     execute_and_wait "Approve Pump Library" "$PUMP_CONTRACT_ADDRESS" "$APPROVE_MSG"
     echo ""
 
-    # 8. Core Contract
-    echo "--- [8/8] Deploying Core Contract ---"
+    # 6. Instantiate Core Contract
+    echo "--- [6/6] Deploying Core Contract ---"
     CORE_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_core.wasm")
     CORE_INIT_MSG=$(jq -c . <<EOF
 {
-  "aum_contract": "$AUM_ORACLE_CONTRACT_ADDRESS",
-  "collector_contract": "$COLLECTOR_CONTRACT_ADDRESS",
-  "treasury_address": "$TREASURY_ADDRESS",
-  "liquidation_buffer_contract": "$LIQUIDATION_BUFFER_CONTRACT_ADDRESS",
+  "exchange_rate_provider_contract": "$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS",
+  "allowlist_contract": "$ALLOW_LIST_CONTRACT_ADDRESS",
   "deposit_pump_contract": "$PUMP_CONTRACT_ADDRESS",
   "accepted_withdrawable_percentage": "0.005",
   "batch_active_duration": 30,
   "batch_withdrawing_duration": 30,
-  "cached_aum_tolerance": "0.02",
-  "cached_er_ttl": 120,
   "deposit_decimals": 6,
   "deposit_denom": "$WBTC_DENOM",
   "deposit_cost": "0.01",
   "deposit_flush_period": 30,
-  "liquidation_buffer_share": "0.1",
   "maxbtc_denom": "$MAXBTC_DENOM",
   "owner": "$SENDER_ADDRESS",
   "fee_collector_params": {
@@ -289,20 +280,18 @@ EOF
 
     # Final Output and saving state
     {
-        echo "export COLLECTOR_CODE_ID=$COLLECTOR_CODE_ID"
-        echo "export AUM_ORACLE_CODE_ID=$AUM_ORACLE_CODE_ID"
-        echo "export LIQUIDATION_BUFFER_CODE_ID=$LIQUIDATION_BUFFER_CODE_ID"
         echo "export FEE_COLLECTOR_CODE_ID=$FEE_COLLECTOR_CODE_ID"
+        echo "export ALLOW_LIST_CODE_ID=$ALLOW_LIST_CODE_ID"
+        echo "export EXCHANGE_RATE_PROVIDER_CODE_ID=$EXCHANGE_RATE_PROVIDER_CODE_ID"
         echo "export PUMP_CODE_ID=$PUMP_CODE_ID"
         echo "export PUMP_LIBRARY_CODE_ID=$PUMP_LIBRARY_CODE_ID"
         echo "export CORE_CODE_ID=$CORE_CODE_ID"
-        echo "export COLLECTOR_CONTRACT_ADDRESS=$COLLECTOR_CONTRACT_ADDRESS"
-        echo "export AUM_ORACLE_CONTRACT_ADDRESS=$AUM_ORACLE_CONTRACT_ADDRESS"
-        echo "export LIQUIDATION_BUFFER_CONTRACT_ADDRESS=$LIQUIDATION_BUFFER_CONTRACT_ADDRESS"
         echo "export PUMP_CONTRACT_ADDRESS=$PUMP_CONTRACT_ADDRESS"
         echo "export PUMP_LIBRARY_CONTRACT_ADDRESS=$PUMP_LIBRARY_CONTRACT_ADDRESS"
         echo "export CORE_CONTRACT_ADDRESS=$CORE_CONTRACT_ADDRESS"
         echo "export FEE_COLLECTOR_CONTRACT_ADDRESS=$FEE_COLLECTOR_CONTRACT_ADDRESS"
+        echo "export EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS"
+        echo "export ALLOW_LIST_CONTRACT_ADDRESS=$ALLOW_LIST_CONTRACT_ADDRESS"
     } > "$DEPLOYMENT_ENV_FILE"
 
     echo "================================================================="
@@ -329,24 +318,6 @@ handle_core_command() {
         flush-deposits)
             msg='{"flush_deposits":{}}'
             execute_and_wait "Core: Flush Deposits" "$CORE_CONTRACT_ADDRESS" "$msg"
-            ;;
-        withdraw)
-            local amount=${1:?ERROR: Amount of maxBTC to withdraw is required (e.g., 1000umaxbtc)}
-            msg='{"withdraw":{}}'
-            execute_and_wait "Core: Withdraw" "$CORE_CONTRACT_ADDRESS" "$msg" "$amount"
-            ;;
-        process-active-batch)
-            msg='{"process_active_batch":{}}'
-            execute_and_wait "Core: Process Active Batch" "$CORE_CONTRACT_ADDRESS" "$msg"
-            ;;
-        claim)
-            local recipient=${1:-$SENDER_ADDRESS}
-            msg=$(printf '{"claim":{"recipient":"%s"}}' "$recipient")
-            execute_and_wait "Core: Claim" "$CORE_CONTRACT_ADDRESS" "$msg"
-            ;;
-        process-cache)
-            msg='{"process_cache":{}}'
-            execute_and_wait "Core: Process Cache" "$CORE_CONTRACT_ADDRESS" "$msg"
             ;;
         update-config)
             local config_json=${1:?ERROR: JSON object for config update is required}
@@ -418,11 +389,7 @@ usage() {
     echo ""
     echo "Core Sub-commands:"
     echo "  deposit [recipient_addr] <amount><denom>  Deposit funds. e.g., '1000000untrn'"
-    echo "  withdraw <amount><maxbtc_denom>           Withdraw maxBTC. e.g., '500000umaxbtc'"
     echo "  flush-deposits                            Flush pending deposits."
-    echo "  process-active-batch                      Process the active withdrawal batch."
-    echo "  claim [recipient_addr]                    Claim withdrawn BTC."
-    echo "  process-cache                             Trigger cache processing."
     echo "  update-config '<json_payload>'            Update protocol config (owner only)."
     echo ""
     echo "Pump Library Sub-commands:"
