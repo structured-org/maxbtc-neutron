@@ -3956,20 +3956,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maxbtc-neutron-collector"
-version = "0.1.0"
-dependencies = [
- "cosmwasm-schema 2.2.1",
- "cosmwasm-std 2.2.1",
- "cw-multi-test",
- "cw-storage-plus",
- "cw2",
- "schemars",
- "serde",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "maxbtc-neutron-core"
 version = "0.1.0"
 dependencies = [

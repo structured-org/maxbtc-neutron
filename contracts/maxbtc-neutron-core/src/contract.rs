@@ -45,7 +45,6 @@ pub fn instantiate(
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
-        treasury_address: deps.api.addr_validate(&msg.treasury_address)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
         maxbtc_denom: msg.maxbtc_denom.clone(),
@@ -92,7 +91,6 @@ pub fn instantiate(
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
-        .add_attribute("treasury_address", cfg.treasury_address.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
         .add_attribute(
@@ -180,11 +178,6 @@ fn execute_update_config(
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.deposit_pump_contract = validated_addr.clone();
         res = res.add_attribute("deposit_pump_contract_updated", validated_addr.to_string());
-    }
-    if let Some(addr) = updates.treasury_address {
-        let validated_addr = deps.api.addr_validate(&addr)?;
-        cfg.treasury_address = validated_addr.clone();
-        res = res.add_attribute("treasury_address_updated", validated_addr.to_string());
     }
     if let Some(v) = updates.deposit_flush_period {
         cfg.deposit_flush_period = v;
@@ -321,7 +314,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
                 owner: cfg.owner.to_string(),
-                treasury_address: cfg.treasury_address.to_string(),
                 deposit_denom: cfg.deposit_denom,
                 maxbtc_denom: cfg.maxbtc_denom,
                 deposit_flush_period: cfg.deposit_flush_period,

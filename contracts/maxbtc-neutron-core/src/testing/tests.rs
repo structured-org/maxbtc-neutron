@@ -28,7 +28,6 @@ fn test_instantiate_success() {
         Attribute::new("action", "instantiate"),
         Attribute::new("owner", msg.owner.clone()),
         Attribute::new("allowlist_contract", msg.allowlist_contract.clone()),
-        Attribute::new("treasury_address", msg.treasury_address.clone()),
         Attribute::new("deposit_denom", msg.deposit_denom.clone()),
         Attribute::new("maxbtc_denom", msg.maxbtc_denom.clone()),
         Attribute::new("deposit_flush_period", msg.deposit_flush_period.to_string()),
@@ -333,7 +332,6 @@ fn default_instantiate_msg(
         owner: deps.api.addr_make("owner_addr").to_string(),
         aum_contract: deps.api.addr_make("aum_addr").to_string(),
         deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
-        treasury_address: deps.api.addr_make("treasury_addr").to_string(),
         exchange_rate_provider_contract: deps
             .api
             .addr_make("exchange_rate_provider_addr")
