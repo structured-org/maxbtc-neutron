@@ -110,12 +110,6 @@
             "null"
           ]
         },
-        "collector_contract": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "deposit_cost": {
           "anyOf": [
             {
@@ -172,12 +166,6 @@
         "paused": {
           "type": [
             "boolean",
-            "null"
-          ]
-        },
-        "treasury_address": {
-          "type": [
-            "string",
             "null"
           ]
         }

@@ -32,6 +32,9 @@ class Client {
     queryExchangeRate = async () => {
         return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
     };
+    querySimulateDeposit = async (args) => {
+        return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
+    };
     deposit = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

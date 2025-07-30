@@ -5,8 +5,6 @@
   "type": "object",
   "required": [
     "allowlist_contract",
-    "aum_contract",
-    "collector_contract",
     "deposit_cost",
     "deposit_decimals",
     "deposit_denom",
@@ -15,19 +13,11 @@
     "exchange_rate_provider_contract",
     "fee_collector_params",
     "maxbtc_denom",
-    "owner",
-    "treasury_address"
+    "owner"
   ],
   "properties": {
     "allowlist_contract": {
       "description": "Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC",
-      "type": "string"
-    },
-    "aum_contract": {
-      "type": "string"
-    },
-    "collector_contract": {
-      "description": "Collector contract that receives BTC shipped back from custody during the withdrawal process.",
       "type": "string"
     },
     "deposit_cost": {
@@ -86,10 +76,6 @@
       "type": "string"
     },
     "owner": {
-      "type": "string"
-    },
-    "treasury_address": {
-      "description": "Treasury account that receives protocol fees and surplus funds.",
       "type": "string"
     }
   },

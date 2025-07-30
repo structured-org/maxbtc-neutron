@@ -34,7 +34,8 @@ export type Uint128 = string;
 export type Binary = string;
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: ConfigResponse | Decimal1;
+  responses: ConfigResponse | Decimal1 | SimulateDepositResponse;
+  query: SimulateDepositArgs;
   execute: DepositArgs | UpdateConfigArgs | MintFeeArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
@@ -49,7 +50,12 @@ export interface ConfigResponse {
   fee_collector_contract: string;
   maxbtc_denom: string;
   owner: string;
-  treasury_address: string;
+}
+export interface SimulateDepositResponse {
+  minted_amount: Uint128;
+}
+export interface SimulateDepositArgs {
+  amount: Uint128;
 }
 export interface DepositArgs {
   recipient: string;
@@ -81,11 +87,6 @@ export interface InstantiateMsg {
    * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
    */
   allowlist_contract: string;
-  aum_contract: string;
-  /**
-   * Collector contract that receives BTC shipped back from custody during the withdrawal process.
-   */
-  collector_contract: string;
   /**
    * One-off cost (Decimal) charged when a user deposits to mint maxBTC
    */
@@ -123,10 +124,6 @@ export interface InstantiateMsg {
    */
   maxbtc_denom: string;
   owner: string;
-  /**
-   * Treasury account that receives protocol fees and surplus funds.
-   */
-  treasury_address: string;
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.
@@ -201,6 +198,9 @@ export class Client {
   }
   queryExchangeRate = async(): Promise<Decimal> => {
     return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+  }
+  querySimulateDeposit = async(args: SimulateDepositArgs): Promise<SimulateDepositResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
   }
   deposit = async(sender:string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }

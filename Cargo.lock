@@ -3942,20 +3942,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "maxbtc-neutron-aum-oracle"
-version = "0.1.0"
-dependencies = [
- "cosmwasm-schema 2.2.1",
- "cosmwasm-std 2.2.1",
- "cw-storage-plus",
- "cw2",
- "neutron-std 5.0.0",
- "schemars",
- "serde",
- "thiserror 2.0.12",
-]
-
-[[package]]
 name = "maxbtc-neutron-core"
 version = "0.1.0"
 dependencies = [

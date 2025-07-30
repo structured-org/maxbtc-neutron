@@ -1,8 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   MaxbtcNeutronCore,
-  MaxbtcNeutronCollector,
-  MaxbtcNeutronAumOracle,
   MaxbtcNeutronAllowList,
   MaxbtcNeutronExchangeRateProvider,
 } from 'maxbtc-neutron-ts-client';
@@ -22,8 +20,6 @@ import { sleep } from '../helpers/sleep';
 const DEPOSIT_DENOM = 'untrn';
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
-const CollectorContractClient = MaxbtcNeutronCollector.Client;
-const AumOracleContractClient = MaxbtcNeutronAumOracle.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
 const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
@@ -33,8 +29,6 @@ describe('Core', () => {
     park?: Cosmopark;
     wallet?: DirectSecp256k1HdWallet;
     coreContractClient?: InstanceType<typeof CoreContractClient>;
-    collectorContractClient?: InstanceType<typeof CollectorContractClient>;
-    aumOracleContractClient?: InstanceType<typeof AumOracleContractClient>;
     allowlistContractClient?: InstanceType<typeof AllowlistContractClient>;
     exchangeRateProviderContractClient?: InstanceType<
       typeof ExchangeRateProviderContractClient
@@ -45,9 +39,6 @@ describe('Core', () => {
     neutronClient?: InstanceType<typeof NeutronClient>;
 
     coreContractAddress?: string;
-    collectorContractAddress?: string;
-    aumOracleContractAddress?: string;
-    liquidationBufferContractAddress?: string;
     pumpContractAddress?: string;
     pumpLibraryContractAddress?: string;
     fee_collector_code_id?: number;
@@ -149,69 +140,6 @@ describe('Core', () => {
           client,
           instantiateRes.contractAddress,
         );
-    });
-
-    it('instantiate collector', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(__dirname, '../../../artifacts/maxbtc_neutron_collector.wasm'),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronCollector.Client.instantiate(
-        client,
-        account.address,
-        res.codeId,
-        {},
-        'label',
-        'auto',
-        [],
-      );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.collectorContractAddress = instantiateRes.contractAddress;
-      context.collectorContractClient = new MaxbtcNeutronCollector.Client(
-        client,
-        context.collectorContractAddress,
-      );
-    });
-
-    it('instantiate aum oracle', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/maxbtc_neutron_aum_oracle.wasm',
-            ),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronAumOracle.Client.instantiate(
-        client,
-        account.address,
-        res.codeId,
-        {
-          aum: '0',
-        },
-        'label',
-        'auto',
-        [],
-      );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.aumOracleContractAddress = instantiateRes.contractAddress;
-      context.aumOracleContractClient = new MaxbtcNeutronAumOracle.Client(
-        client,
-        context.aumOracleContractAddress,
-      );
     });
 
     it('upload fee collector', async () => {
@@ -352,9 +280,6 @@ describe('Core', () => {
         account.address,
         res.codeId,
         {
-          aum_contract: context.aumOracleContractAddress,
-          collector_contract: context.collectorContractAddress,
-          treasury_address: context.treasuryAddress,
           deposit_pump_contract: context.pumpContractAddress,
           deposit_decimals: 6,
           deposit_denom: DEPOSIT_DENOM,
