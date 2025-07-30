@@ -330,7 +330,6 @@ fn default_instantiate_msg(
 ) -> InstantiateMsg {
     InstantiateMsg {
         owner: deps.api.addr_make("owner_addr").to_string(),
-        aum_contract: deps.api.addr_make("aum_addr").to_string(),
         deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
         exchange_rate_provider_contract: deps
             .api
@@ -345,7 +344,7 @@ fn default_instantiate_msg(
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_params: FeeMinterParams {
             code_id: 0,                                       // Test
-            salt: Binary::from(vec![1, 2, 3, 4]),             // Test
+            salt: Binary::from(vec![1, 2, 3, 4]),        // Test
             fee_apy_reduction_percentage: Default::default(), // Test
             collection_period_seconds: 0,                     // Test
         },

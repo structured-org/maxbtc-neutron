@@ -5,7 +5,6 @@ use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub aum_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
