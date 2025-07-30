@@ -38,14 +38,13 @@ pub fn instantiate(
         &canonical_creator, // The creator is this core contract
         &msg.fee_collector_params.salt,
     )
-        .map_err(ContractError::Instantiate2Error)?;
+    .map_err(ContractError::Instantiate2Error)?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
         deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
-        collector_contract: deps.api.addr_validate(&msg.collector_contract)?,
         treasury_address: deps.api.addr_validate(&msg.treasury_address)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
@@ -92,7 +91,6 @@ pub fn instantiate(
         .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
         .add_attribute("action", "instantiate")
         .add_attribute("owner", cfg.owner.to_string())
-        .add_attribute("collector_contract", cfg.collector_contract.to_string())
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("treasury_address", cfg.treasury_address.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
@@ -183,11 +181,6 @@ fn execute_update_config(
         cfg.deposit_pump_contract = validated_addr.clone();
         res = res.add_attribute("deposit_pump_contract_updated", validated_addr.to_string());
     }
-    if let Some(addr) = updates.collector_contract {
-        let validated_addr = deps.api.addr_validate(&addr)?;
-        cfg.collector_contract = validated_addr.clone();
-        res = res.add_attribute("collector_contract_updated", validated_addr.to_string());
-    }
     if let Some(addr) = updates.treasury_address {
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.treasury_address = validated_addr.clone();
@@ -267,7 +260,6 @@ pub(crate) fn execute_deposit(
         .add_attribute("recipient", recipient)
         .add_attribute("minted_maxbtc", minted_amount.to_string()))
 }
-
 
 /// Flushes the contract's accumulated deposit balance to the deposit pump contract.
 ///

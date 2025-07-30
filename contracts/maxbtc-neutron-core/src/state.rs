@@ -11,9 +11,6 @@ pub struct Config {
     pub owner: Addr,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: Addr,
-    /// Collector account that receives BTC shipped back from custody
-    /// during the withdrawal process.
-    pub collector_contract: Addr,
     /// Treasury account that receives protocol fees and surplus funds.
     pub treasury_address: Addr,
     /// Denom for user deposits (e.g. IBC-transferred BTC)

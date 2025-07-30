@@ -27,7 +27,6 @@ fn test_instantiate_success() {
     let expected_attributes = vec![
         Attribute::new("action", "instantiate"),
         Attribute::new("owner", msg.owner.clone()),
-        Attribute::new("collector_contract", msg.collector_contract.clone()),
         Attribute::new("allowlist_contract", msg.allowlist_contract.clone()),
         Attribute::new("treasury_address", msg.treasury_address.clone()),
         Attribute::new("deposit_denom", msg.deposit_denom.clone()),
@@ -334,7 +333,6 @@ fn default_instantiate_msg(
         owner: deps.api.addr_make("owner_addr").to_string(),
         aum_contract: deps.api.addr_make("aum_addr").to_string(),
         deposit_pump_contract: deps.api.addr_make("pump_addr").to_string(),
-        collector_contract: deps.api.addr_make("collector_addr").to_string(),
         treasury_address: deps.api.addr_make("treasury_addr").to_string(),
         exchange_rate_provider_contract: deps
             .api

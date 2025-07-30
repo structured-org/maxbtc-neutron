@@ -8,9 +8,6 @@ pub struct InstantiateMsg {
     pub aum_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_pump_contract: String,
-    /// Collector contract that receives BTC shipped back from custody
-    /// during the withdrawal process.
-    pub collector_contract: String,
     /// Treasury account that receives protocol fees and surplus funds.
     pub treasury_address: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
@@ -41,7 +38,6 @@ pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
     pub owner: Option<String>,
     pub deposit_pump_contract: Option<String>,
-    pub collector_contract: Option<String>,
     pub treasury_address: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
