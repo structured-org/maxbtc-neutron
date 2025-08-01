@@ -1,148 +1,115 @@
-# maxBTC Neutron Minting Contract
+# Core contract
 
-Welcome to the **maxbtc-neutron-minting** contract – the on-chain engine that mints, burns and settles **maxBTC**, a wrapped‐BTC token native to the [Neutron](https://neutron.org) ecosystem and secured by **CosmWasm** smart contracts.
+## Core Functionality: Depositing and Minting
 
-> **TL;DR**
-> *Users deposit BTC-backed collateral, receive freshly-minted `maxBTC`, and can later redeem it for native BTC through time-boxed withdrawal batches.
-> Operators can flush deposits to external custody or manage a liquidation buffer, while the contract keeps a transparent, oracle-driven AUM ↔ maxBTC exchange-rate.*
+The main purpose of the contract is to allow users to deposit a specific token (assuming `wBTC`) and mint `maxBTC`.
 
----
+Here’s how the deposit process works from a user's perspective:
 
-## Table of Contents
+1. **Initiate Deposit:** A user sends a transaction to the contract's `Deposit` function, including the funds they wish to deposit. The recipient of the new `maxBTC` can be the sender or another specified address.
+2. **Perform Checks:** Before proceeding, the contract runs several critical safety checks:
+    - **Is the contract paused?** The owner can temporarily halt all deposit activity.
+    - **Is the deposit cap reached?** The contract tracks the total value of assets deposited. If a new deposit would exceed a predefined `deposits_cap`, it's rejected to manage risk.
+    - **Is the recipient allowlisted?** The contract checks with a separate `allowlist_contract` to ensure the address designated *to receive* the `maxBTC` is authorized for deposits.
+3. **Calculate Mint Amount:** If the checks pass, the contract calculates how much `maxBTC` to mint. This isn't a 1-to-1 conversion. The calculation is:
+    - It queries a separate, trusted `exchange_rate_provider_contract` to get the latest price of the deposited asset relative to `maxBTC`.
+    - It subtracts a small, fixed percentage fee (`deposit_cost`) from the user's deposit.
+    - The final amount of `maxBTC` to be minted is essentially `(Deposited Amount - Fee) / Exchange Rate`.
+4. **Mint and Deliver `maxBTC`:** the calculated amount of `maxBTC` is minted and delivered directly to the recipient's wallet. The contract then updates its internal **counter** for the total amount deposited.
 
-1. [Motivation](#motivation)
-2. [High-level Flow](#high-level-flow)
-3. [Architecture](#architecture)
-4. [Message Reference](#message-reference)
+## Flushing Deposits
 
-    * [Instantiate](#instantiate)
-    * [Execute](#execute)
-    * [Query](#query)
-5. [Building & Testing](#building--testing)
-6. [Running a Local Demo](#running-a-local-demo)
-7. [Design Notes](#design-notes)
-8. [Security & Audits](#security--audits)
+The assets that users deposit (e.g., `wBTC`) accumulate in the contract's balance. The `FlushDeposits` function exists to move these funds to their next destination.
 
----
+- **Who can trigger it?** Anyone can call this function.
+- **How it works:** It's rate-limited by a `deposit_flush_period` (e.g., every 24 hours). When triggered after the cooldown has passed, the contract takes its entire balance of the deposit asset and sends it to a `deposit_forwarder_contract`. This "`forwarder`" contract is responsible for the next step, such as bridging the assets to Ethereum via IBC Eureka.
+- **Purpose:** This mechanism ensures the underlying assets that back `maxBTC` are regularly moved to where they can be put to work.
 
-## Motivation
+## Fee Collection
 
-Bridging BTC into the Cosmos is tricky: custodial bridges are opaque, while trust-minimised bridges remain nascent. **maxBTC** aims for a pragmatic middle-ground:
+There are two layers to fees. The first is the simple `deposit_cost` taken from each deposit. The second involves a companion contract.
 
-* **Full Reserve** –  every minted `maxBTC` is backed 1 : 1 by BTC in independent, auditable custody.
-* **Batch Withdrawals** – users burn `maxBTC`, receive **redemption tokens**, and later claim native BTC once the batch is funded on the Bitcoin side.
-* **Safety Valves** – a **liquidation buffer** ensures fast redemptions and guards against insolvency, while an emergency FSM can halt the protocol if invariants break.
+The main contract has a dedicated `fee_collector_contract` that it works with. This fee collector can request a special minting operation via the `MintFee` function. Only the address of the fee collector is authorized to call this function. When called, the main contract will mint a specified amount of `maxBTC` and send it to the fee collector. This allows the protocol to create `maxBTC` as a form of revenue or reward for the fee collector, which can then manage or distribute those funds according to its own logic. See the dedicated section below.
 
-The contract you see here coordinates these flows on Neutron.
+## Contract Setup and Administration
 
----
+### Initial Setup (Instantiation)
 
-## High-level Flow
+When the contract is first deployed, it performs a one-time setup sequence:
 
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle -->|Deposit| Idle
-    Idle -->|FlushDeposits| Flushing
-    Flushing -->|Cache processed| Idle
-    Idle -->|Withdraw| ActiveBatch
-    ActiveBatch -->|ProcessActiveBatch| Withdrawing
-    Withdrawing -->|Funds received| Idle
-```
+1. **Create the `maxBTC` Denom:** Its very first action is to use the Token Factory to officially create the `maxBTC` token on the Neutron blockchain. From that point on, this contract becomes the exclusive minter for `maxBTC`.
+2. **Deploy the Fee Collector:** The contract uses a feature called `Instantiate2` to **predict the blockchain address** of its companion `fee_collector_contract` *before* it exists.
+3. **Launch the Fee Collector:** With the address predicted, it immediately sends a message to create the `fee_collector_contract` at that known address, providing it with the necessary information to link the two contracts together from birth.
 
-1. **Deposit** – Users send the configured `deposit_denom` (e.g. `uusdc`) and instantly receive `maxBTC` minus a fee.
-2. **FlushDeposits** – Anyone may flush accumulated deposits:
+### Owner Controls
 
-    * A share is routed to the **liquidation buffer** (`liquidation_buffer_share` of AUM).
-    * The rest is IBC-transferred to external BTC custody via a dedicated “deposit forwarder” contract.
-3. **Withdraw** – Users burn `maxBTC` and receive *redemption tokens* tied to the current batch.
-4. **ProcessActiveBatch** – Once the batch’s active period expires, it transitions to **Withdrawing**.
-5. **Claim** – After the BTC lands in the custody address, users redeem their share by burning redemption tokens.
+The contract owner has significant control over its parameters through the `UpdateConfig` function. This is a permissioned function that only the owner can call. The owner can:
 
-Throughout, the contract caches an **exchange-rate (ER)** snapshot to bridge multi-block operations safely.
+- Pause or unpause the contract.
+- Change the owner to a new address.
+- Update the addresses of its connected contracts (the allowlist, exchange rate provider, deposit forwarder, and fee collector).
+- Adjust the deposit cap and the flush period.
 
----
+## Information Queries (Read-Only)
 
-## Architecture
+Users can query the contract to get information without needing to send a transaction. The most important queries are:
 
-### Key storage buckets
+- **`Config`:** Displays the current configuration, such as the owner and key contract addresses.
+- **`ExchangeRate`:** Fetches and returns the current exchange rate from the provider contract.
+- **`SimulateDeposit`:** Allows a user to input a potential deposit amount and see exactly how much `maxBTC` they would receive in return, after fees and the exchange rate are applied. This is a useful tool for users to check the outcome before committing funds.
 
-| Item                    | Path              | Purpose                                                    |
-| ----------------------- | ----------------- | ---------------------------------------------------------- |
-| **`CONFIG`**            | singleton         | Global configuration & addresses                           |
-| **`ACTIVE_BATCH`**      | singleton         | Batch accepting withdrawals                                |
-| **`WITHDRAWING_BATCH`** | singleton         | Batch waiting for BTC top-up                               |
-| **`FINALIZED_BATCHES`** | map<`u64`, Batch> | Settled batches (users can still claim)                    |
-| **`FSM`**               | singleton         | Finite-state machine (`Idle` → `Flushing` / `Withdrawing`) |
-| **`CACHED_ER`**         | singleton         | Cached `ER` + AUM snapshot + expiry                        |
+# Fee Collector Contract
 
-### Exchange-Rate formula
+This contract is a specialized companion to the main `maxBTC` minting contract. Its single, crucial job is to calculate and collect a performance-based fee by minting new `maxBTC`. It effectively captures a percentage of the yield that `maxBTC` generates over time.
 
-```text
-ER = (oracle_AUM + deposit_buffer + liquidation_buffer)
-     ----------------------------------------------------
-     (circulating_maxBTC + btc_requested – maxBTC_in_liquidation_buffer)
-```
+## Core Mission: Collecting Fees on Yield
 
-If the denominator is zero (bootstrap phase) the contract returns `1` to avoid division by zero.
+The central function of the contract is `CollectFee`. While anyone can trigger this function, it will only execute under specific conditions.
 
-### Finite-State Machine (FSM)
+1. **Cooldown Period:** The contract will only run if a set amount of time (the `collection_period_seconds`) has passed since the last time a fee was collected. This prevents it from being triggered too frequently.
+2. **Positive Yield Check:** The contract compares the **current** exchange rate of `maxBTC` with the rate it recorded during the **last** collection. **If the rate has not increased, it means `maxBTC` has not generated any yield, and the contract will do nothing.** No profit means no fee is taken.
 
-| State           | Trigger In         | Trigger Out                 | Purpose                                     |
-| --------------- | ------------------ |-----------------------------| ------------------------------------------- |
-| **Idle**        | –                  | Deposit / Withdraw / Flush  | Normal operation                            |
-| **Flushing**    | FlushDeposits      | Money reached remote chain  | Ensures external custody received the funds |
-| **Withdrawing** | ProcessActiveBatch | BTC collected (≈ requested) | Waits for BTC top-up before claims          |
+If both conditions are met, the contract proceeds to calculate the fee and instructs the main `maxBTC` minting contract to create new tokens for it.
 
----
+## How the Fee is Calculated
 
-## Message Reference
+The fee calculation is sophisticated. Instead of taking a simple cut of transactions, it captures a portion of the overall system's growth (its APY).
 
-### Execute
+Here’s the concept:
 
-| Variant                 | Who can call | Description                                           |
-| ----------------------- | ------------ | ----------------------------------------------------- |
-| `UpdateConfig`          | **Owner**    | Fine-grained config updates                           |
-| `Deposit { recipient }` | Anyone       | Deposit `deposit_denom` → receive `maxBTC`            |
-| `FlushDeposits {}`      | Anyone       | Flush buffer; manages liquidation buffer & IBC forwarder   |
-| `Withdraw {}`           | Anyone       | Burn `maxBTC` → mint redemption tokens                |
-| `ProcessActiveBatch {}` | Anyone       | After `batch_active_duration`, start withdrawal phase |
-| `Claim { recipient }`   | Anyone       | Claim BTC proportional to burned redemption tokens    |
+- The contract determines how much the `maxBTC` exchange rate has appreciated since the last collection. This appreciation is the "yield."
+- Based on a configured `fee_apy_reduction_percentage`, it calculates how many new `maxBTC` tokens it needs to mint to effectively "skim off" a percentage of that yield.
 
-### Query
+This newly minted `maxBTC` is sent to and held by this fee collector contract.
 
-| Query                         | Returns                 |
-| ----------------------------- | ----------------------- |
-| `Config {}`                   | `ConfigResponse`        |
-| `ActiveBatch {}`              | `Option<BatchResponse>` |
-| `WithdrawingBatch {}`         | `Option<BatchResponse>` |
-| `FinalizedBatch { batch_id }` | `Option<BatchResponse>` |
+## The Two-Step Update: A Failsafe Mechanism
 
----
+The process of collecting the fee is a clever two-step dance to ensure it never fails halfway.
 
-## Design Notes
+1. **Step 1 (Request):** The fee collector sends a request to the main contract, asking it to mint the calculated fee amount.
+2. **Step 2 (Reply):** The fee collector then waits for a confirmation, or `reply`, from the main contract. **Only after it receives confirmation that the minting was successful does it update its own internal records.** It saves the new, slightly diluted exchange rate and resets the timestamp for the next collection period.
 
-* **Tokenfactory Integration** – The contract creates its own `factory/<addr>/maxbtc` denom on instantiation and later mints/burns via native `MsgMint` & `MsgBurn`.
-* **Safety Checks** –
+This two-step process is a critical failsafe. It guarantees that the fee collector only updates its state if the fee was actually collected, preventing it from getting out of sync with the main system.
 
-    * Deposit cap (`deposits_cap`) prevents runaway growth.
-    * Optional allow-list (`deposits_allowlist`) for regulated environments.
-    * Every multi-step flow caches the ER + AUM snapshot and refuses further state-mutations if the cache expires (→ “emergency mode”).
-* **Gas Efficiency** – Core bookkeeping (AUM, ER, batch maths) is done in-contract; cross-chain actions are batched into a single `flush` to reduce IBC overhead.
+## Payouts and Administration
 
----
+Once the fees are collected, they need to be managed.
 
-## Security & Audits
+- **Claiming Fees:** The contract owner can call the `Claim` function. This is a permissioned, owner-only action that sends the `maxBTC` tokens accumulated in the fee collector's balance to any specified recipient address. This is how the protocol's revenue is ultimately paid out.
+- **Configuration:** The owner can also update the contract's parameters, such as changing the fee percentage, the length of the collection period, or the address of the main `core_contract` it communicates with.
 
-This repository has **not yet** undergone a formal security audit.
-✔ Internal invariants are unit-tested and fuzz-tested.
-⚠ **Main-net usage is discouraged until a full audit is complete.**
+# Allow List Contract
 
-Audit status and reports will be tracked in the [Security](./SECURITY.md) section.
+This smart contract is a streamlined access control utility for the `maxBTC` protocol. Its sole function is to maintain and enforce a definitive list of authorized addresses, acting as a simple and secure gatekeeper for key system actions.
 
----
+### Core Functionality and Verification
 
-## Contributing
+The contract's mechanism is based on a single, centrally managed allow-list. This list contains all blockchain addresses that are pre-approved for participation.
 
-Bug reports, feature ideas and PRs are welcome!
-Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for coding standards and the DCO sign-off procedure.
+The primary purpose of this contract is to answer one question for other contracts in the ecosystem: "Is a given address allowed?" This is handled by the `IsAddressAllowed` query. If a match is found, the address is considered authorized. If not, it is unauthorized.
+
+### Secure Administration and Management
+
+The integrity of the allow-list is protected by a strict ownership model. The contract is controlled by a single owner, and critically, **only the owner** has the permission to modify the list.
+
+This administrative control is exercised through the `UpdateAllowList` function, which allows the owner to replace the entire existing list with a new one. This ensures that the list cannot be tampered with by unauthorized parties. The contract owner can also securely transfer ownership to a new address.
