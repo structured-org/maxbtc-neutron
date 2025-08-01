@@ -9,6 +9,3 @@ export const MaxbtcNeutronExchangeRateProvider = _2;
 
 import * as _3 from './maxbtcNeutronFeeCollector';
 export const MaxbtcNeutronFeeCollector = _3;
-
-import * as _4 from './maxbtcNeutronLiquidationBuffer';
-export const MaxbtcNeutronLiquidationBuffer = _4;

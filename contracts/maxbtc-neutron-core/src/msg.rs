@@ -6,7 +6,7 @@ use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
 pub struct InstantiateMsg {
     pub owner: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
-    pub deposit_pump_contract: String,
+    pub deposit_forwarder_contract: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
@@ -34,7 +34,7 @@ pub struct InstantiateMsg {
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
     pub owner: Option<String>,
-    pub deposit_pump_contract: Option<String>,
+    pub deposit_forwarder_contract: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
     pub deposits_cap: Option<Option<Uint128>>,

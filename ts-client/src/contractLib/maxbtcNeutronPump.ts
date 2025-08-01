@@ -25,7 +25,7 @@ export type Uint128 = string;
  */
 export type Addr = string;
 
-export interface MaxbtcNeutronPumpSchema {
+export interface MaxbtcNeutronForwarderSchema {
   responses: Config;
   execute: PushArgs;
   instantiate?: InstantiateMsg;

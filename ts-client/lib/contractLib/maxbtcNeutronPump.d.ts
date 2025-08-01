@@ -24,7 +24,7 @@ export type Uint128 = string;
  * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
 export type Addr = string;
-export interface MaxbtcNeutronPumpSchema {
+export interface MaxbtcNeutronForwarderSchema {
     responses: Config;
     execute: PushArgs;
     instantiate?: InstantiateMsg;

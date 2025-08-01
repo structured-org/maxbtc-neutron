@@ -1,5 +1,5 @@
 [package]
-name = "neutron_pump_executor"
+name = "neutron_forwarder_executor"
 version = "0.1.0"
 edition = "2021"
 

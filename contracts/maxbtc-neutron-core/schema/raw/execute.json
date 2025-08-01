@@ -128,7 +128,7 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "deposit_pump_contract": {
+        "deposit_forwarder_contract": {
           "type": [
             "string",
             "null"

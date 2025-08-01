@@ -6,5 +6,3 @@ import * as _2 from './maxbtcNeutronExchangeRateProvider';
 export declare const MaxbtcNeutronExchangeRateProvider: typeof _2;
 import * as _3 from './maxbtcNeutronFeeCollector';
 export declare const MaxbtcNeutronFeeCollector: typeof _3;
-import * as _4 from './maxbtcNeutronLiquidationBuffer';
-export declare const MaxbtcNeutronLiquidationBuffer: typeof _4;

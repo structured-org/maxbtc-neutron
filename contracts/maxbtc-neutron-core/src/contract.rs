@@ -44,7 +44,7 @@ pub fn instantiate(
     let cfg = Config {
         paused: false,
         owner: deps.api.addr_validate(&msg.owner)?,
-        deposit_pump_contract: deps.api.addr_validate(&msg.deposit_pump_contract)?,
+        deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
         maxbtc_denom: msg.maxbtc_denom.clone(),
@@ -174,10 +174,13 @@ fn execute_update_config(
         cfg.owner = owner_addr.clone();
         res = res.add_attribute("owner_updated", owner_addr.to_string());
     }
-    if let Some(addr) = updates.deposit_pump_contract {
+    if let Some(addr) = updates.deposit_forwarder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
-        cfg.deposit_pump_contract = validated_addr.clone();
-        res = res.add_attribute("deposit_pump_contract_updated", validated_addr.to_string());
+        cfg.deposit_forwarder_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "deposit_forwarder_contract_updated",
+            validated_addr.to_string(),
+        );
     }
     if let Some(v) = updates.deposit_flush_period {
         cfg.deposit_flush_period = v;
@@ -254,7 +257,7 @@ pub(crate) fn execute_deposit(
         .add_attribute("minted_maxbtc", minted_amount.to_string()))
 }
 
-/// Flushes the contract's accumulated deposit balance to the deposit pump contract.
+/// Flushes the contract's accumulated deposit balance to the deposit forwarder contract.
 ///
 /// This handler can be triggered by any account, but its execution is rate-limited
 /// by the `deposit_flush_period` defined in the contract's configuration.
@@ -284,12 +287,12 @@ pub(crate) fn execute_flush_deposits(
         .query_balance(env.contract.address.clone(), cfg.deposit_denom.clone())?
         .amount;
 
-    // Send what's left to the deposit pump contract, which will send it to Ethereum over IBC
+    // Send what's left to the deposit forwarder contract, which will send it to Ethereum over IBC
     // Eureka though the valence library + base account combo
     if !amount_to_flush.is_zero() {
         LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
         let msg = CosmosMsg::Bank(BankMsg::Send {
-            to_address: cfg.deposit_pump_contract.to_string(),
+            to_address: cfg.deposit_forwarder_contract.to_string(),
             amount: vec![Coin {
                 denom: cfg.deposit_denom,
                 amount: amount_to_flush,

@@ -39,8 +39,8 @@ describe('Core', () => {
     neutronClient?: InstanceType<typeof NeutronClient>;
 
     coreContractAddress?: string;
-    pumpContractAddress?: string;
-    pumpLibraryContractAddress?: string;
+    forwarderContractAddress?: string;
+    forwarderLibraryContractAddress?: string;
     fee_collector_code_id?: number;
 
     treasuryAddress?: string;
@@ -161,7 +161,7 @@ describe('Core', () => {
       context.fee_collector_code_id = res.codeId;
     });
 
-    it('instantiate pump (valence base account)', async () => {
+    it('instantiate forwarder (valence base account)', async () => {
       const { client, account } = context;
       const res = await client.upload(
         account.address,
@@ -189,10 +189,10 @@ describe('Core', () => {
 
       expect(instantiateRes.contractAddress).toBeTruthy();
       expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.pumpContractAddress = instantiateRes.contractAddress;
+      context.forwarderContractAddress = instantiateRes.contractAddress;
     });
 
-    it('instantiate pump library (valence ibc transfer library)', async () => {
+    it('instantiate forwarder library (valence ibc transfer library)', async () => {
       const { client, account } = context;
       const res = await client.upload(
         account.address,
@@ -212,7 +212,7 @@ describe('Core', () => {
         owner: account.address,
         processor: account.address,
         config: {
-          input_addr: { library_account_addr: context.pumpContractAddress },
+          input_addr: { library_account_addr: context.forwarderContractAddress },
           output_addr: {
             library_account_addr: '0x1234567890123456789012345678901234567890',
           },
@@ -247,14 +247,14 @@ describe('Core', () => {
 
       expect(instantiateRes.contractAddress).toBeTruthy();
       expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.pumpLibraryContractAddress = instantiateRes.contractAddress;
+      context.forwarderLibraryContractAddress = instantiateRes.contractAddress;
 
       const approveRes = await client.execute(
         account.address,
-        context.pumpContractAddress,
+        context.forwarderContractAddress,
         {
           approve_library: {
-            library: context.pumpLibraryContractAddress,
+            library: context.forwarderLibraryContractAddress,
           },
         },
         'auto',
@@ -280,7 +280,7 @@ describe('Core', () => {
         account.address,
         res.codeId,
         {
-          deposit_pump_contract: context.pumpContractAddress,
+          deposit_forwarder_contract: context.forwarderContractAddress,
           deposit_decimals: 6,
           deposit_denom: DEPOSIT_DENOM,
           deposit_cost: '0.01',
@@ -357,7 +357,7 @@ describe('Core', () => {
         context.neutronClient,
         context.coreContractClient,
         context.exchangeRateProviderContractClient,
-        context.pumpContractAddress,
+        context.forwarderContractAddress,
       );
     });
 
@@ -408,9 +408,9 @@ describe('Core', () => {
       });
       it('flush deposits before flush period', async () => {
         const { coreContractClient, account } = context;
-        const pumpBalanceBefore = (
+        const forwarderBalanceBefore = (
           await context.client.getBalance(
-            context.pumpContractAddress,
+            context.forwarderContractAddress,
             DEPOSIT_DENOM,
           )
         ).amount;
@@ -435,14 +435,14 @@ describe('Core', () => {
           ),
         ).toBeTruthy();
         await waitForTx(context.client, res.transactionHash);
-        const pumpBalanceAfter = (
+        const forwarderBalanceAfter = (
           await context.client.getBalance(
-            context.pumpContractAddress,
+            context.forwarderContractAddress,
             DEPOSIT_DENOM,
           )
         ).amount;
-        expect(BigInt(pumpBalanceAfter)).toBeGreaterThan(
-          BigInt(pumpBalanceBefore),
+        expect(BigInt(forwarderBalanceAfter)).toBeGreaterThan(
+          BigInt(forwarderBalanceBefore),
         );
       });
       it('no flush deposits right after the flush', async () => {
@@ -479,7 +479,7 @@ const updateExchangeRate = async (
   exchangeRateProviderClient: InstanceType<
     typeof ExchangeRateProviderContractClient
   >,
-  pumpAddress: string,
+  forwarderAddress: string,
 ) => {
   const maxBtcSupply = Number(
     (
@@ -494,13 +494,13 @@ const updateExchangeRate = async (
     )
   ).data.balance.amount;
 
-  const pumpBTCBalance = (
-    await neutronClient.CosmosBankV1Beta1.query.queryBalance(pumpAddress, {
+  const forwarderBTCBalance = (
+    await neutronClient.CosmosBankV1Beta1.query.queryBalance(forwarderAddress, {
       denom: DEPOSIT_DENOM,
     })
   ).data.balance.amount;
 
-  const aum = Number(coreBTCBalance) + Number(pumpBTCBalance);
+  const aum = Number(coreBTCBalance) + Number(forwarderBTCBalance);
 
   await exchangeRateProviderClient.updateExchangeRate(account, {
     rate: (aum / maxBtcSupply).toString(),

@@ -200,22 +200,22 @@ run_setup() {
     FEE_COLLECTOR_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_fee_collector.wasm")
     echo ""
 
-    # 3. Pump Contract (Valence Base Account)
-    echo "--- [3/6] Deploying Pump Contract (Valence Base Account) ---"
-    PUMP_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_base_account.wasm")
-    PUMP_INIT_MSG=$(printf '{"admin": "%s", "approved_libraries": []}' "$SENDER_ADDRESS")
-    PUMP_CONTRACT_ADDRESS=$(instantiate_contract "$PUMP_CODE_ID" "$PUMP_INIT_MSG" "valence-pump")
+    # 3. Forwarder Contract (Valence Base Account)
+    echo "--- [3/6] Deploying Forwarder Contract (Valence Base Account) ---"
+    FORWARDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_base_account.wasm")
+    FORWARDER_INIT_MSG=$(printf '{"admin": "%s", "approved_libraries": []}' "$SENDER_ADDRESS")
+    FORWARDER_CONTRACT_ADDRESS=$(instantiate_contract "$FORWARDER_CODE_ID" "$FORWARDER_INIT_MSG" "valence-forwarder")
     echo ""
 
-    # 4. Pump Library Contract (Valence IBC Transfer Library)
-    echo "--- [4/6] Deploying Pump Library Contract ---"
-    PUMP_LIBRARY_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_neutron_ibc_transfer_library.wasm")
-    PUMP_LIBRARY_INIT_MSG=$(jq -c . <<EOF
+    # 4. Forwarder Library Contract (Valence IBC Transfer Library)
+    echo "--- [4/6] Deploying Forwarder Library Contract ---"
+    FORWARDER_LIBRARY_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_neutron_ibc_transfer_library.wasm")
+    FORWARDER_LIBRARY_INIT_MSG=$(jq -c . <<EOF
 {
   "owner": "$SENDER_ADDRESS",
   "processor": "$SENDER_ADDRESS",
   "config": {
-    "input_addr": { "library_account_addr": "$PUMP_CONTRACT_ADDRESS" },
+    "input_addr": { "library_account_addr": "$FORWARDER_CONTRACT_ADDRESS" },
     "output_addr": { "library_account_addr": "0xd8cbA23cdaF8e969Fd17c8EAbeCF82a4f002ee8D" },
     "denom": { "native": "$WBTC_DENOM" },
     "amount": "full_amount",
@@ -232,13 +232,13 @@ run_setup() {
 }
 EOF
 )
-    PUMP_LIBRARY_CONTRACT_ADDRESS=$(instantiate_contract "$PUMP_LIBRARY_CODE_ID" "$PUMP_LIBRARY_INIT_MSG" "valence-pump-library")
+    FORWARDER_LIBRARY_CONTRACT_ADDRESS=$(instantiate_contract "$FORWARDER_LIBRARY_CODE_ID" "$FORWARDER_LIBRARY_INIT_MSG" "valence-forwarder-library")
     echo ""
 
-    # 5. Approve Pump Library
-    echo "--- [5/6] Approving Pump Library ---"
-    APPROVE_MSG=$(printf '{"approve_library":{"library":"%s"}}' "$PUMP_LIBRARY_CONTRACT_ADDRESS")
-    execute_and_wait "Approve Pump Library" "$PUMP_CONTRACT_ADDRESS" "$APPROVE_MSG"
+    # 5. Approve Forwarder Library
+    echo "--- [5/6] Approving Forwarder Library ---"
+    APPROVE_MSG=$(printf '{"approve_library":{"library":"%s"}}' "$FORWARDER_LIBRARY_CONTRACT_ADDRESS")
+    execute_and_wait "Approve Forwarder Library" "$FORWARDER_CONTRACT_ADDRESS" "$APPROVE_MSG"
     echo ""
 
     # 6. Instantiate Core Contract
@@ -248,7 +248,7 @@ EOF
 {
   "exchange_rate_provider_contract": "$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS",
   "allowlist_contract": "$ALLOW_LIST_CONTRACT_ADDRESS",
-  "deposit_pump_contract": "$PUMP_CONTRACT_ADDRESS",
+  "deposit_forwarder_contract": "$FORWARDER_CONTRACT_ADDRESS",
   "accepted_withdrawable_percentage": "0.005",
   "batch_active_duration": 30,
   "batch_withdrawing_duration": 30,
@@ -283,11 +283,11 @@ EOF
         echo "export FEE_COLLECTOR_CODE_ID=$FEE_COLLECTOR_CODE_ID"
         echo "export ALLOW_LIST_CODE_ID=$ALLOW_LIST_CODE_ID"
         echo "export EXCHANGE_RATE_PROVIDER_CODE_ID=$EXCHANGE_RATE_PROVIDER_CODE_ID"
-        echo "export PUMP_CODE_ID=$PUMP_CODE_ID"
-        echo "export PUMP_LIBRARY_CODE_ID=$PUMP_LIBRARY_CODE_ID"
+        echo "export FORWARDER_CODE_ID=$FORWARDER_CODE_ID"
+        echo "export FORWARDER_LIBRARY_CODE_ID=$FORWARDER_LIBRARY_CODE_ID"
         echo "export CORE_CODE_ID=$CORE_CODE_ID"
-        echo "export PUMP_CONTRACT_ADDRESS=$PUMP_CONTRACT_ADDRESS"
-        echo "export PUMP_LIBRARY_CONTRACT_ADDRESS=$PUMP_LIBRARY_CONTRACT_ADDRESS"
+        echo "export FORWARDER_CONTRACT_ADDRESS=$FORWARDER_CONTRACT_ADDRESS"
+        echo "export FORWARDER_LIBRARY_CONTRACT_ADDRESS=$FORWARDER_LIBRARY_CONTRACT_ADDRESS"
         echo "export CORE_CONTRACT_ADDRESS=$CORE_CONTRACT_ADDRESS"
         echo "export FEE_COLLECTOR_CONTRACT_ADDRESS=$FEE_COLLECTOR_CONTRACT_ADDRESS"
         echo "export EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS"
@@ -331,8 +331,8 @@ handle_core_command() {
     esac
 }
 
-handle_pump_library_command() {
-    [[ -z "$PUMP_LIBRARY_CONTRACT_ADDRESS" ]] && { echo "Pump Library contract address not found. Please run 'setup' first." >&2; exit 1; }
+handle_forwarder_library_command() {
+    [[ -z "$FORWARDER_LIBRARY_CONTRACT_ADDRESS" ]] && { echo "Forwarder Library contract address not found. Please run 'setup' first." >&2; exit 1; }
 
     local sub_command=$1
     shift
@@ -348,10 +348,10 @@ handle_pump_library_command() {
                 "$fee_amount" "$fee_denom" "$fee_receiver" "$timeout_timestamp")
             echo $msg
 
-            execute_and_wait "Pump Library: Eureka Transfer" "$PUMP_LIBRARY_CONTRACT_ADDRESS" "$msg"
+            execute_and_wait "Forwarder Library: Eureka Transfer" "$FORWARDER_LIBRARY_CONTRACT_ADDRESS" "$msg"
             ;;
         *)
-            echo "Unknown pump-library command: $sub_command" >&2
+            echo "Unknown forwarder-library command: $sub_command" >&2
             usage
             ;;
     esac
@@ -384,7 +384,7 @@ usage() {
     echo "Commands:"
     echo "  setup                                     Uploads and instantiates all contracts."
     echo "  core <sub_command> [<args>]               Execute a message on the Core contract."
-    echo "  pump-library <sub_command> [<args>]       Execute a message on the Pump Library contract."
+    echo "  forwarder-library <sub_command> [<args>]       Execute a message on the Forwarder Library contract."
     echo "  fee-collector <sub_command> [<args>]      Execute a message on the Fee Collector contract."
     echo ""
     echo "Core Sub-commands:"
@@ -392,7 +392,7 @@ usage() {
     echo "  flush-deposits                            Flush pending deposits."
     echo "  update-config '<json_payload>'            Update protocol config (owner only)."
     echo ""
-    echo "Pump Library Sub-commands:"
+    echo "Forwarder Library Sub-commands:"
     echo "  eureka-transfer <fee_amount> <fee_denom> <fee_receiver_addr> <timeout_nano>"
     echo "                                            Execute a Eureka transfer."
     echo ""
@@ -420,8 +420,8 @@ main() {
         core)
             handle_core_command "$@"
             ;;
-        pump-library)
-            handle_pump_library_command "$@"
+        forwarder-library)
+            handle_forwarder_library_command "$@"
             ;;
         fee-collector)
             handle_fee_collector_command "$@"

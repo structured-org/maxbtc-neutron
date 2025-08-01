@@ -9,7 +9,7 @@
     "deposit_decimals",
     "deposit_denom",
     "deposit_flush_period",
-    "deposit_pump_contract",
+    "deposit_forwarder_contract",
     "exchange_rate_provider_contract",
     "fee_collector_params",
     "maxbtc_denom",
@@ -44,7 +44,7 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "deposit_pump_contract": {
+    "deposit_forwarder_contract": {
       "description": "Contract that forwards freshly-received deposits to the custody chain.",
       "type": "string"
     },

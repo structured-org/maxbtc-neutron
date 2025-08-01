@@ -105,7 +105,7 @@ export interface InstantiateMsg {
     /**
      * Contract that forwards freshly-received deposits to the custody chain.
      */
-    deposit_pump_contract: string;
+    deposit_forwarder_contract: string;
     /**
      * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
      */

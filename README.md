@@ -54,7 +54,7 @@ stateDiagram-v2
 2. **FlushDeposits** – Anyone may flush accumulated deposits:
 
     * A share is routed to the **liquidation buffer** (`liquidation_buffer_share` of AUM).
-    * The rest is IBC-transferred to external BTC custody via a dedicated “deposit pump” contract.
+    * The rest is IBC-transferred to external BTC custody via a dedicated “deposit forwarder” contract.
 3. **Withdraw** – Users burn `maxBTC` and receive *redemption tokens* tied to the current batch.
 4. **ProcessActiveBatch** – Once the batch’s active period expires, it transitions to **Withdrawing**.
 5. **Claim** – After the BTC lands in the custody address, users redeem their share by burning redemption tokens.
@@ -104,7 +104,7 @@ If the denominator is zero (bootstrap phase) the contract returns `1` to avoid d
 | ----------------------- | ------------ | ----------------------------------------------------- |
 | `UpdateConfig`          | **Owner**    | Fine-grained config updates                           |
 | `Deposit { recipient }` | Anyone       | Deposit `deposit_denom` → receive `maxBTC`            |
-| `FlushDeposits {}`      | Anyone       | Flush buffer; manages liquidation buffer & IBC pump   |
+| `FlushDeposits {}`      | Anyone       | Flush buffer; manages liquidation buffer & IBC forwarder   |
 | `Withdraw {}`           | Anyone       | Burn `maxBTC` → mint redemption tokens                |
 | `ProcessActiveBatch {}` | Anyone       | After `batch_active_duration`, start withdrawal phase |
 | `Claim { recipient }`   | Anyone       | Claim BTC proportional to burned redemption tokens    |
