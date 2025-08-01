@@ -8,7 +8,7 @@ use crate::error::{ContractError, ContractResult};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::EXCHANGE_RATE;
 
-const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-allow-list";
+const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
