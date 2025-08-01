@@ -123,6 +123,10 @@ fn execute_mint_fee(
     amount: Coin,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
+    if cfg.paused {
+        return Err(ContractError::ContractPaused {});
+    }
+
     if info.sender != cfg.fee_collector_contract {
         return Err(ContractError::Unauthorized {});
     }
