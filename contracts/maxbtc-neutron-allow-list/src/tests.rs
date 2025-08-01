@@ -51,45 +51,6 @@ fn test_update_ownership() {
 }
 
 #[test]
-fn test_set_kyc() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
-    let info = message_info(
-        &Addr::unchecked("cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh"),
-        &[],
-    );
-    // Instantiate the contract
-    let msg = InstantiateMsg {
-        owner: "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
-    };
-    instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    // Set KYC for an address
-    let execute_msg = ExecuteMsg::SetKYC {
-        address: "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
-        kyc: true,
-    };
-    let res = execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
-    assert_eq!(res.attributes.len(), 3);
-    assert_eq!(res.attributes[0].key, "action");
-    assert_eq!(res.attributes[0].value, "set_kyc");
-    assert_eq!(res.attributes[1].key, "address");
-    assert_eq!(
-        res.attributes[1].value,
-        "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
-    );
-    assert_eq!(res.attributes[2].key, "kyc");
-    assert_eq!(res.attributes[2].value, "true");
-
-    // Check KYC status
-    let query_msg = QueryMsg::KYCCheck {
-        address: "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
-    };
-    let res = query(deps.as_ref(), env, query_msg).unwrap();
-    let kyc_status: bool = from_json(&res).unwrap();
-    assert!(kyc_status);
-}
-
-#[test]
 fn test_update_allow_list() {
     let mut deps = mock_dependencies();
     let env = mock_env();
@@ -128,6 +89,39 @@ fn test_update_allow_list() {
 }
 
 #[test]
+fn test_update_allow_list_no_admin() {
+    let mut deps = mock_dependencies();
+    let env = mock_env();
+    let info = message_info(
+        &Addr::unchecked("cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh"),
+        &[],
+    );
+    // Instantiate the contract
+    let msg = InstantiateMsg {
+        owner: "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
+    };
+    instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    // Update the allow list
+    let info = message_info(
+        &Addr::unchecked("cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"),
+        &[],
+    );
+    let execute_msg = ExecuteMsg::UpdateAllowList {
+        allow_list: vec![
+            "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
+            "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
+        ],
+    };
+    let res = execute(deps.as_mut(), env.clone(), info, execute_msg);
+    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Caller is not the contract's current owner"
+    );
+}
+
+#[test]
 fn test_is_address_allowed_by_allow_list() {
     let mut deps = mock_dependencies();
     let env = mock_env();
@@ -146,41 +140,6 @@ fn test_is_address_allowed_by_allow_list() {
             "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
             "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
         ],
-    };
-    execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
-    // Check if an address is allowed
-    let query_msg = QueryMsg::IsAddressAllowed {
-        address: "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
-    };
-    let res = query(deps.as_ref(), env.clone(), query_msg).unwrap();
-    let is_allowed: bool = from_json(&res).unwrap();
-    assert!(is_allowed);
-    // Check if an address is not allowed
-    let query_msg = QueryMsg::IsAddressAllowed {
-        address: "cosmwasm1nonexistentaddress".to_string(),
-    };
-    let res = query(deps.as_ref(), env, query_msg).unwrap();
-    let is_allowed: bool = from_json(&res).unwrap();
-    assert!(!is_allowed);
-}
-
-#[test]
-fn test_is_address_allowed_by_kyc_list() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
-    let info = message_info(
-        &Addr::unchecked("cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh"),
-        &[],
-    );
-    // Instantiate the contract
-    let msg = InstantiateMsg {
-        owner: "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh".to_string(),
-    };
-    instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    // Update the allow list
-    let execute_msg = ExecuteMsg::SetKYC {
-        address: "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55".to_string(),
-        kyc: true,
     };
     execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
     // Check if an address is allowed

@@ -5,31 +5,6 @@
     {
       "type": "object",
       "required": [
-        "set_k_y_c"
-      ],
-      "properties": {
-        "set_k_y_c": {
-          "type": "object",
-          "required": [
-            "address",
-            "kyc"
-          ],
-          "properties": {
-            "address": {
-              "type": "string"
-            },
-            "kyc": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "update_allow_list"
       ],
       "properties": {

@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 
 use crate::error::{ContractError, ContractResult};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{ALLOW_LIST, KYC_LIST};
+use crate::state::ALLOW_LIST;
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-allow-list";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -31,14 +31,8 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> ContractResult<Response> {
     match msg {
-        ExecuteMsg::SetKYC { address, kyc } => {
-            KYC_LIST.save(deps.storage, &address, &kyc)?;
-            Ok(Response::new()
-                .add_attribute("action", "set_kyc")
-                .add_attribute("address", address)
-                .add_attribute("kyc", kyc.to_string()))
-        }
         ExecuteMsg::UpdateAllowList { allow_list } => {
+            cw_ownable::assert_owner(deps.storage, &info.sender)?;
             let addresses: Result<Vec<_>, _> = allow_list
                 .into_iter()
                 .map(|addr| deps.api.addr_validate(&addr))
@@ -76,16 +70,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
                     .collect::<Vec<_>>(),
             )?
         }
-        QueryMsg::KYCCheck { address } => {
-            let kyc = KYC_LIST.load(deps.storage, &address)?;
-            to_json_binary(&kyc)?
-        }
         QueryMsg::IsAddressAllowed { address } => {
             let allow_list = ALLOW_LIST.load(deps.storage)?;
             let is_allowed_by_allow_list =
                 allow_list.iter().any(|addr| addr.to_string() == address);
-            let is_allowed_by_kyc = KYC_LIST.may_load(deps.storage, &address)?.unwrap_or(false);
-            to_json_binary(&(is_allowed_by_allow_list || is_allowed_by_kyc))?
+            to_json_binary(&is_allowed_by_allow_list)?
         }
     })
 }

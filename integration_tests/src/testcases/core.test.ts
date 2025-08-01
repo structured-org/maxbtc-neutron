@@ -310,7 +310,7 @@ describe('Core', () => {
     });
   });
   describe('deposits', () => {
-    it('should not be able to deposit from not kyc-ed or allowed address', async () => {
+    it('should not be able to deposit from a not allowed address', async () => {
       const { coreContractClient, account } = context;
       await expect(
         coreContractClient.deposit(
@@ -323,16 +323,13 @@ describe('Core', () => {
       ).rejects.toThrow(/Recipient address not allowed to mint maxBTC/);
     });
 
-    it('pass kyc', async () => {
+    it('update allow list', async () => {
       const { allowlistContractClient, client, account } = context;
 
       // Add the account to the allowlist
-      const addRes = await allowlistContractClient.setKYC(
+      const addRes = await allowlistContractClient.updateAllowList(
         account.address,
-        {
-          address: account.address,
-          kyc: true,
-        },
+        { allow_list: [account.address] },
         'auto',
         'adding account to allowlist',
       );

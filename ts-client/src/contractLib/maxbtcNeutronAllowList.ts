@@ -3,7 +3,6 @@ import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 export type ArrayOfString = string[];
 export type Boolean = boolean;
-export type Boolean1 = boolean;
 export type String = string;
 /**
  * Actions that can be taken to alter the contract's ownership
@@ -56,21 +55,14 @@ export type Timestamp = Uint64;
 export type Uint64 = string;
 
 export interface MaxbtcNeutronAllowListSchema {
-  responses: ArrayOfString | Boolean | Boolean1 | String;
-  query: KYCCheckArgs | IsAddressAllowedArgs;
-  execute: SetKYCArgs | UpdateAllowListArgs | UpdateOwnershipArgs;
+  responses: ArrayOfString | Boolean | String;
+  query: IsAddressAllowedArgs;
+  execute: UpdateAllowListArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
-export interface KYCCheckArgs {
-  address: string;
-}
 export interface IsAddressAllowedArgs {
   address: string;
-}
-export interface SetKYCArgs {
-  address: string;
-  kyc: boolean;
 }
 export interface UpdateAllowListArgs {
   allow_list: string[];
@@ -131,15 +123,8 @@ export class Client {
   queryAllowList = async(): Promise<ArrayOfString> => {
     return this.client.queryContractSmart(this.contractAddress, { allow_list: {} });
   }
-  queryKYCCheck = async(args: KYCCheckArgs): Promise<Boolean> => {
-    return this.client.queryContractSmart(this.contractAddress, { k_y_c_check: args });
-  }
   queryIsAddressAllowed = async(args: IsAddressAllowedArgs): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, { is_address_allowed: args });
-  }
-  setKYC = async(sender:string, args: SetKYCArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { set_k_y_c: args }, fee || "auto", memo, funds);
   }
   updateAllowList = async(sender:string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
