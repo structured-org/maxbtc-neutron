@@ -3,7 +3,6 @@ import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 export type ArrayOfString = string[];
 export type Boolean = boolean;
-export type Boolean1 = boolean;
 export type String = string;
 /**
  * Actions that can be taken to alter the contract's ownership
@@ -49,21 +48,14 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 export interface MaxbtcNeutronAllowListSchema {
-    responses: ArrayOfString | Boolean | Boolean1 | String;
-    query: KYCCheckArgs | IsAddressAllowedArgs;
-    execute: SetKYCArgs | UpdateAllowListArgs | UpdateOwnershipArgs;
+    responses: ArrayOfString | Boolean | String;
+    query: IsAddressAllowedArgs;
+    execute: UpdateAllowListArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
-export interface KYCCheckArgs {
-    address: string;
-}
 export interface IsAddressAllowedArgs {
     address: string;
-}
-export interface SetKYCArgs {
-    address: string;
-    kyc: boolean;
 }
 export interface UpdateAllowListArgs {
     allow_list: string[];
@@ -80,9 +72,7 @@ export declare class Client {
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     queryOwner: () => Promise<String>;
     queryAllowList: () => Promise<ArrayOfString>;
-    queryKYCCheck: (args: KYCCheckArgs) => Promise<Boolean>;
     queryIsAddressAllowed: (args: IsAddressAllowedArgs) => Promise<Boolean>;
-    setKYC: (sender: string, args: SetKYCArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateAllowList: (sender: string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

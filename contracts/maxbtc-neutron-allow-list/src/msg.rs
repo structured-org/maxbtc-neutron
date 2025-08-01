@@ -9,7 +9,6 @@ pub struct InstantiateMsg {
 #[cw_ownable_execute]
 #[cw_serde]
 pub enum ExecuteMsg {
-    SetKYC { address: String, kyc: bool },
     UpdateAllowList { allow_list: Vec<String> },
 }
 
@@ -20,8 +19,6 @@ pub enum QueryMsg {
     Owner {},
     #[returns(Vec<String>)]
     AllowList {},
-    #[returns(bool)]
-    KYCCheck { address: String },
     #[returns(bool)]
     IsAddressAllowed { address: String },
 }

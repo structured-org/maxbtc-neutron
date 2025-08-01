@@ -31,27 +31,6 @@
     {
       "type": "object",
       "required": [
-        "k_y_c_check"
-      ],
-      "properties": {
-        "k_y_c_check": {
-          "type": "object",
-          "required": [
-            "address"
-          ],
-          "properties": {
-            "address": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "is_address_allowed"
       ],
       "properties": {
