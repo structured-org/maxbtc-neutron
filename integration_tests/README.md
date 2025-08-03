@@ -6,7 +6,7 @@ This repository contains tests for Drop on Cosmos implementation.
 
 ### Prerequisites
 
-- node v18.12+
+- node v20.0.0+
 - Docker engine
 - yarn
 
