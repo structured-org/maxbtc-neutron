@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   MaxbtcNeutronCore,
   MaxbtcNeutronAllowList,
-  MaxbtcNeutronExchangeRateProvider,
+  MaxbtcNeutronExchangeRateProvider, MaxbtcNeutronFeeCollector,
 } from 'maxbtc-neutron-ts-client';
 
 import { join } from 'path';
@@ -23,6 +23,7 @@ const CoreContractClient = MaxbtcNeutronCore.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
 const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
+const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
 
 describe('Core', () => {
   const context: {
@@ -42,6 +43,9 @@ describe('Core', () => {
     forwarderContractAddress?: string;
     forwarderLibraryContractAddress?: string;
     fee_collector_code_id?: number;
+
+    feeCollectorContractClient?: InstanceType<typeof FeeCollectorContractClient>;
+    feeCollectorContractAddress?: string;
 
     treasuryAddress?: string;
   } = {};
@@ -292,7 +296,7 @@ describe('Core', () => {
           allowlist_contract: context.allowlistContractClient.contractAddress,
           fee_collector_params: {
             code_id: fee_collector_code_id,
-            collection_period_seconds: 1,
+            collection_period_seconds: 10,
             fee_apy_reduction_percentage: '0.1',
             salt: 'Z3Rmbw==',
           },
@@ -308,7 +312,23 @@ describe('Core', () => {
         context.coreContractAddress,
       );
     });
+    it('get fee collector address and instantiate client', async () => {
+      const { client, coreContractClient } = context;
+      // The core contract stores the address of the fee collector it created.
+      const coreConfig = await coreContractClient.queryConfig();
+      const feeCollectorAddress = coreConfig.fee_collector_contract;
+
+      expect(feeCollectorAddress).toBeTruthy();
+      expect(feeCollectorAddress).toHaveLength(66);
+
+      context.feeCollectorContractAddress = feeCollectorAddress;
+      context.feeCollectorContractClient = new FeeCollectorContractClient(
+          client,
+          feeCollectorAddress,
+      );
+    });
   });
+
   describe('deposits', () => {
     it('should not be able to deposit from a not allowed address', async () => {
       const { coreContractClient, account } = context;
@@ -467,6 +487,149 @@ describe('Core', () => {
             (a) => a.key === 'status' && a.value === 'not_enough_time_elapsed',
           ),
         ).toBeTruthy();
+      });
+    });
+  });
+
+  describe('Fee Collector', () => {
+    it('should have correct initial config and state', async () => {
+      const {
+        feeCollectorContractClient,
+        account,
+        coreContractAddress,
+      } = context;
+
+      const config = await feeCollectorContractClient.queryConfig();
+      const state = await feeCollectorContractClient.queryState();
+
+      expect(config.owner).toEqual(account.address);
+      expect(config.core_contract).toEqual(coreContractAddress);
+      expect(config.fee_apy_reduction_percentage).toEqual('0.1');
+      expect(config.collection_period_seconds).toEqual(10);
+      expect(config.fee_denom).toEqual(
+          `factory/${coreContractAddress}/maxbtc`,
+      );
+      expect(state.last_exchange_rate).toEqual("1"); // Because that was the rate when the contract was instantiated
+    });
+
+    it('should successfully collect fees when APY is positive', async () => {
+      const {
+        feeCollectorContractClient,
+        client,
+        account,
+        coreContractClient,
+        coreContractAddress
+      } = context;
+
+      const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
+      const balanceBefore = await client.getBalance(
+          feeCollectorContractClient.contractAddress,
+          maxBtcDenom,
+      );
+      const stateBefore = await feeCollectorContractClient.queryState();
+
+      // The previous deposit test already caused a rate increase, so APY is positive.
+      // We just need to wait for the collection period again.
+      await sleep(1500);
+
+      // Collect the fee
+      const collectRes = await feeCollectorContractClient.collectFee(
+          account.address,
+          'auto',
+      );
+      await waitForTx(client, collectRes.transactionHash);
+
+      // Verify fee was collected by checking the balance
+      const balanceAfter = await client.getBalance(
+          feeCollectorContractClient.contractAddress,
+          maxBtcDenom,
+      );
+      expect(BigInt(balanceAfter.amount)).toBeGreaterThan(
+          BigInt(balanceBefore.amount),
+      );
+
+      // Verify the contract's internal state was updated via the reply handler
+      const stateAfter = await feeCollectorContractClient.queryState();
+      const newRate = await coreContractClient.queryExchangeRate();
+      expect(stateAfter.last_exchange_rate).toEqual(newRate);
+      expect(Number(stateAfter.last_collection_timestamp)).toBeGreaterThan(
+          Number(stateBefore.last_collection_timestamp),
+      );
+    });
+
+    it('should fail to collect fee before collection period ends', async () => {
+      const { feeCollectorContractClient, account } = context;
+      await expect(
+          feeCollectorContractClient.collectFee(account.address, 'auto'),
+      ).rejects.toThrow(/Fee collection is not allowed yet/);
+    });
+
+    it('should fail to collect fee with negative or zero APY', async () => {
+      const { feeCollectorContractClient, account } = context;
+      // Wait for the short collection period to pass
+      await sleep(11000);
+
+      // The exchange rate hasn't changed since instantiation, so APY is zero.
+      await expect(
+          feeCollectorContractClient.collectFee(account.address, 'auto'),
+      ).rejects.toThrow(/APY is not positive/);
+    });
+
+    describe('Claiming & Config', () => {
+      it('should allow owner to claim collected fees', async () => {
+        const { feeCollectorContractClient, client, account, coreContractAddress } =
+            context;
+        const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
+
+        const feeCollectorBalance = await client.getBalance(
+            feeCollectorContractClient.contractAddress,
+            maxBtcDenom,
+        );
+        // Ensure there's a balance to claim from the previous test
+        expect(BigInt(feeCollectorBalance.amount)).toBeGreaterThan(0n);
+
+        const recipientBalanceBefore = await client.getBalance(
+            account.address,
+            maxBtcDenom,
+        );
+        const claimAmount = { denom: maxBtcDenom, amount: '10' };
+
+        await feeCollectorContractClient.claim(
+            account.address,
+            { amount: claimAmount, recipient: account.address },
+            'auto',
+        );
+
+        const recipientBalanceAfter = await client.getBalance(
+            account.address,
+            maxBtcDenom,
+        );
+
+        const expectedBalance =
+            BigInt(recipientBalanceBefore.amount) + BigInt(claimAmount.amount);
+        expect(BigInt(recipientBalanceAfter.amount)).toEqual(expectedBalance);
+      });
+
+      it('should allow owner to update the configuration', async () => {
+        const { feeCollectorContractClient, account, client } = context;
+        const newPeriodHours = 2;
+        const newPercentage = '0.25';
+
+        const updateRes = await feeCollectorContractClient.updateConfig(
+            account.address,
+            {
+              collection_period_hours: newPeriodHours,
+              fee_apy_reduction_percentage: newPercentage,
+            },
+            'auto',
+        );
+        await waitForTx(client, updateRes.transactionHash);
+
+        const newConfig = await feeCollectorContractClient.queryConfig();
+        expect(newConfig.collection_period_seconds).toEqual(
+            newPeriodHours * 3600,
+        );
+        expect(newConfig.fee_apy_reduction_percentage).toEqual(newPercentage);
       });
     });
   });

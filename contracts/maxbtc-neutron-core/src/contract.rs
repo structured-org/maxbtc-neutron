@@ -131,9 +131,9 @@ fn execute_mint_fee(
         return Err(ContractError::Unauthorized {});
     }
 
-    if amount.denom != cfg.maxbtc_denom {
+    if amount.denom != cfg.get_maxbtc_denom(env.contract.address.to_string()) {
         return Err(ContractError::InvalidDepositDenom {
-            expected: cfg.maxbtc_denom.to_string(),
+            expected: cfg.get_maxbtc_denom(env.contract.address.to_string()),
             received: amount.denom.to_string(),
         });
     }
