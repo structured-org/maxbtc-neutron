@@ -1,0 +1,27 @@
+[package]
+authors = ["Albert Andrejev <albert.andrejev@gmail.com>", "Andrei Zavgorodnii <andrei.z@hadronlabs.org>"]
+description = "MaxBTC APY calculator"
+edition = "2021"
+name = "maxbtc-neutron-apy-calculator"
+version = "1.0.0"
+
+exclude = [
+    "contract.wasm",
+    "hash.txt",
+]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+backtraces = []
+library = []
+
+[dependencies]
+cw2 = { workspace = true }
+cw-ownable = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cosmwasm-std = { workspace = true }
+thiserror = { workspace = true }
+cw-utils = { workspace = true }
+cw-storage-plus = { workspace = true }

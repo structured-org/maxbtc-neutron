@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   MaxbtcNeutronCore,
   MaxbtcNeutronAllowList,
-  MaxbtcNeutronExchangeRateProvider, MaxbtcNeutronFeeCollector,
+  MaxbtcNeutronExchangeRateProvider, MaxbtcNeutronFeeCollector, MaxbtcNeutronApyCalculator,
 } from 'maxbtc-neutron-ts-client';
 
 import { join } from 'path';
@@ -18,12 +18,15 @@ import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
 
 const DEPOSIT_DENOM = 'untrn';
+const APY_CALC_PERIOD_TIMEOUT = 10; // seconds
+const APY_CALC_PERIODS_TO_KEEP = 24;
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
 const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
 const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
+const ApyCalculatorContractClient = MaxbtcNeutronApyCalculator.Client;
 
 describe('Core', () => {
   const context: {
@@ -34,6 +37,7 @@ describe('Core', () => {
     exchangeRateProviderContractClient?: InstanceType<
       typeof ExchangeRateProviderContractClient
     >;
+    apyCalculatorContractClient?: InstanceType<typeof ApyCalculatorContractClient>;
 
     account?: AccountData;
     client?: SigningCosmWasmClient;
@@ -46,6 +50,7 @@ describe('Core', () => {
 
     feeCollectorContractClient?: InstanceType<typeof FeeCollectorContractClient>;
     feeCollectorContractAddress?: string;
+    apyCalculatorContractAddress?: string;
 
     treasuryAddress?: string;
   } = {};
@@ -325,6 +330,43 @@ describe('Core', () => {
       context.feeCollectorContractClient = new FeeCollectorContractClient(
           client,
           feeCollectorAddress,
+      );
+    });
+
+    it('instantiate apy calculator', async () => {
+      const { client, account, coreContractAddress } = context;
+      const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+              fs.readFileSync(
+                  join(
+                      __dirname,
+                      '../../../artifacts/maxbtc_neutron_apy_calculator.wasm',
+                  ),
+              ),
+          ),
+          1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+      const instantiateRes = await ApyCalculatorContractClient.instantiate(
+          client,
+          account.address,
+          res.codeId,
+          {
+            owner: account.address,
+            core_contract: coreContractAddress,
+            period_timeout: APY_CALC_PERIOD_TIMEOUT,
+            periods_to_keep: APY_CALC_PERIODS_TO_KEEP,
+          },
+          'apy_calculator',
+          'auto',
+          [],
+      );
+      expect(instantiateRes.contractAddress).toHaveLength(66);
+      context.apyCalculatorContractAddress = instantiateRes.contractAddress;
+      context.apyCalculatorContractClient = new ApyCalculatorContractClient(
+          client,
+          instantiateRes.contractAddress,
       );
     });
   });
@@ -631,6 +673,112 @@ describe('Core', () => {
         );
         expect(newConfig.fee_apy_reduction_percentage).toEqual(newPercentage);
       });
+    });
+  });
+
+  describe('Apy Calculator', () => {
+    it('should have the correct initial configuration', async () => {
+      const { apyCalculatorContractClient, account, coreContractAddress } =
+          context;
+
+      const config = await apyCalculatorContractClient.queryGetConfig();
+      expect(config.core_contract).toEqual(coreContractAddress);
+      expect(config.period_timeout).toEqual(APY_CALC_PERIOD_TIMEOUT);
+      expect(config.periods_to_keep).toEqual(APY_CALC_PERIODS_TO_KEEP);
+
+      const ownership = await apyCalculatorContractClient.queryOwnership();
+      expect(ownership.owner).toEqual(account.address);
+    });
+
+    it('should update the exchange rate snapshot for the first time', async () => {
+      const { apyCalculatorContractClient, account } = context;
+      // The `deposits` tests have already run and updated the rate in the provider.
+      // This first snapshot will capture that updated rate.
+      // The first call is allowed irrespective of time, as last_update is 0.
+      const res = await apyCalculatorContractClient.updateExchangeRates(
+          account.address,
+          'auto',
+      );
+      expect(res.transactionHash).toHaveLength(64);
+      await waitForTx(context.client, res.transactionHash);
+    });
+
+    it('should fail to update exchange rate snapshot before the timeout period', async () => {
+      const { apyCalculatorContractClient, account } = context;
+      await expect(
+          apyCalculatorContractClient.updateExchangeRates(account.address, 'auto'),
+      ).rejects.toThrow(/Too early/);
+    });
+
+    it('should fail to query APY with only one data point', async () => {
+      const { apyCalculatorContractClient } = context;
+      // With only one snapshot, start time and end time are the same,
+      // leading to an error.
+      await expect(
+          apyCalculatorContractClient.queryGetApy({ time_span_hours: 1 }),
+      ).rejects.toThrow(/Period end is before period start/);
+    });
+
+    it('should successfully update the exchange rate snapshot a second time', async () => {
+      const { apyCalculatorContractClient, account, coreContractClient } = context;
+      // Wait for the timeout period to pass
+      await sleep((APY_CALC_PERIOD_TIMEOUT + 1) * 1000);
+
+      // Make another deposit to change the AUM, which will change the exchange rate
+      const depositRes = await coreContractClient.deposit(
+          account.address,
+          { recipient: account.address },
+          'auto',
+          'second deposit for apy test',
+          [{ denom: 'untrn', amount: '100000' }],
+      );
+      await waitForTx(context.client, depositRes.transactionHash);
+
+      // Update the exchange rate provider with the new AUM
+      await updateExchangeRate(
+          context.account.address,
+          context.neutronClient,
+          context.coreContractClient,
+          context.exchangeRateProviderContractClient,
+          context.forwarderContractAddress,
+      );
+
+      // Trigger the snapshot in the APY calculator
+      const res = await apyCalculatorContractClient.updateExchangeRates(
+          account.address,
+          'auto',
+      );
+      expect(res.transactionHash).toHaveLength(64);
+      await waitForTx(context.client, res.transactionHash);
+    });
+
+    it('should calculate the APY based on the two snapshots', async () => {
+      const { apyCalculatorContractClient } = context;
+
+      const res = await apyCalculatorContractClient.queryGetApy({
+        time_span_hours: 1,
+      });
+
+      const startRate = Number(res.start_exchange_rate.exchange_rate);
+      const endRate = Number(res.end_exchange_rate.exchange_rate);
+      const startTs = Number(res.start_exchange_rate.timestamp);
+      const endTs = Number(res.end_exchange_rate.timestamp);
+
+
+      // Because we made a deposit, the rate should have increased.
+      expect(endRate).toBeGreaterThan(startRate);
+      expect(endTs).toBeGreaterThan(startTs);
+      expect(Number(res.apy)).toBeGreaterThan(0);
+    });
+
+    it('should fail to query with an out of range timespan', async () => {
+      const { apyCalculatorContractClient } = context;
+
+      await expect(
+          apyCalculatorContractClient.queryGetApy({
+            time_span_hours: APY_CALC_PERIODS_TO_KEEP,
+          }),
+      ).rejects.toThrow(/Timespan is out of range/);
     });
   });
 });
