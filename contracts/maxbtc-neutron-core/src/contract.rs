@@ -249,7 +249,7 @@ pub(crate) fn execute_deposit(
     )?;
 
     TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
-        Ok(total + minted_amount)
+        Ok(total + deposit_coin.amount)
     })?;
 
     // Return the response
