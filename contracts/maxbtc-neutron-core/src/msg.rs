@@ -114,7 +114,7 @@ pub struct FeeMinterParams {
     pub salt: Binary,
     /// The percentage of APY to be taken as a fee.
     pub fee_apy_reduction_percentage: Decimal,
-    /// The duration in hours for each fee collection period.
+    /// The duration in seconds for each fee collection period.
     pub collection_period_seconds: u64,
 }
 
