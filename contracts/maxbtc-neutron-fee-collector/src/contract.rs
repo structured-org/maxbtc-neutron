@@ -80,7 +80,6 @@ pub fn execute(
             core_contract,
             fee_apy_reduction_percentage,
             collection_period_hours,
-            maxbtc_decimals,
         } => execute_update_config(
             deps,
             env,
@@ -89,7 +88,6 @@ pub fn execute(
             core_contract,
             fee_apy_reduction_percentage,
             collection_period_hours,
-            maxbtc_decimals,
         ),
     }
 }
@@ -196,7 +194,6 @@ pub fn execute_update_config(
     core_contract: Option<String>,
     fee_apy_reduction_percentage: Option<Decimal>,
     collection_period_hours: Option<u64>,
-    maxbtc_decimals: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     if info.sender != config.owner {
@@ -235,10 +232,6 @@ pub fn execute_update_config(
         config.collection_period_seconds = new_period * 60 * 60;
         response =
             response.add_attribute("collection_period_hours_updated", new_period.to_string());
-    }
-    if let Some(new_decimals) = maxbtc_decimals {
-        config.maxbtc_decimals = new_decimals;
-        response = response.add_attribute("maxbtc_decimals_updated", new_decimals.to_string());
     }
 
     CONFIG.save(deps.storage, &config)?;
