@@ -45,9 +45,7 @@ pub fn execute(
         }
         ExecuteMsg::UpdateOwnership(action) => {
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
-            Ok(Response::new()
-                .add_attribute("action", "update_ownership")
-                .add_attribute("new_owner", info.sender))
+            Ok(Response::new().add_attribute("action", "update_ownership"))
         }
     }
 }
