@@ -110,7 +110,10 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig(updates) => execute_update_config(deps, info, updates),
-        ExecuteMsg::Deposit { recipient } => execute_deposit(deps, env, info, recipient),
+        ExecuteMsg::Deposit {
+            recipient,
+            min_receive_amount,
+        } => execute_deposit(deps, env, info, recipient, min_receive_amount),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
         ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
     }
@@ -216,6 +219,7 @@ pub(crate) fn execute_deposit(
     env: Env,
     info: MessageInfo,
     recipient: String,
+    min_receive_amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
@@ -232,6 +236,16 @@ pub(crate) fn execute_deposit(
 
     // Calculate the amount of maxBTC to mint.
     let minted_amount = calculate_mint_amount(deps.as_ref(), deposit_coin.amount)?;
+
+    // If a minimum receive amount is specified, ensure we meet that condition
+    if let Some(min_amount) = min_receive_amount {
+        if minted_amount < min_amount {
+            return Err(ContractError::SlippageLimitExceeded {
+                requested: min_amount.u128(),
+                actual: minted_amount.u128(),
+            });
+        }
+    }
 
     // Can be equal to zero if rounding kicks in with a very high ER.
     if minted_amount.is_zero() {

@@ -47,7 +47,10 @@ pub struct UpdateConfigMsg {
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
     /// User deposit flow
-    Deposit { recipient: String },
+    Deposit {
+        recipient: String,
+        min_receive_amount: Option<Uint128>,
+    },
     /// Permissionless handler to flush deposits after `deposit_flush_period`
     FlushDeposits {},
     /// Owner-only message to update protocol configuration in-place

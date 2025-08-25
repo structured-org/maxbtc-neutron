@@ -56,6 +56,9 @@ pub enum ContractError {
     #[error("Deposit cap was exceeded")]
     DepositCapExceeded {},
 
+    #[error("Slippage limit exceeded. Requested at least {requested}, actual {actual}")]
+    SlippageLimitExceeded { requested: u128, actual: u128 },
+
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),
     #[error("{0}")]
