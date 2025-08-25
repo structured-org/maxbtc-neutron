@@ -8,6 +8,9 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
+    #[error("{0}")]
+    OwnershipError(#[from] cw_ownable::OwnershipError),
+
     #[error("Unauthorized")]
     Unauthorized {},
 

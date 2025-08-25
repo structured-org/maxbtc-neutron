@@ -3947,6 +3947,7 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
+ "cw-ownable",
  "cw-storage-plus",
  "cw2",
  "neutron-std 5.0.0",

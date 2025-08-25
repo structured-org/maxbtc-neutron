@@ -10,6 +10,7 @@ use cosmwasm_std::{
     DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
+use cw_ownable::{assert_owner, initialize_owner};
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgCreateDenom, MsgMint};
 
@@ -40,10 +41,11 @@ pub fn instantiate(
     )
     .map_err(ContractError::Instantiate2Error)?;
 
+    initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
-        owner: deps.api.addr_validate(&msg.owner)?,
         deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
@@ -65,11 +67,11 @@ pub fn instantiate(
 
     // Create the instantiate message for the fee collector contract
     let instantiate_fee_collector_msg = WasmMsg::Instantiate2 {
-        admin: Some(cfg.owner.to_string()), // The core contract owner is admin
+        admin: Some(msg.owner.to_string()), // The core contract owner is admin
         code_id: msg.fee_collector_params.code_id,
         label: "maxBTC Fee Collector Contract".to_string(),
         msg: to_json_binary(&FeeCollectorInstantiateMsg {
-            owner: msg.owner,                                // Same owner as the core contract
+            owner: msg.owner.to_string(), // Same owner as the core contract
             core_contract: env.contract.address.to_string(), // This contract's address
             fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
             collection_period_seconds: msg.fee_collector_params.collection_period_seconds,
@@ -89,7 +91,7 @@ pub fn instantiate(
         .add_message(create_maxbtc_denom_msg)
         .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
         .add_attribute("action", "instantiate")
-        .add_attribute("owner", cfg.owner.to_string())
+        .add_attribute("owner", msg.owner)
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
@@ -116,6 +118,10 @@ pub fn execute(
         } => execute_deposit(deps, env, info, recipient, min_receive_amount),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
         ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
+        ExecuteMsg::UpdateOwnership(action) => {
+            cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
+            Ok(Response::new().add_attribute("action", "update_ownership"))
+        }
     }
 }
 
@@ -162,9 +168,7 @@ fn execute_update_config(
     let mut cfg = CONFIG.load(deps.storage)?;
 
     // Only the current owner may update the config.
-    if info.sender != cfg.owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    assert_owner(deps.storage, &info.sender)?;
 
     // Initialize the response with standard attributes.
     let mut res = Response::new()
@@ -175,11 +179,6 @@ fn execute_update_config(
     if let Some(paused) = updates.paused {
         cfg.paused = paused;
         res = res.add_attribute("paused_updated", paused.to_string());
-    }
-    if let Some(owner) = updates.owner {
-        let owner_addr = deps.api.addr_validate(&owner)?;
-        cfg.owner = owner_addr.clone();
-        res = res.add_attribute("owner_updated", owner_addr.to_string());
     }
     if let Some(addr) = updates.deposit_forwarder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
@@ -334,7 +333,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
-                owner: cfg.owner.to_string(),
                 deposit_denom: cfg.deposit_denom,
                 maxbtc_denom: cfg.maxbtc_denom,
                 deposit_flush_period: cfg.deposit_flush_period,
@@ -358,6 +356,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = SimulateDepositResponse { minted_amount };
             to_json_binary(&resp)
         }
+        QueryMsg::Owner {} => Ok(to_json_binary(
+            &cw_ownable::get_ownership(deps.storage)?
+                .owner
+                .unwrap_or(cosmwasm_std::Addr::unchecked(""))
+                .to_string(),
+        )?),
     }
 }
 

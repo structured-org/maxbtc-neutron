@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
+use cw_ownable::cw_ownable_execute;
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -33,7 +34,6 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
-    pub owner: Option<String>,
     pub deposit_forwarder_contract: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
@@ -43,6 +43,7 @@ pub struct UpdateConfigMsg {
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
+#[cw_ownable_execute]
 #[cw_serde]
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
@@ -64,6 +65,8 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(String)]
+    Owner {},
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
@@ -82,7 +85,6 @@ pub struct SimulateDepositResponse {
 /// Response for querying config
 #[cw_serde]
 pub struct ConfigResponse {
-    pub owner: String,
     pub deposit_denom: String,
     pub maxbtc_denom: String,
     pub deposit_flush_period: u64,

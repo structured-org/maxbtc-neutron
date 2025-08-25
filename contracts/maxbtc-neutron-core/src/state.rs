@@ -7,8 +7,6 @@ pub struct Config {
     /// When `true`, user-initiated actions are rejected; can be set
     /// automatically on emergencies or manually by the owner.
     pub paused: bool,
-    /// Address with full administrative rights over the contract.
-    pub owner: Addr,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_forwarder_contract: Addr,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
