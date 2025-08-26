@@ -26,14 +26,14 @@ class Client {
         });
         return res;
     }
-    queryOwner = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { owner: {} });
-    };
     queryAllowList = async () => {
         return this.client.queryContractSmart(this.contractAddress, { allow_list: {} });
     };
     queryIsAddressAllowed = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { is_address_allowed: args });
+    };
+    queryOwnership = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
     updateAllowList = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {

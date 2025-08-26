@@ -356,12 +356,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = SimulateDepositResponse { minted_amount };
             to_json_binary(&resp)
         }
-        QueryMsg::Owner {} => Ok(to_json_binary(
-            &cw_ownable::get_ownership(deps.storage)?
-                .owner
-                .unwrap_or(cosmwasm_std::Addr::unchecked(""))
-                .to_string(),
-        )?),
+        QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
 }
 

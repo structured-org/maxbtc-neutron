@@ -106,7 +106,7 @@
           "minimum": 0.0
         },
         "collection_period_seconds": {
-          "description": "The duration in hours for each fee collection period.",
+          "description": "The duration in seconds for each fee collection period.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

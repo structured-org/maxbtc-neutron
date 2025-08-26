@@ -26,11 +26,11 @@ class Client {
         });
         return res;
     }
-    queryOwner = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { owner: {} });
-    };
     queryExchangeRate = async () => {
         return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+    };
+    queryOwnership = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
     updateExchangeRate = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {

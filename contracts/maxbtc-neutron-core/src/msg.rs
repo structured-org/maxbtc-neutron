@@ -1,6 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
-use cw_ownable::cw_ownable_execute;
+use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -62,11 +62,10 @@ pub enum ExecuteMsg {
 }
 
 /// QueryMsg for reading contract states.
+#[cw_ownable_query]
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(String)]
-    Owner {},
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
