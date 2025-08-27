@@ -196,6 +196,10 @@ fn execute_update_config(
         cfg.deposits_cap = cap;
         res = res.add_attribute("deposits_cap_updated", cap.unwrap());
     }
+    if let Some(deposit_cost) = updates.deposit_cost {
+        cfg.deposit_cost = deposit_cost;
+        res = res.add_attribute("deposit_cost_updated", deposit_cost.to_string());
+    }
     if let Some(allowlist_contract) = updates.allowlist_contract {
         let validated_addr = deps.api.addr_validate(&allowlist_contract)?;
         cfg.allowlist_contract = validated_addr.clone();
