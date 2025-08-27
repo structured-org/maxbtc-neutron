@@ -205,6 +205,14 @@ fn execute_update_config(
         cfg.allowlist_contract = validated_addr.clone();
         res = res.add_attribute("allowlist_contract_updated", validated_addr.to_string());
     }
+    if let Some(exchange_rate_provider_contract) = updates.exchange_rate_provider_contract {
+        let validated_addr = deps.api.addr_validate(&exchange_rate_provider_contract)?;
+        cfg.exchange_rate_provider_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "exchange_rate_provider_contract_updated",
+            validated_addr.to_string(),
+        );
+    }
     if let Some(addr) = updates.fee_collector_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.fee_collector_contract = validated_addr.clone();

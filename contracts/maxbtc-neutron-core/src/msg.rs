@@ -37,6 +37,7 @@ pub struct UpdateConfigMsg {
     pub deposit_forwarder_contract: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
+    pub exchange_rate_provider_contract: Option<String>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
