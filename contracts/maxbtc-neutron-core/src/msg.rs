@@ -133,6 +133,12 @@ pub enum AllowlistQueryMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum ExchangeRateProviderQueryMsg {
-    #[returns(Decimal)]
-    ExchangeRate {},
+    #[returns(GetTwaerResponse)]
+    GetTwaer {},
+}
+
+#[cw_serde]
+pub struct GetTwaerResponse {
+    pub twaer: Decimal,
+    pub published_at: u64,
 }

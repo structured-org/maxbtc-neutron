@@ -1,4 +1,4 @@
-use crate::msg::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg};
+use crate::msg::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
@@ -144,9 +144,15 @@ impl WasmMockQuerier {
             let parsed: Result<ExchangeRateProviderQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
                 return match q {
-                    ExchangeRateProviderQueryMsg::ExchangeRate {} => {
+                    ExchangeRateProviderQueryMsg::GetTwaer {} => {
                         let val = self.exchange_rate;
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&GetTwaerResponse {
+                                twaer: val,
+                                published_at: 1234567890,
+                            })
+                            .unwrap(),
+                        ))
                     }
                 };
             }

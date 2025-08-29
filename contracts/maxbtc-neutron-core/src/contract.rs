@@ -1,7 +1,8 @@
 use crate::error::ContractError;
 use crate::msg::{
     AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-    FeeCollectorInstantiateMsg, InstantiateMsg, QueryMsg, SimulateDepositResponse, UpdateConfigMsg,
+    FeeCollectorInstantiateMsg, GetTwaerResponse, InstantiateMsg, QueryMsg,
+    SimulateDepositResponse, UpdateConfigMsg,
 };
 use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin};
@@ -430,13 +431,13 @@ fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<C
 
 /// Queries the exchange rate from the exchange rate provider contract.
 pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
-    let er: Decimal = deps
-        .querier
-        .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
-            contract_addr: cfg.exchange_rate_provider_contract.to_string(),
-            msg: to_json_binary(&ExchangeRateProviderQueryMsg::ExchangeRate {})?,
-        }))?;
-    Ok(er)
+    let res: GetTwaerResponse =
+        deps.querier
+            .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
+                contract_addr: cfg.exchange_rate_provider_contract.to_string(),
+                msg: to_json_binary(&ExchangeRateProviderQueryMsg::GetTwaer {})?,
+            }))?;
+    Ok(res.twaer)
 }
 
 /// Verifies that the current Deposits does **not** exceed the optional *deposit cap*.
