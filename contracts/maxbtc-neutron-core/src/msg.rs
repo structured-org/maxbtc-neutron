@@ -142,3 +142,6 @@ pub struct GetTwaerResponse {
     pub twaer: Decimal,
     pub published_at: u64,
 }
+
+#[cw_serde]
+pub struct MigrateMsg {}

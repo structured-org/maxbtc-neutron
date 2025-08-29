@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use crate::msg::{
     AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-    FeeCollectorInstantiateMsg, GetTwaerResponse, InstantiateMsg, QueryMsg,
+    FeeCollectorInstantiateMsg, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg,
     SimulateDepositResponse, UpdateConfigMsg,
 };
 use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
@@ -476,4 +476,9 @@ fn check_deposits_allowlist(
     } else {
         Ok(())
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    Ok(Response::default())
 }
