@@ -2,7 +2,7 @@
   "name": "maxbtc-neutron-integration-tests",
   "version": "1.0.8",
   "main": "vitest",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "scripts": {
     "test": "vitest --run",
     "test:core": "vitest --run core.test.ts --bail 1",
