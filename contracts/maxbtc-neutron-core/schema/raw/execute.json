@@ -4,6 +4,19 @@
   "description": "ExecuteMsg enumerates all possible actions in this contract.",
   "oneOf": [
     {
+      "type": "object",
+      "required": [
+        "tick"
+      ],
+      "properties": {
+        "tick": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "User deposit flow",
       "type": "object",
       "required": [
@@ -36,13 +49,13 @@
       "additionalProperties": false
     },
     {
-      "description": "Permissionless handler to flush deposits after `deposit_flush_period`",
+      "description": "User withdraw flow",
       "type": "object",
       "required": [
-        "flush_deposits"
+        "withdraw"
       ],
       "properties": {
-        "flush_deposits": {
+        "withdraw": {
           "type": "object",
           "additionalProperties": false
         }
@@ -253,14 +266,6 @@
             }
           ]
         },
-        "deposit_flush_period": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "deposit_forwarder_contract": {
           "type": [
             "string",
@@ -284,7 +289,19 @@
             }
           ]
         },
+        "exchange_rate_provider_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fee_collector_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operator": {
           "type": [
             "string",
             "null"
@@ -293,6 +310,24 @@
         "paused": {
           "type": [
             "boolean",
+            "null"
+          ]
+        },
+        "waitosaur_observer_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waitsaur_holder_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withdrawal_manager_contract": {
+          "type": [
+            "string",
             "null"
           ]
         }

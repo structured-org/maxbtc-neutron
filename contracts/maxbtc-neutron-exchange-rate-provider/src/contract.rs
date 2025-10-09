@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 use cw_ownable::assert_owner;
 
 use crate::error::{ContractError, ContractResult};
-use crate::msg::{ExecuteMsg, GetTwaerResponse, InstantiateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::EXCHANGE_RATE;
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider";
@@ -58,4 +58,25 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             published_at: env.block.time.seconds(),
         })?,
     })
+}
+
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
+    }
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    }
+
+    Ok(Response::new())
 }

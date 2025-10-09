@@ -1,4 +1,3 @@
-use crate::state::{Config, State};
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Coin, Decimal, Timestamp};
 
@@ -31,10 +30,10 @@ pub enum ExecuteMsg {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     /// Returns the current contract configuration.
-    #[returns(Config)]
+    #[returns(crate::state::Config)]
     Config {},
     /// Returns the current contract state.
-    #[returns(State)]
+    #[returns(crate::state::State)]
     State {},
 }
 
@@ -67,3 +66,6 @@ pub enum CoreQueryMsg {
 pub enum CoreExecuteMsg {
     MintFee { amount: Coin },
 }
+
+#[cw_serde]
+pub struct MigrateMsg {}

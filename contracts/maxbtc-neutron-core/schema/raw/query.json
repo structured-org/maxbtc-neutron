@@ -4,6 +4,68 @@
   "description": "QueryMsg for reading contract states.",
   "oneOf": [
     {
+      "type": "object",
+      "required": [
+        "contract_state"
+      ],
+      "properties": {
+        "contract_state": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "active_batch"
+      ],
+      "properties": {
+        "active_batch": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "withdrawing_batch"
+      ],
+      "properties": {
+        "withdrawing_batch": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "finalized_batches"
+      ],
+      "properties": {
+        "finalized_batches": {
+          "type": "object",
+          "properties": {
+            "batch_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Returns the Config state",
       "type": "object",
       "required": [

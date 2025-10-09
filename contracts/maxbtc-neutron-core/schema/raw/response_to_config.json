@@ -6,9 +6,11 @@
   "required": [
     "deposit_cost",
     "deposit_denom",
-    "deposit_flush_period",
     "fee_collector_contract",
-    "maxbtc_denom"
+    "operator",
+    "waitosaur_observer_contract",
+    "waitsaur_holder_contract",
+    "withdrawal_manager_contract"
   ],
   "properties": {
     "deposit_cost": {
@@ -17,15 +19,19 @@
     "deposit_denom": {
       "type": "string"
     },
-    "deposit_flush_period": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "fee_collector_contract": {
       "type": "string"
     },
-    "maxbtc_denom": {
+    "operator": {
+      "type": "string"
+    },
+    "waitosaur_observer_contract": {
+      "type": "string"
+    },
+    "waitsaur_holder_contract": {
+      "type": "string"
+    },
+    "withdrawal_manager_contract": {
       "type": "string"
     }
   },

@@ -42,12 +42,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal1 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs = {
@@ -57,10 +51,14 @@ export type UpdateOwnershipArgs = {
     };
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronExchangeRateProviderSchema {
-    responses: Decimal | OwnershipForString;
+    responses: GetTwaerResponse | OwnershipForString;
     execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+export interface GetTwaerResponse {
+    published_at: number;
+    twaer: Decimal;
 }
 /**
  * The contract's ownership info
@@ -80,7 +78,7 @@ export interface OwnershipForString {
     pending_owner?: string | null;
 }
 export interface UpdateExchangeRateArgs {
-    rate: Decimal1;
+    rate: Decimal;
 }
 export interface InstantiateMsg {
     owner: string;
@@ -90,10 +88,16 @@ export declare class Client {
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
-    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    queryExchangeRate: () => Promise<Decimal>;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    queryGetTwaer: () => Promise<GetTwaerResponse>;
     queryOwnership: () => Promise<OwnershipForString>;
     updateExchangeRate: (sender: string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateExchangeRateMsg: (args: UpdateExchangeRateArgs) => {
+        update_exchange_rate: UpdateExchangeRateArgs;
+    };
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateOwnershipMsg: (args: UpdateOwnershipArgs) => {
+        update_ownership: UpdateOwnershipArgs;
+    };
 }

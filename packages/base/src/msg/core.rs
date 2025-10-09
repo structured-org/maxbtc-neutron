@@ -1,21 +1,23 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
+use cosmwasm_std::{Coin, Decimal, SignedDecimal256, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
+    /// Operator address
+    pub operator: String,
+    /// Contract that owns and creates token factory tokens.
+    pub token_contract: String,
+    /// Admin contract with high privileges
+    pub factory_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_forwarder_contract: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// The token-factory sub-denom used for the maxBTC token
-    pub maxbtc_denom: String,
-    /// Minimum number of seconds that must elapse between two deposit-flush operations
-    pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap
@@ -26,21 +28,35 @@ pub struct InstantiateMsg {
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: String,
-    /// Instantiation parameters for the fee collector.
-    pub fee_collector_params: FeeMinterParams,
+    /// This contract is allowed to mint maxBTC to take a fee on the
+    /// accrued protocol APR
+    pub fee_collector_contract: String,
+    /// Address of the waitosaur contract
+    pub waitosaur_observer_contract: String,
+    /// Address of the waitosaur holder contract
+    pub waitosaur_holder_contract: String,
+    /// Address of the withdrawal manager contract
+    pub withdrawal_manager_contract: String,
+    /// Total amount of BTC deposited by the contract (used in migration)
+    pub total_deposited: Option<Uint128>,
+    /// Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
+    pub current_deposit_balance: Option<Uint128>,
 }
 
 /// Message for updating configuration parameters (owner-only).
 #[cw_serde]
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
+    pub operator: Option<String>,
     pub deposit_forwarder_contract: Option<String>,
-    pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
     pub exchange_rate_provider_contract: Option<String>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
+    pub waitosaur_observer_contract: Option<String>,
+    pub waitsaur_holder_contract: Option<String>,
+    pub withdrawal_manager_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -48,18 +64,21 @@ pub struct UpdateConfigMsg {
 #[cw_serde]
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
+    Tick {},
     /// User deposit flow
     Deposit {
         recipient: String,
         min_receive_amount: Option<Uint128>,
     },
-    /// Permissionless handler to flush deposits after `deposit_flush_period`
-    FlushDeposits {},
+    /// User withdraw flow
+    Withdraw {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
     /// Mints the requested amount of fees to the fee collector address. Can only be
     /// executed by the fee collector.
-    MintFee { amount: Coin },
+    MintFee {
+        amount: Coin,
+    },
 }
 
 /// QueryMsg for reading contract states.
@@ -67,6 +86,14 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(crate::state::core::ContractState)]
+    ContractState {},
+    #[returns(crate::state::core::Batch)]
+    ActiveBatch {},
+    #[returns(crate::state::core::Batch)]
+    WithdrawingBatch {},
+    #[returns(Vec<crate::state::core::Batch>)]
+    FinalizedBatches { batch_id: Option<u64> },
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
@@ -85,42 +112,13 @@ pub struct SimulateDepositResponse {
 /// Response for querying config
 #[cw_serde]
 pub struct ConfigResponse {
+    pub operator: String,
     pub deposit_denom: String,
-    pub maxbtc_denom: String,
-    pub deposit_flush_period: u64,
     pub deposit_cost: Decimal,
     pub fee_collector_contract: String,
-}
-
-/// Describes the queries that can be sent to the liquidation buffer contract.
-#[cw_serde]
-pub enum LiquidationBufferContractQueryMsg {
-    GetBTCBalance {},
-    GetMaxBTCBalance {},
-}
-
-// (This is the InstantiateMsg for the fee collector contract, shown for context)
-#[cw_serde]
-pub struct FeeCollectorInstantiateMsg {
-    pub owner: String,
-    pub core_contract: String,
-    pub fee_apy_reduction_percentage: Decimal,
-    pub collection_period_seconds: u64,
-    pub fee_denom: String,
-    pub maxbtc_decimals: u32,
-}
-
-/// New struct to hold parameters for instantiating the fee collector contract.
-#[cw_serde]
-pub struct FeeMinterParams {
-    /// The code ID of the fee collector contract wasm.
-    pub code_id: u64,
-    /// A unique salt for generating a predictable address with Instantiate2.
-    pub salt: Binary,
-    /// The percentage of APY to be taken as a fee.
-    pub fee_apy_reduction_percentage: Decimal,
-    /// The duration in seconds for each fee collection period.
-    pub collection_period_seconds: u64,
+    pub waitsaur_holder_contract: String,
+    pub withdrawal_manager_contract: String,
+    pub waitosaur_observer_contract: String,
 }
 
 #[cw_serde]
@@ -141,6 +139,18 @@ pub enum ExchangeRateProviderQueryMsg {
 pub struct GetTwaerResponse {
     pub twaer: Decimal,
     pub published_at: u64,
+}
+
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum WaitosaurObserverQueryMsg {
+    #[returns(crate::state::core::WaitosaurObserverState)]
+    GetState {},
+}
+
+#[cw_serde]
+pub enum WaitosaurObserverExecuteMsg {
+    Lock { amount: SignedDecimal256 },
 }
 
 #[cw_serde]

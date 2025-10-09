@@ -45,12 +45,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal1 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs =
@@ -64,10 +58,14 @@ export type UpdateOwnershipArgs =
   | "renounce_ownership";
 
 export interface MaxbtcNeutronExchangeRateProviderSchema {
-  responses: Decimal | OwnershipForString;
+  responses: GetTwaerResponse | OwnershipForString;
   execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
+}
+export interface GetTwaerResponse {
+  published_at: number;
+  twaer: Decimal;
 }
 /**
  * The contract's ownership info
@@ -87,7 +85,7 @@ export interface OwnershipForString {
   pending_owner?: string | null;
 }
 export interface UpdateExchangeRateArgs {
-  rate: Decimal1;
+  rate: Decimal;
 }
 export interface InstantiateMsg {
   owner: string;
@@ -107,7 +105,7 @@ export class Client {
     this.client = client;
     this.contractAddress = contractAddress;
   }
-  mustBeSigningClient() {
+  mustBeSigningClient(): Error {
     return new Error("This client is not a SigningCosmWasmClient");
   }
   static async instantiate(
@@ -118,9 +116,10 @@ export class Client {
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
     const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
@@ -128,29 +127,32 @@ export class Client {
     client: SigningCosmWasmClient,
     sender: string,
     codeId: number,
-    salt: number,
+    salt: Uint8Array,
     initMsg: InstantiateMsg,
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
-    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+    const res = await client.instantiate2(sender, codeId, salt, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
-  queryExchangeRate = async(): Promise<Decimal> => {
-    return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+  queryGetTwaer = async(): Promise<GetTwaerResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_twaer: {} });
   }
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
   updateExchangeRate = async(sender:string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_exchange_rate: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.updateExchangeRateMsg(args), fee || "auto", memo, funds);
   }
+  updateExchangeRateMsg = (args: UpdateExchangeRateArgs): { update_exchange_rate: UpdateExchangeRateArgs } => { return { update_exchange_rate: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_ownership: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
   }
+  updateOwnershipMsg = (args: UpdateOwnershipArgs): { update_ownership: UpdateOwnershipArgs } => { return { update_ownership: args }; }
 }

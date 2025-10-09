@@ -26,7 +26,7 @@ async fn main() -> Result<(), AppError> {
         log::info!("Starting new execution cycle...");
         match run_cycle(&config, &chain_client).await {
             Ok(_) => log::info!("Execution cycle completed successfully."),
-            Err(e) => log::error!("Execution cycle failed: {}", e),
+            Err(e) => log::error!("Execution cycle failed: {e}"),
         }
         log::info!("Sleeping for {} seconds.", config.execute_period);
         tokio::time::sleep(Duration::from_secs(config.execute_period)).await;
@@ -61,7 +61,7 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
             AppError::Chain("No eureka_transfer operation found in Skip API response".to_string())
         })?;
 
-    log::debug!("Skip API eureka transfer info: {:?}", eureka_transfer);
+    log::debug!("Skip API eureka transfer info: {eureka_transfer:?}");
 
     let fee_quote = eureka_transfer.smart_relay_fee_quote;
     if fee_quote.fee_denom != config.hub_denom {
@@ -78,7 +78,7 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
 
     // Parse the expiration timestamp and convert to nanoseconds
     let timeout_timestamp_nano = DateTime::parse_from_rfc3339(&fee_quote.expiration)
-        .map_err(|e| AppError::Chain(format!("Failed to parse expiration timestamp: {}", e)))?
+        .map_err(|e| AppError::Chain(format!("Failed to parse expiration timestamp: {e}")))?
         .timestamp_nanos_opt()
         .unwrap() as u64;
 
@@ -92,11 +92,11 @@ async fn run_cycle(config: &Config, chain_client: &ChainClient) -> Result<(), Ap
     };
 
     let msg = ExecuteMsg::EurekaTransfer { eureka_fee };
-    log::debug!("EurekaTransfer message: {:?}", msg);
+    log::debug!("EurekaTransfer message: {msg:?}");
 
     let tx_hash = chain_client
         .execute_message(&config.contract_address, msg)
         .await?;
-    log::info!("Transfer tx hash: {}", tx_hash);
+    log::info!("Transfer tx hash: {tx_hash}");
     Ok(())
 }
