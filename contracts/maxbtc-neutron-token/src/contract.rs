@@ -104,6 +104,7 @@ pub(crate) fn execute_mint(
     amount: Uint128,
     recipient: String,
 ) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)?;
     let cfg = CONFIG.load(deps.storage)?;
 
     // Can be equal to zero if rounding kicks in with a very high ER.
@@ -158,7 +159,7 @@ pub(crate) fn execute_burn(
         .add_attribute("denom", cfg.denom))
 }
 
-fn execute_set_token_metadata(
+pub(crate) fn execute_set_token_metadata(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -171,14 +172,21 @@ fn execute_set_token_metadata(
     let metadata_msg = create_set_denom_metadata_msg(
         env.contract.address.into_string(),
         cfg.denom.clone(),
-        token_metadata,
+        token_metadata.clone(),
     )?;
 
     Ok(Response::new()
         .add_message(metadata_msg)
         .add_attribute("action", "set_token_metadata")
         .add_attribute("sender", info.sender)
-        .add_attribute("denom", cfg.denom.clone()))
+        .add_attribute("denom", cfg.denom.clone())
+        .add_attribute("exponent", token_metadata.exponent.to_string())
+        .add_attribute("display", token_metadata.display)
+        .add_attribute("name", token_metadata.name)
+        .add_attribute("description", token_metadata.description)
+        .add_attribute("symbol", token_metadata.symbol)
+        .add_attribute("uri", token_metadata.uri.unwrap_or_default())
+        .add_attribute("uri_hash", token_metadata.uri_hash.unwrap_or_default()))
 }
 
 #[entry_point]

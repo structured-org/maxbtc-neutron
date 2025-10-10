@@ -2,11 +2,11 @@ use std::marker::PhantomData;
 
 use crate::contract::{execute, get_maxbtc_denom, instantiate};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg};
+use crate::msg::{DenomMetadata, ExecuteMsg, InstantiateMsg};
 use crate::state::CONFIG;
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    Api, Attribute, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
+    coin, Api, Attribute, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
 };
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, MockQuerier, Empty> {
@@ -30,9 +30,8 @@ fn test_instantiate_success() {
     // Act: call instantiate
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
-    // Assert: check response
-    // We expect 2 message: instantiate2 msg for the fee collector, and create_tokenfactory_create_denom_msg
     assert_eq!(res.messages.len(), 1);
+
     // Assert: check attributes
     let expected_attributes = vec![
         Attribute::new("action", "instantiate"),
@@ -66,10 +65,6 @@ fn test_instantiate_success() {
         cfg.denom,
         get_maxbtc_denom(env.contract.address.to_string(), msg.subdenom.clone())
     );
-
-    // Finally, check time-based items
-    // let last_deposit_flush_time = LAST_DEPOSIT_FLUSH_TIME.load(&deps.storage).unwrap();
-    // assert_eq!(last_deposit_flush_time, env.block.time.seconds());
 }
 
 #[test]
@@ -125,6 +120,151 @@ fn test_mint_zero_amount() {
     }
 }
 
+#[test]
+fn test_mint_wrong_owner() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let info = message_info(&deps.api.addr_make("not_owner_addr"), &[]);
+
+    // Act
+    let recipient = deps.api.addr_make("recipient_addr").to_string();
+    let err = do_mint(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        recipient,
+        Uint128::zero(),
+    )
+    .unwrap_err();
+
+    // Assert
+    match err {
+        ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner) => {}
+        e => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[test]
+fn test_burn_success() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let burn_amount: Uint128 = Uint128::from(1_000_000u128);
+
+    let info = message_info(
+        &deps.api.addr_make("owner_addr"),
+        &[coin(
+            burn_amount.u128(),
+            "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc",
+        )],
+    );
+
+    // Act
+    let res = do_burn(deps.as_mut(), env.clone(), info.clone()).unwrap();
+
+    // Assert
+    // The response should have exactly one message: the tokenfactory Mint
+    assert_eq!(res.messages.len(), 1);
+
+    let burned_attr = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "amount")
+        .expect("amount attribute must be present");
+    assert_eq!(burned_attr.value, "1000000");
+}
+
+#[test]
+fn test_burn_wrong_owner_allowed() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let burn_amount: Uint128 = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("not_owner_addr"),
+        &[coin(
+            burn_amount.u128(),
+            "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc",
+        )],
+    );
+
+    // Act
+    let res = do_burn(deps.as_mut(), env.clone(), info.clone());
+
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_burn_wrong_denom() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let burn_amount: Uint128 = Uint128::from(1_000_000u128);
+
+    let info = message_info(
+        &deps.api.addr_make("owner_addr"),
+        &[coin(burn_amount.u128(), "untrn")],
+    );
+
+    // Act
+    let err =
+        do_burn(deps.as_mut(), env.clone(), info.clone()).expect_err("Zero deposit is invalid");
+
+    match err {
+        ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(_)) => {}
+        e => panic!("Unexpected error: {:?}", e),
+    }
+}
+
+#[test]
+fn test_set_token_metadata_success() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let info = message_info(&deps.api.addr_make("owner_addr"), &[]);
+
+    // Act
+    let res = do_set_token_metadata(deps.as_mut(), env.clone(), info.clone()).unwrap();
+
+    // Assert
+    // The response should have exactly one message: the tokenfactory Mint
+    assert_eq!(res.messages.len(), 1);
+
+    assert_eq!(
+        res.attributes,
+        vec![
+            Attribute::new("action", "set_token_metadata"),
+            Attribute::new("sender", info.sender.to_string()),
+            Attribute::new("denom", "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"),
+            Attribute::new("exponent", "0"),
+            Attribute::new("display", "maxBTC"),
+            Attribute::new("name", "maxBTC"),
+            Attribute::new("description", "maxBTC"),
+            Attribute::new("symbol", "maxBTC"),
+            Attribute::new("uri", ""),
+            Attribute::new("uri_hash", ""),
+        ]
+    );
+}
+
+#[test]
+fn test_set_token_metadata_wrong_owner() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let info = message_info(&deps.api.addr_make("not_owner_addr"), &[]);
+
+    // Act
+    let err = do_set_token_metadata(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+
+    // Assert
+    match err {
+        ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner) => {}
+        e => panic!("Unexpected error: {:?}", e),
+    }
+}
+
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
@@ -170,6 +310,35 @@ fn do_mint(
         ExecuteMsg::Mint {
             recipient: recipient.to_string(),
             amount,
+        },
+    )
+}
+
+/// A convenience helper for calling the `execute_burn` entry point.
+fn do_burn(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    execute(deps, env, info, ExecuteMsg::Burn {})
+}
+
+/// A convenience helper for calling the `execute_set_token_metadata` entry point.
+fn do_set_token_metadata(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    execute(
+        deps,
+        env,
+        info,
+        ExecuteMsg::SetTokenMetadata {
+            token_metadata: DenomMetadata {
+                name: "maxBTC".to_string(),
+                symbol: "maxBTC".to_string(),
+                display: "maxBTC".to_string(),
+                uri: None,
+                uri_hash: None,
+                description: "maxBTC".to_string(),
+                exponent: 0,
+            },
         },
     )
 }
