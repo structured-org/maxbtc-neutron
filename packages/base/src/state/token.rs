@@ -11,4 +11,4 @@ pub struct Config {
 }
 
 /// A single global config item
-pub const CONFIG: Item<Config> = Item::new("config");
+pub const CONFIG: Item<Config> = Item::new("config_v2");

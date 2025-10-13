@@ -6,14 +6,16 @@ use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
+    /// Contract that owns and creates token factory tokens.
+    pub token_contract: String,
+    /// Admin contract with high privileges
+    pub factory_contract: String,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_forwarder_contract: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// The token-factory sub-denom used for the maxBTC token
-    pub maxbtc_denom: String,
     /// Minimum number of seconds that must elapse between two deposit-flush operations
     pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
@@ -26,8 +28,15 @@ pub struct InstantiateMsg {
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: String,
+
+    //----------------------------------------------------------------------------------------
     /// Instantiation parameters for the fee collector.
-    pub fee_collector_params: FeeMinterParams,
+    // pub fee_collector_params: FeeMinterParams,
+    //----------------------------------------------------------------------------------------
+
+    /// This contract is allowed to mint maxBTC to take a fee on the
+    /// accrued protocol APR
+    pub fee_collector_contract: String,
 }
 
 /// Message for updating configuration parameters (owner-only).

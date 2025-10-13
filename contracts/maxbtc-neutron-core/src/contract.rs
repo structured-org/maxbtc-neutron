@@ -1,22 +1,27 @@
 use crate::error::ContractError;
-use crate::msg::{
-    AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-    FeeCollectorInstantiateMsg, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg,
-    SimulateDepositResponse, UpdateConfigMsg,
-};
-use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin};
 use cosmwasm_std::{
-    entry_point, instantiate2_address, to_json_binary, BankMsg, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg,
+    entry_point, to_json_binary, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
-use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgCreateDenom, MsgMint};
+use maxbtc_base::msg::token::ExecuteMsg as TokenExecuteMsg;
+use maxbtc_base::msg::{
+    core::{
+        AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
+        GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg, SimulateDepositResponse,
+        UpdateConfigMsg,
+    },
+    token::QueryMsg as TokenQueryMsg,
+};
+use maxbtc_base::state::{
+    core::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED},
+    token::Config as TokenConfigResponse,
+};
 
-const CONTRACT_NAME: &str = "maxbtc-neutron-minting";
-const CONTRACT_VERSION: &str = "0.1.0";
+const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[entry_point]
 pub fn instantiate(
@@ -27,30 +32,16 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    // Get the checksum for the fee collector contract's code ID
-    let fee_collector_code_info = deps
-        .querier
-        .query_wasm_code_info(msg.fee_collector_params.code_id)?;
-    let fee_collector_checksum = fee_collector_code_info.checksum;
-
-    // Predict the fee collector contract address using Instantiate2
-    let canonical_creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-    let fee_collector_address = instantiate2_address(
-        fee_collector_checksum.as_slice(),
-        &canonical_creator, // The creator is this core contract
-        &msg.fee_collector_params.salt,
-    )
-    .map_err(ContractError::Instantiate2Error)?;
-
     initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
+        token_contract: deps.api.addr_validate(&msg.token_contract)?,
+        factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
         deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
-        maxbtc_denom: msg.maxbtc_denom.clone(),
         deposit_flush_period: msg.deposit_flush_period,
         deposit_cost: msg.deposit_cost,
         deposits_cap: msg.deposits_cap,
@@ -59,43 +50,24 @@ pub fn instantiate(
             .api
             .addr_validate(&msg.exchange_rate_provider_contract)?,
         // Store the predicted address in the config
-        fee_collector_contract: deps.api.addr_humanize(&fee_collector_address)?,
+        fee_collector_contract: deps.api.addr_validate(&msg.fee_collector_contract)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
     LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
     TOTAL_DEPOSITED.save(deps.storage, &Uint128::zero())?;
 
-    // Create the instantiate message for the fee collector contract
-    let instantiate_fee_collector_msg = WasmMsg::Instantiate2 {
-        admin: Some(msg.owner.to_string()), // The core contract owner is admin
-        code_id: msg.fee_collector_params.code_id,
-        label: "maxBTC Fee Collector Contract".to_string(),
-        msg: to_json_binary(&FeeCollectorInstantiateMsg {
-            owner: msg.owner.to_string(), // Same owner as the core contract
-            core_contract: env.contract.address.to_string(), // This contract's address
-            fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
-            collection_period_seconds: msg.fee_collector_params.collection_period_seconds,
-            fee_denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
-            maxbtc_decimals: cfg.deposit_decimals,
-        })?,
-        funds: vec![],
-        salt: msg.fee_collector_params.salt.clone(),
-    };
-
     // Create the maxBTC denom via token factory
-    let create_maxbtc_denom_msg =
-        create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
+    // let create_maxbtc_denom_msg =
+    //     create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
 
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
-        .add_message(create_maxbtc_denom_msg)
-        .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
         .add_attribute("action", "instantiate")
         .add_attribute("owner", msg.owner)
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
-        .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
+        // .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
         .add_attribute(
             "instantiated_fee_collector_address",
             cfg.fee_collector_contract.to_string(),
@@ -128,7 +100,7 @@ pub fn execute(
 
 fn execute_mint_fee(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     amount: Coin,
 ) -> Result<Response, ContractError> {
@@ -141,16 +113,27 @@ fn execute_mint_fee(
         return Err(ContractError::Unauthorized {});
     }
 
-    if amount.denom != cfg.get_maxbtc_denom(env.contract.address.to_string()) {
+    let maxbtc_denom = deps
+        .querier
+        .query_wasm_smart::<TokenConfigResponse>(&cfg.token_contract, &TokenQueryMsg::Config {})?
+        .denom;
+
+    if amount.denom != maxbtc_denom {
         return Err(ContractError::InvalidDepositDenom {
-            expected: cfg.get_maxbtc_denom(env.contract.address.to_string()),
+            expected: maxbtc_denom,
             received: amount.denom.to_string(),
         });
     }
 
     // Mint the maxBTC to the recipient
-    let mint_msg =
-        create_tokenfactory_mint_msg(&env.clone(), info.sender.to_string(), amount.clone())?;
+    let mint_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cfg.token_contract.to_string(),
+        msg: to_json_binary(&TokenExecuteMsg::Mint {
+            amount: amount.amount,
+            recipient: info.sender.to_string(),
+        })?,
+        funds: vec![],
+    });
 
     // Return the response
     Ok(Response::new()
@@ -228,7 +211,7 @@ fn execute_update_config(
 
 pub(crate) fn execute_deposit(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     info: MessageInfo,
     recipient: String,
     min_receive_amount: Option<Uint128>,
@@ -265,14 +248,14 @@ pub(crate) fn execute_deposit(
     }
 
     // Mint the maxBTC to the recipient
-    let mint_msg = create_tokenfactory_mint_msg(
-        &env.clone(),
-        recipient.clone(),
-        Coin {
+    let mint_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cfg.token_contract.to_string(),
+        msg: to_json_binary(&TokenExecuteMsg::Mint {
             amount: minted_amount,
-            denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
-        },
-    )?;
+            recipient: recipient.clone(),
+        })?,
+        funds: vec![],
+    });
 
     TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
         Ok(total + deposit_coin.amount)
@@ -347,7 +330,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
                 deposit_denom: cfg.deposit_denom,
-                maxbtc_denom: cfg.maxbtc_denom,
                 deposit_flush_period: cfg.deposit_flush_period,
                 deposit_cost: cfg.deposit_cost,
                 fee_collector_contract: cfg.fee_collector_contract.to_string(),
@@ -356,15 +338,14 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         }
         QueryMsg::ExchangeRate {} => {
             let cfg = CONFIG.load(deps.storage)?;
-            let er = get_exchange_rate(&deps, &cfg).map_err(|e| {
-                StdError::generic_err(format!("failed to get_exchange_rate: {}", e))
-            })?;
+            let er = get_exchange_rate(&deps, &cfg)
+                .map_err(|e| StdError::generic_err(format!("failed to get_exchange_rate: {e}")))?;
             Ok(to_json_binary(&er)?)
         }
         QueryMsg::SimulateDeposit { amount } => {
             // Call the dedicated calculation function and map its error type to StdError
             let minted_amount = calculate_mint_amount(deps, amount)
-                .map_err(|e| StdError::generic_err(format!("Calculation failed: {}", e)))?;
+                .map_err(|e| StdError::generic_err(format!("Calculation failed: {e}")))?;
 
             let resp = SimulateDepositResponse { minted_amount };
             to_json_binary(&resp)
@@ -406,27 +387,6 @@ fn calculate_mint_amount(
         dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
 
     Ok(minted_amount)
-}
-
-/// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
-fn create_tokenfactory_mint_msg(
-    env: &Env,
-    recipient: String,
-    amount: Coin,
-) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgMint {
-        sender: env.contract.address.to_string(),
-        amount: Some(BaseCoin::from(amount)),
-        mint_to_address: recipient,
-    }))
-}
-
-/// Creates a message to create a tokenfactory denom.
-fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
-        sender: env.contract.address.to_string(),
-        subdenom: denom,
-    }))
 }
 
 /// Queries the exchange rate from the exchange rate provider contract.

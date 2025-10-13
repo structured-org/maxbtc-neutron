@@ -41,7 +41,7 @@ pub fn execute(
             ALLOW_LIST.save(deps.storage, &validated_addresses)?;
             Ok(Response::new()
                 .add_attribute("action", "update_allow_list")
-                .add_attribute("allow_list", format!("{:?}", validated_addresses)))
+                .add_attribute("allow_list", format!("{validated_addresses:?}")))
         }
         ExecuteMsg::UpdateOwnership(action) => {
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;

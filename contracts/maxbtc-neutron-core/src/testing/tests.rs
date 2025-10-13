@@ -1,12 +1,12 @@
 use crate::contract::{execute, execute_flush_deposits, instantiate};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, FeeMinterParams, InstantiateMsg};
-use crate::state::{CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
 use cosmwasm_std::{
-    coin, Attribute, Binary, Decimal, DepsMut, Env, MessageInfo, OwnedDeps, Response, Uint128,
+    coin, Attribute, Decimal, DepsMut, Env, MessageInfo, OwnedDeps, Response, Uint128,
 };
+use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg};
+use maxbtc_base::state::core::{CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 
 #[test]
 fn test_instantiate_success() {
@@ -20,16 +20,12 @@ fn test_instantiate_success() {
     // Act: call instantiate
     let res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
 
-    // Assert: check response
-    // We expect 2 message: instantiate2 msg for the fee collector, and create_tokenfactory_create_denom_msg
-    assert_eq!(res.messages.len(), 2);
     // Assert: check attributes
     let expected_attributes = vec![
         Attribute::new("action", "instantiate"),
         Attribute::new("owner", msg.owner.clone()),
         Attribute::new("allowlist_contract", msg.allowlist_contract.clone()),
         Attribute::new("deposit_denom", msg.deposit_denom.clone()),
-        Attribute::new("maxbtc_denom", msg.maxbtc_denom.clone()),
         Attribute::new("deposit_flush_period", msg.deposit_flush_period.to_string()),
         Attribute::new("deposit_cost", msg.deposit_cost.to_string()),
     ];
@@ -61,9 +57,6 @@ fn test_first_deposit_success() {
     let (mut deps, env, _) = setup_contract();
 
     let cfg = CONFIG.load(&deps.storage).unwrap();
-
-    deps.querier
-        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
 
     // deposit_amount = 1 wBTC => deposit_coin.amount = 1 * 10^6 = 1_000_000
     // deposit_cost = 1% => user effectively deposits 0.99 wBTC
@@ -114,9 +107,6 @@ fn test_deposit_less_than_expected() {
 
     let cfg = CONFIG.load(&deps.storage).unwrap();
 
-    deps.querier
-        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
-
     let deposit_amount: Uint128 = Uint128::from(1_000_000u128);
     let info = message_info(
         &deps.api.addr_make("depositor"),
@@ -147,7 +137,7 @@ fn test_deposit_less_than_expected() {
             assert_eq!(requested, 1_000_001u128);
             assert_eq!(actual, 990_000u128);
         }
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -174,7 +164,7 @@ fn test_deposit_contract_paused() {
     // Assert
     match err {
         ContractError::ContractPaused {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -190,8 +180,6 @@ fn test_deposit_exceeds_cap() {
     TOTAL_DEPOSITED
         .save(&mut deps.storage, &Uint128::from(110_000_000u128))
         .unwrap();
-    deps.querier
-        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
 
     // Provide a deposit
     let info = message_info(
@@ -207,7 +195,7 @@ fn test_deposit_exceeds_cap() {
     // Assert
     match err {
         ContractError::DepositCapExceeded {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -234,7 +222,7 @@ fn test_deposit_not_allowlisted() {
     // Assert
     match err {
         ContractError::AddressNotAllowed {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -249,7 +237,7 @@ fn test_deposit_no_funds() {
 
     match err {
         ContractError::NoFundsSent {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -270,7 +258,7 @@ fn test_deposit_multiple_funds() {
 
     match err {
         ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -286,7 +274,7 @@ fn test_deposit_zero_amount() {
 
     match err {
         ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -308,7 +296,7 @@ fn test_deposit_wrong_denom() {
             assert_eq!(expected, "wBTC");
             assert_eq!(received, "ETH");
         }
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -352,7 +340,6 @@ fn test_flush_guard_not_enough_time_elapsed() {
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
-
 /// Initializes the contract and sets up a "happy path" config in storage.
 /// Returns a mutable Deps and an Env, Info you can reuse in tests.
 fn setup_contract() -> (
@@ -376,6 +363,8 @@ fn default_instantiate_msg(
 ) -> InstantiateMsg {
     InstantiateMsg {
         owner: deps.api.addr_make("owner_addr").to_string(),
+        token_contract: deps.api.addr_make("token_contract_addr").to_string(),
+        factory_contract: deps.api.addr_make("factory_contract_addr").to_string(),
         deposit_forwarder_contract: deps.api.addr_make("forwarder_addr").to_string(),
         exchange_rate_provider_contract: deps
             .api
@@ -383,17 +372,17 @@ fn default_instantiate_msg(
             .to_string(),
         deposit_denom: "wBTC".to_string(),
         deposit_decimals: 6u32,
-        maxbtc_denom: "maxbtc".to_string(),
         deposit_flush_period: 3600,
         deposit_cost: Decimal::percent(1),
         deposits_cap: None,
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
-        fee_collector_params: FeeMinterParams {
-            code_id: 0,                                       // Test
-            salt: Binary::from(vec![1, 2, 3, 4]),             // Test
-            fee_apy_reduction_percentage: Default::default(), // Test
-            collection_period_seconds: 0,                     // Test
-        },
+        fee_collector_contract: deps.api.addr_make("fee_collector_addr").to_string(),
+        // fee_collector_params: FeeMinterParams {
+        //     code_id: 0,                                       // Test
+        //     salt: Binary::from(vec![1, 2, 3, 4]),             // Test
+        //     fee_apy_reduction_percentage: Default::default(), // Test
+        //     collection_period_seconds: 0,                     // Test
+        // },
     }
 }
 

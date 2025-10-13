@@ -1,6 +1,6 @@
 [package]
 name = "maxbtc-neutron-token"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Andrei Zavgorodnii <andrei.z@hadronlabs.org>","Albert Andrejev <albert.andrejev@hadronlabs.org>"]
 edition = "2021"
 
@@ -42,5 +42,8 @@ cw-ownable = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 neutron-std = { workspace = true }
+semver = { workspace = true }
+
+maxbtc-base = { workspace = true }
 
 [dev-dependencies]

@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use crate::contract::{execute, get_maxbtc_denom, instantiate};
 use crate::error::ContractError;
-use crate::msg::{DenomMetadata, ExecuteMsg, InstantiateMsg};
-use crate::state::CONFIG;
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, Api, Attribute, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
 };
+use maxbtc_base::msg::token::{DenomMetadata, ExecuteMsg, InstantiateMsg};
+use maxbtc_base::state::token::CONFIG;
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, MockQuerier, Empty> {
     OwnedDeps {
@@ -116,7 +116,7 @@ fn test_mint_zero_amount() {
 
     match err {
         ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -141,7 +141,7 @@ fn test_mint_wrong_owner() {
     // Assert
     match err {
         ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner) => {}
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -213,7 +213,7 @@ fn test_burn_wrong_denom() {
 
     match err {
         ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(_)) => {}
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
@@ -261,14 +261,13 @@ fn test_set_token_metadata_wrong_owner() {
     // Assert
     match err {
         ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner) => {}
-        e => panic!("Unexpected error: {:?}", e),
+        e => panic!("Unexpected error: {e:?}"),
     }
 }
 
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
-
 /// Initializes the contract and sets up a "happy path" config in storage.
 /// Returns a mutable Deps and an Env, Info you can reuse in tests.
 fn setup_contract() -> (

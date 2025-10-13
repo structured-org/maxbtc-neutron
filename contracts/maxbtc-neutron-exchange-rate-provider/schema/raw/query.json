@@ -5,10 +5,10 @@
     {
       "type": "object",
       "required": [
-        "exchange_rate"
+        "get_twaer"
       ],
       "properties": {
-        "exchange_rate": {
+        "get_twaer": {
           "type": "object",
           "additionalProperties": false
         }

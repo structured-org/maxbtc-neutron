@@ -1,0 +1,347 @@
+use crate::error::ContractError;
+use crate::msg::{
+    ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg, GetTwaerResponse, InstantiateMsg,
+    MigrateMsg, QueryMsg, SimulateDepositResponse, UpdateConfigMsg,
+};
+use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
+pub(crate) use crate::utils::dec_to_amount;
+use cosmwasm_std::{
+    entry_point, to_json_binary, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128,
+};
+use cw2::set_contract_version;
+use cw_ownable::{assert_owner, initialize_owner};
+
+const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[entry_point]
+pub fn instantiate(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    // Get the checksum for the fee collector contract's code ID
+    // let fee_collector_code_info = deps
+    //     .querier
+    //     .query_wasm_code_info(msg.fee_collector_params.code_id)?;
+    // let fee_collector_checksum = fee_collector_code_info.checksum;
+
+    // // Predict the fee collector contract address using Instantiate2
+    // let canonical_creator = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+    // let fee_collector_address = instantiate2_address(
+    //     fee_collector_checksum.as_slice(),
+    //     &canonical_creator, // The creator is this core contract
+    //     &msg.fee_collector_params.salt,
+    // )
+    // .map_err(ContractError::Instantiate2Error)?;
+
+    initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+
+    // Build the Config, now with the predictable fee collector address
+    let cfg = Config {
+        paused: false,
+        token_contract: deps.api.addr_validate(&msg.token_contract)?,
+        factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
+        deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
+        deposit_denom: msg.deposit_denom.clone(),
+        deposit_decimals: msg.deposit_decimals,
+        deposit_flush_period: msg.deposit_flush_period,
+        deposit_cost: msg.deposit_cost,
+        deposits_cap: msg.deposits_cap,
+        allowlist_contract: deps.api.addr_validate(&msg.allowlist_contract)?,
+        exchange_rate_provider_contract: deps
+            .api
+            .addr_validate(&msg.exchange_rate_provider_contract)?,
+        // Store the predicted address in the config
+        fee_collector_contract: deps.api.addr_validate(&msg.fee_collector_contract)?, //deps.api.addr_humanize(&fee_collector_address)?,
+    };
+    CONFIG.save(deps.storage, &cfg)?;
+
+    LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
+    TOTAL_DEPOSITED.save(deps.storage, &Uint128::zero())?;
+
+    // Create the instantiate message for the fee collector contract
+    // let instantiate_fee_collector_msg = WasmMsg::Instantiate2 {
+    //     admin: Some(msg.owner.to_string()), // The core contract owner is admin
+    //     code_id: msg.fee_collector_params.code_id,
+    //     label: "maxBTC Fee Collector Contract".to_string(),
+    //     msg: to_json_binary(&FeeCollectorInstantiateMsg {
+    //         owner: msg.owner.to_string(), // Same owner as the core contract
+    //         core_contract: env.contract.address.to_string(), // This contract's address
+    //         fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
+    //         collection_period_seconds: msg.fee_collector_params.collection_period_seconds,
+    //         fee_denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
+    //         maxbtc_decimals: cfg.deposit_decimals,
+    //     })?,
+    //     funds: vec![],
+    //     salt: msg.fee_collector_params.salt.clone(),
+    // };
+
+    // Create the maxBTC denom via token factory
+    // let create_maxbtc_denom_msg =
+    //     create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
+
+    // 5. Build the final response with all necessary messages and attributes
+    Ok(Response::new()
+        // .add_message(create_maxbtc_denom_msg)
+        // .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
+        .add_attribute("action", "instantiate")
+        .add_attribute("owner", msg.owner)
+        .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
+        .add_attribute("deposit_denom", cfg.deposit_denom.clone())
+        // .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
+        .add_attribute(
+            "instantiated_fee_collector_address",
+            cfg.fee_collector_contract.to_string(),
+        )
+        .add_attribute("deposit_flush_period", cfg.deposit_flush_period.to_string())
+        .add_attribute("deposit_cost", cfg.deposit_cost.to_string()))
+}
+
+#[entry_point]
+pub fn execute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> Result<Response, ContractError> {
+    match msg {
+        ExecuteMsg::UpdateConfig(updates) => execute_update_config(deps, info, updates),
+        ExecuteMsg::Deposit {
+            recipient,
+            min_receive_amount,
+        } => execute_deposit(deps, env, info, recipient, min_receive_amount),
+        ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
+        ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
+        ExecuteMsg::UpdateOwnership(action) => {
+            cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
+            Ok(Response::new().add_attribute("action", "update_ownership"))
+        }
+    }
+}
+
+fn execute_mint_fee(
+    _deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    _amount: Coin,
+) -> Result<Response, ContractError> {
+    // Return the response
+    Ok(Response::default())
+}
+
+/// Owner-only handler that updates the configuration in-place.
+fn execute_update_config(
+    deps: DepsMut,
+    info: MessageInfo,
+    updates: UpdateConfigMsg,
+) -> Result<Response, ContractError> {
+    let mut cfg = CONFIG.load(deps.storage)?;
+
+    // Only the current owner may update the config.
+    assert_owner(deps.storage, &info.sender)?;
+
+    // Initialize the response with standard attributes.
+    let mut res = Response::new()
+        .add_attribute("action", "update_config")
+        .add_attribute("sender", info.sender.to_string());
+
+    // Apply changes one field at a time and add a corresponding attribute for each update.
+    if let Some(paused) = updates.paused {
+        cfg.paused = paused;
+        res = res.add_attribute("paused_updated", paused.to_string());
+    }
+    if let Some(addr) = updates.deposit_forwarder_contract {
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.deposit_forwarder_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "deposit_forwarder_contract_updated",
+            validated_addr.to_string(),
+        );
+    }
+    if let Some(v) = updates.deposit_flush_period {
+        cfg.deposit_flush_period = v;
+        res = res.add_attribute("deposit_flush_period_updated", v.to_string());
+    }
+    if let Some(cap) = updates.deposits_cap {
+        cfg.deposits_cap = cap;
+        res = res.add_attribute("deposits_cap_updated", cap.unwrap());
+    }
+    if let Some(deposit_cost) = updates.deposit_cost {
+        cfg.deposit_cost = deposit_cost;
+        res = res.add_attribute("deposit_cost_updated", deposit_cost.to_string());
+    }
+    if let Some(allowlist_contract) = updates.allowlist_contract {
+        let validated_addr = deps.api.addr_validate(&allowlist_contract)?;
+        cfg.allowlist_contract = validated_addr.clone();
+        res = res.add_attribute("allowlist_contract_updated", validated_addr.to_string());
+    }
+    if let Some(exchange_rate_provider_contract) = updates.exchange_rate_provider_contract {
+        let validated_addr = deps.api.addr_validate(&exchange_rate_provider_contract)?;
+        cfg.exchange_rate_provider_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "exchange_rate_provider_contract_updated",
+            validated_addr.to_string(),
+        );
+    }
+    if let Some(addr) = updates.fee_collector_contract {
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.fee_collector_contract = validated_addr.clone();
+        res = res.add_attribute("fee_collector_contract_updated", validated_addr.to_string());
+    }
+
+    // Save the updated configuration.
+    CONFIG.save(deps.storage, &cfg)?;
+
+    Ok(res)
+}
+
+pub(crate) fn execute_deposit(
+    _deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    _recipient: String,
+    _min_receive_amount: Option<Uint128>,
+) -> Result<Response, ContractError> {
+    Ok(Response::new())
+}
+
+/// Flushes the contract's accumulated deposit balance to the deposit forwarder contract.
+///
+/// This handler can be triggered by any account, but its execution is rate-limited
+/// by the `deposit_flush_period` defined in the contract's configuration.
+pub(crate) fn execute_flush_deposits(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if cfg.paused {
+        return Err(ContractError::ContractPaused {});
+    }
+    let mut msgs = vec![];
+
+    let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
+    let now = env.block.time.seconds();
+    if now < last_time + cfg.deposit_flush_period {
+        // Not enough time has passed, do nothing
+        return Ok(Response::new()
+            .add_messages(msgs)
+            .add_attribute("action", "flush_deposits")
+            .add_attribute("status", "not_enough_time_elapsed"));
+    }
+
+    let amount_to_flush = deps
+        .querier
+        .query_balance(env.contract.address.clone(), cfg.deposit_denom.clone())?
+        .amount;
+
+    // Send what's left to the deposit forwarder contract, which will send it to Ethereum over IBC
+    // Eureka though the valence library + base account combo
+    if !amount_to_flush.is_zero() {
+        LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &now)?;
+        let msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.deposit_forwarder_contract.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom,
+                amount: amount_to_flush,
+            }],
+        });
+        msgs.push(msg);
+    }
+
+    let resp = Response::new()
+        .add_messages(msgs)
+        .add_attribute("action", "flush_deposits")
+        .add_attribute("sender", info.sender)
+        .add_attribute("flushed", amount_to_flush.to_string());
+
+    Ok(resp)
+}
+
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
+    match msg {
+        QueryMsg::Config {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let resp = ConfigResponse {
+                deposit_denom: cfg.deposit_denom,
+                maxbtc_denom: "aaaa".to_string(),
+                deposit_flush_period: cfg.deposit_flush_period,
+                deposit_cost: cfg.deposit_cost,
+                fee_collector_contract: cfg.fee_collector_contract.to_string(),
+            };
+            Ok(to_json_binary(&resp)?)
+        }
+        QueryMsg::ExchangeRate {} => {
+            let cfg = CONFIG.load(deps.storage)?;
+            let er = get_exchange_rate(&deps, &cfg)
+                .map_err(|e| StdError::generic_err(format!("failed to get_exchange_rate: {e}")))?;
+            Ok(to_json_binary(&er)?)
+        }
+        QueryMsg::SimulateDeposit { amount } => {
+            // Call the dedicated calculation function and map its error type to StdError
+            let minted_amount = calculate_mint_amount(deps, amount)
+                .map_err(|e| StdError::generic_err(format!("Calculation failed: {e}")))?;
+
+            let resp = SimulateDepositResponse { minted_amount };
+            to_json_binary(&resp)
+        }
+        QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
+    }
+}
+
+/* -----------------------------------------------------------------------------------------------
+/ HELPER FUNCTIONS BELOW
+/ -----------------------------------------------------------------------------------------------*/
+
+/// Calculates the amount of maxBTC to be minted for a given deposit amount.
+/// This function encapsulates the core logic used in both deposits and simulations.
+fn calculate_mint_amount(
+    deps: Deps,
+    deposit_amount_raw: Uint128,
+) -> Result<Uint128, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+
+    // Get the current exchange rate
+    let er = get_exchange_rate(&deps, &cfg)?;
+
+    // A zero exchange rate is an invalid state and would cause a division by zero error.
+    if er.is_zero() {
+        // We use InvalidDepositAmount here as a zero exchange rate makes any deposit invalid.
+        return Err(ContractError::InvalidDepositAmount {});
+    }
+
+    // Convert the raw input amount to a Decimal using the deposit asset's decimals
+    let deposit_amount = Decimal::from_atomics(deposit_amount_raw, cfg.deposit_decimals)
+        .map_err(|_| ContractError::InvalidDepositAmount {})?;
+
+    // Apply the deposit fee (cost)
+    let fee_multiplier = Decimal::one() - cfg.deposit_cost;
+
+    // Calculate the final amount of maxBTC to be minted after fees and exchange rate conversion
+    let minted_amount =
+        dec_to_amount((deposit_amount * fee_multiplier) / er, cfg.deposit_decimals)?;
+
+    Ok(minted_amount)
+}
+
+/// Queries the exchange rate from the exchange rate provider contract.
+pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
+    let res: GetTwaerResponse =
+        deps.querier
+            .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
+                contract_addr: cfg.exchange_rate_provider_contract.to_string(),
+                msg: to_json_binary(&ExchangeRateProviderQueryMsg::GetTwaer {})?,
+            }))?;
+    Ok(res.twaer)
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    Ok(Response::default())
+}

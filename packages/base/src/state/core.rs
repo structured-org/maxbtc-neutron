@@ -7,14 +7,16 @@ pub struct Config {
     /// When `true`, user-initiated actions are rejected; can be set
     /// automatically on emergencies or manually by the owner.
     pub paused: bool,
+    /// Admin contract with high privileges
+    pub factory_contract: Addr,
+    /// Contract that owns and creates token factory tokens.
+    pub token_contract: Addr,
     /// Contract that forwards freshly-received deposits to the custody chain.
     pub deposit_forwarder_contract: Addr,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// Token-factory sub-denom used for maxBTC
-    pub maxbtc_denom: String,
     /// Minimum number of seconds between two deposit-flush operations
     pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
@@ -30,16 +32,6 @@ pub struct Config {
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,
-}
-
-impl Config {
-    pub fn get_maxbtc_denom(&self, contract_addr: String) -> String {
-        format!("factory/{}/{}", contract_addr, self.maxbtc_denom)
-    }
-
-    pub fn get_redemption_denom(&self, contract_addr: String, batch_id: u64) -> String {
-        format!("factory/{}/redemption/batch/{}", contract_addr, batch_id)
-    }
 }
 
 /// A single global config item

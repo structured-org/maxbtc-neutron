@@ -1,6 +1,5 @@
-use crate::state::Config;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
@@ -58,9 +57,13 @@ pub struct DenomMetadata {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     /// Returns the Config state
-    #[returns(Config)]
+    #[returns(crate::state::token::Config)]
     Config {},
 }
 
 #[cw_serde]
-pub struct MigrateMsg {}
+pub struct MigrateMsg {
+    pub factory_contract: Addr,
+    pub core_code_id: u64,
+    pub salt: String,
+}

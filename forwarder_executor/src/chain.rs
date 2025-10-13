@@ -49,8 +49,8 @@ impl ChainClient {
         contract_address: &str,
         msg: ExecuteMsg,
     ) -> Result<String, AppError> {
-        log::info!("Executing wasm message on contract: {}", contract_address);
-        log::debug!("Push message: {:?}", msg);
+        log::info!("Executing wasm message on contract: {contract_address}");
+        log::debug!("Push message: {msg:?}");
         let tx_resp = self
             .client
             .execute_wasm(contract_address, msg, vec![], None)
@@ -68,7 +68,7 @@ impl ChainClient {
         if tx_result.code == 0 {
             log::info!("Transaction successful!");
         } else {
-            log::error!("Transaction failed: {:?}", tx_result);
+            log::error!("Transaction failed: {tx_result:?}");
         }
 
         Ok(tx_resp.hash)

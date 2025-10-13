@@ -1,12 +1,14 @@
 use crate::error::ContractError;
-use crate::msg::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use crate::state::{Config, CONFIG};
 use cosmwasm_std::{
-    entry_point, to_json_binary, Coin, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128,
+    entry_point, instantiate2_address, to_json_binary, Addr, Binary, CodeInfoResponse, Coin,
+    CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
+use cw_storage_plus::Item;
+use maxbtc_base::msg::core::InstantiateMsg as CoreInstantiateMsg;
+use maxbtc_base::msg::token::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use maxbtc_base::state::token::{Config, CONFIG};
 use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{
@@ -200,12 +202,90 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
     }
 }
 
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        // Remove in next version
+        // deps.storage.remove("last_deposit_flush_time".as_bytes());
+        // deps.storage.remove("total_deposited".as_bytes());
+        // deps.storage.remove("config".as_bytes()); // new config are stored under another key
+
+        let salt = msg.salt.as_bytes();
+        let canonical_self_address = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+        let core_contract_checksum = get_code_checksum(deps.as_ref(), msg.core_code_id)?;
+        let core_address = instantiate2_address(
+            core_contract_checksum.as_bytes(),
+            &canonical_self_address,
+            salt,
+        )?;
+        let core_contract = deps.api.addr_humanize(&core_address)?;
+        initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
+
+        #[cosmwasm_schema::cw_serde]
+        pub struct OldConfig {
+            pub paused: bool,
+            pub deposit_forwarder_contract: Addr,
+            pub deposit_denom: String,
+            pub deposit_decimals: u32,
+            pub maxbtc_denom: String,
+            pub deposit_flush_period: u64,
+            pub deposit_cost: Decimal,
+            pub deposits_cap: Option<Uint128>,
+            pub allowlist_contract: Addr,
+            pub exchange_rate_provider_contract: Addr,
+            pub fee_collector_contract: Addr,
+        }
+
+        let old_config = Item::<OldConfig>::new("config").load(deps.storage)?;
+
+        let instantiate_core_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
+            admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
+            code_id: msg.core_code_id,
+            label: "maxBTC Core Contract".to_string(),
+            msg: to_json_binary(&CoreInstantiateMsg {
+                owner: msg.factory_contract.to_string(),
+                token_contract: env.contract.address.to_string(),
+                factory_contract: msg.factory_contract.to_string(),
+                deposit_forwarder_contract: old_config.deposit_forwarder_contract.into_string(),
+                deposit_denom: old_config.deposit_denom,
+                deposit_decimals: old_config.deposit_decimals,
+                deposit_flush_period: old_config.deposit_flush_period,
+                deposit_cost: old_config.deposit_cost,
+                deposits_cap: old_config.deposits_cap,
+                allowlist_contract: old_config.allowlist_contract.into_string(),
+                exchange_rate_provider_contract: old_config
+                    .exchange_rate_provider_contract
+                    .into_string(),
+                fee_collector_contract: old_config.fee_collector_contract.into_string(),
+            })?,
+            funds: vec![],
+            salt: Binary::from(salt),
+        });
+
+        let new_config = Config {
+            factory_contract: msg.factory_contract,
+            denom: get_maxbtc_denom(env.contract.address.to_string(), old_config.maxbtc_denom),
+        };
+        CONFIG.save(deps.storage, &new_config)?;
+
+        return Ok(Response::new().add_message(instantiate_core_contract_msg));
+    }
+    Ok(Response::default())
+}
+
 /* -----------------------------------------------------------------------------------------------
 / HELPER FUNCTIONS BELOW
 / -----------------------------------------------------------------------------------------------*/
 /// Formats the maxBTC denom for a given contract address
 pub fn get_maxbtc_denom(contract_addr: String, subdenom: String) -> String {
-    format!("factory/{}/{}", contract_addr, subdenom)
+    format!("factory/{contract_addr}/{subdenom}")
 }
 
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
@@ -269,7 +349,7 @@ fn create_set_denom_metadata_msg(
     }))
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
+fn get_code_checksum(deps: Deps, code_id: u64) -> StdResult<String> {
+    let CodeInfoResponse { checksum, .. } = deps.querier.query_wasm_code_info(code_id)?;
+    Ok(checksum.to_hex())
 }

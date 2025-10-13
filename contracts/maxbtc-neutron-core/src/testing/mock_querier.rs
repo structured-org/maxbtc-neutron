@@ -1,10 +1,14 @@
-use crate::msg::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
     ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
     SystemResult, Uint128, WasmQuery,
 };
+use maxbtc_base::msg::{
+    core::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse},
+    token::QueryMsg as TokenConfigQueryMsg,
+};
+use maxbtc_base::state::token::Config as TokenConfigResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -37,6 +41,8 @@ pub struct WasmMockQuerier {
 
     allowed_recipient: bool,
 
+    denom: String,
+
     exchange_rate: Decimal,
 }
 
@@ -67,6 +73,7 @@ impl WasmMockQuerier {
             balances: HashMap::new(),
             supplies: Default::default(),
             allowed_recipient: true,
+            denom: "maxBTC".to_string(),
             exchange_rate: Decimal::one(),
         }
     }
@@ -74,10 +81,6 @@ impl WasmMockQuerier {
     /// Allows you to store any arbitrary `(address, denom) -> amount` for `BankQuery::Balance`.
     pub fn set_balance(&mut self, address: &str, denom: &str, amount: Uint128) {
         self.balances.insert((address.into(), denom.into()), amount);
-    }
-
-    pub fn set_token_supply(&mut self, denom: &str, amount: Uint128) {
-        self.supplies.insert(denom.into(), amount);
     }
 
     pub fn set_allowed_recipient(&mut self, allowed: bool) {
@@ -122,7 +125,7 @@ impl WasmMockQuerier {
                 let query_result: ContractResult<Binary> = to_json_binary(&CodeInfoResponse::new(
                     0,
                     Addr::unchecked("creator"),
-                    Checksum::generate(&vec![1, 2, 3, 4, 5]),
+                    Checksum::generate(&[1, 2, 3, 4, 5]),
                 ))
                 .into();
                 SystemResult::Ok(query_result)
@@ -138,7 +141,7 @@ impl WasmMockQuerier {
 
     /// Dispatches our recognized wasm queries to the correct mock data.
     fn handle_wasm_smart_query(&self, contract_addr: &str, msg: &Binary) -> QuerierResult {
-        println!("Handling wasm query for contract: {}", contract_addr);
+        println!("Handling wasm query for contract: {contract_addr}");
 
         if contract_addr == "cosmwasm1qugtqqz3w5yqdt7z56nx5aj0umrtz2q4r8escthjpgkvmhdjkypq9umkdq" {
             let parsed: Result<ExchangeRateProviderQueryMsg, _> = from_json(msg);
@@ -185,6 +188,31 @@ impl WasmMockQuerier {
                 }));
         }
 
+        if contract_addr == "cosmwasm1qugtqqz3w5yqdt7z56nx5aj0umrtz2q4r8escthjpgkvmhdjkypq9umkdq" {
+            let parsed: Result<TokenConfigQueryMsg, _> = from_json(msg);
+            if let Ok(q) = parsed {
+                return match q {
+                    TokenConfigQueryMsg::Config {} => SystemResult::Ok(ContractResult::Ok(
+                        to_json_binary(&TokenConfigResponse {
+                            factory_contract: Addr::unchecked("factory"),
+                            denom: self.denom.clone(),
+                        })
+                        .unwrap(),
+                    )),
+                    _ => {
+                        unimplemented!()
+                    }
+                };
+            }
+            // If parse failed or unsupported => fallback
+            return self
+                .base
+                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
+                    contract_addr: contract_addr.into(),
+                    msg: msg.clone(),
+                }));
+        }
+
         // 3. If it's not one of our recognized addresses, fallback to base
         self.base
             .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
@@ -203,7 +231,7 @@ impl Querier for WasmMockQuerier {
             Ok(req) => req,
             Err(e) => {
                 return SystemResult::Err(SystemError::InvalidRequest {
-                    error: format!("Parsing query request: {}", e),
+                    error: format!("Parsing query request: {e}"),
                     request: bin_request.into(),
                 })
             }
