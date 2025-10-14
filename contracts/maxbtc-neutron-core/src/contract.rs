@@ -479,6 +479,24 @@ fn check_deposits_allowlist(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, ContractError> {
+    if let Some(mint) = msg.mint {
+        let cfg = CONFIG.load(deps.storage)?;
+
+        let mint_msg = create_tokenfactory_mint_msg(
+            &env.clone(),
+            mint.recipient.clone(),
+            Coin {
+                amount: mint.amount,
+                denom: cfg.get_maxbtc_denom(env.contract.address.to_string()),
+            },
+        )?;
+
+        return Ok(Response::new()
+            .add_message(mint_msg)
+            .add_attribute("action", "migrate_mint")
+            .add_attribute("recipient", mint.recipient)
+            .add_attribute("minted_maxbtc", mint.amount.to_string()));
+    }
     Ok(Response::default())
 }
