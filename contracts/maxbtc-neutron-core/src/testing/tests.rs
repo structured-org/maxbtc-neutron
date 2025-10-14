@@ -377,12 +377,8 @@ fn default_instantiate_msg(
         deposits_cap: None,
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_contract: deps.api.addr_make("fee_collector_addr").to_string(),
-        // fee_collector_params: FeeMinterParams {
-        //     code_id: 0,                                       // Test
-        //     salt: Binary::from(vec![1, 2, 3, 4]),             // Test
-        //     fee_apy_reduction_percentage: Default::default(), // Test
-        //     collection_period_seconds: 0,                     // Test
-        // },
+        last_deposit_flush_time: None,
+        total_deposited: None,
     }
 }
 

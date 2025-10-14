@@ -28,15 +28,13 @@ pub struct InstantiateMsg {
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: String,
-
-    //----------------------------------------------------------------------------------------
-    /// Instantiation parameters for the fee collector.
-    // pub fee_collector_params: FeeMinterParams,
-    //----------------------------------------------------------------------------------------
-
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: String,
+    /// Sets the last time a deposit flush was done (used in migration)
+    pub last_deposit_flush_time: Option<u64>,
+    /// Total amount of BTC deposited by the contract (used in migration)
+    pub total_deposited: Option<Uint128>,
 }
 
 /// Message for updating configuration parameters (owner-only).

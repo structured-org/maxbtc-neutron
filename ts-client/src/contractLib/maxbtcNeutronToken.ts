@@ -2,11 +2,15 @@ import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ * A human readable address.
  *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ * In Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.
+ *
+ * This type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.
+ *
+ * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
-export type Decimal = string;
+export type Addr = string;
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -45,6 +49,20 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
+ * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u128` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
+ *
+ * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
+ *
+ * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
+ */
+export type Uint128 = string;
+/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs =
@@ -57,15 +75,21 @@ export type UpdateOwnershipArgs =
   | "accept_ownership"
   | "renounce_ownership";
 
-export interface MaxbtcNeutronExchangeRateProviderSchema {
-  responses: GetTwaerResponse | OwnershipForString;
-  execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
+export interface MaxbtcNeutronTokenSchema {
+  responses: Config | OwnershipForString;
+  execute: MintArgs | SetTokenMetadataArgs | UpdateConfigArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
-export interface GetTwaerResponse {
-  published_at: number;
-  twaer: Decimal;
+export interface Config {
+  /**
+   * The token-factory sub-denom used for the maxBTC token
+   */
+  denom: string;
+  /**
+   * Factory contract that owns all admin privileges
+   */
+  factory_contract: Addr;
 }
 /**
  * The contract's ownership info
@@ -84,11 +108,59 @@ export interface OwnershipForString {
    */
   pending_owner?: string | null;
 }
-export interface UpdateExchangeRateArgs {
-  rate: Decimal;
+export interface MintArgs {
+  amount: Uint128;
+  recipient: string;
 }
+export interface SetTokenMetadataArgs {
+  token_metadata: DenomMetadata;
+}
+export interface DenomMetadata {
+  /**
+   * Even longer description, example: "The native staking token of the Cosmos Hub"
+   */
+  description: string;
+  /**
+   * Lowercase moniker to be displayed in clients, example: "atom"
+   */
+  display: string;
+  /**
+   * Number of decimals
+   */
+  exponent: number;
+  /**
+   * Descriptive token name, example: "Cosmos Hub Atom"
+   */
+  name: string;
+  /**
+   * Symbol to be displayed on exchanges, example: "ATOM"
+   */
+  symbol: string;
+  /**
+   * URI to a document that contains additional information
+   */
+  uri?: string | null;
+  /**
+   * SHA256 hash of a document pointed by URI
+   */
+  uri_hash?: string | null;
+}
+export interface UpdateConfigArgs {
+  factory_contract?: string | null;
+}
+/**
+ * InstantiateMsg configures the contract on initialization.
+ */
 export interface InstantiateMsg {
+  /**
+   * Factory contract that owns all admin privileges
+   */
+  factory_contract: string;
   owner: string;
+  /**
+   * The token-factory sub-denom used for the maxBTC token
+   */
+  subdenom: string;
 }
 
 
@@ -139,17 +211,32 @@ export class Client {
     });
     return res;
   }
-  queryGetTwaer = async(): Promise<GetTwaerResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, { get_twaer: {} });
+  queryConfig = async(): Promise<Config> => {
+    return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
-  updateExchangeRate = async(sender:string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  mint = async(sender:string, args: MintArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, this.updateExchangeRateMsg(args), fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.mintMsg(args), fee || "auto", memo, funds);
   }
-  updateExchangeRateMsg = (args: UpdateExchangeRateArgs): { update_exchange_rate: UpdateExchangeRateArgs } => { return { update_exchange_rate: args }; }
+  mintMsg = (args: MintArgs): { mint: MintArgs } => { return { mint: args }; }
+  burn = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.burnMsg(), fee || "auto", memo, funds);
+  }
+  burnMsg = (): { burn: {} } => { return { burn: {} } }
+  setTokenMetadata = async(sender:string, args: SetTokenMetadataArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.setTokenMetadataMsg(args), fee || "auto", memo, funds);
+  }
+  setTokenMetadataMsg = (args: SetTokenMetadataArgs): { set_token_metadata: SetTokenMetadataArgs } => { return { set_token_metadata: args }; }
+  updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);
+  }
+  updateConfigMsg = (args: UpdateConfigArgs): { update_config: UpdateConfigArgs } => { return { update_config: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);

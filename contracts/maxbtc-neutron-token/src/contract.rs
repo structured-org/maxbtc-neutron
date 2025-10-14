@@ -1,7 +1,8 @@
 use crate::error::ContractError;
 use cosmwasm_std::{
-    entry_point, instantiate2_address, to_json_binary, Addr, Binary, CodeInfoResponse, Coin,
-    CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, WasmMsg,
+    entry_point, instantiate2_address, to_json_binary, Addr, Binary, Checksum, CodeInfoResponse,
+    Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
@@ -221,7 +222,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         let canonical_self_address = deps.api.addr_canonicalize(env.contract.address.as_str())?;
         let core_contract_checksum = get_code_checksum(deps.as_ref(), msg.core_code_id)?;
         let core_address = instantiate2_address(
-            core_contract_checksum.as_bytes(),
+            core_contract_checksum.as_slice(),
             &canonical_self_address,
             salt,
         )?;
@@ -245,6 +246,10 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
         let old_config = Item::<OldConfig>::new("config").load(deps.storage)?;
 
+        let total_deposited = Item::<Uint128>::new("total_deposited").load(deps.storage)?;
+        let last_deposit_flush_time =
+            Item::<u64>::new("last_deposit_flush_time").load(deps.storage)?;
+
         let instantiate_core_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
             code_id: msg.core_code_id,
@@ -264,6 +269,8 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                     .exchange_rate_provider_contract
                     .into_string(),
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
+                last_deposit_flush_time: Some(last_deposit_flush_time),
+                total_deposited: Some(total_deposited),
             })?,
             funds: vec![],
             salt: Binary::from(salt),
@@ -275,7 +282,9 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         };
         CONFIG.save(deps.storage, &new_config)?;
 
-        return Ok(Response::new().add_message(instantiate_core_contract_msg));
+        return Ok(Response::new()
+            .add_message(instantiate_core_contract_msg)
+            .add_attribute("core_contract", core_contract.to_string()));
     }
     Ok(Response::default())
 }
@@ -349,7 +358,7 @@ fn create_set_denom_metadata_msg(
     }))
 }
 
-fn get_code_checksum(deps: Deps, code_id: u64) -> StdResult<String> {
+fn get_code_checksum(deps: Deps, code_id: u64) -> StdResult<Checksum> {
     let CodeInfoResponse { checksum, .. } = deps.querier.query_wasm_code_info(code_id)?;
-    Ok(checksum.to_hex())
+    Ok(checksum)
 }

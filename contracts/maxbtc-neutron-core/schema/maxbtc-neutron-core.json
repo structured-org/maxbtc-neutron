@@ -73,8 +73,17 @@
         "type": "string"
       },
       "fee_collector_contract": {
-        "description": "Instantiation parameters for the fee collector. This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR",
+        "description": "This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR",
         "type": "string"
+      },
+      "last_deposit_flush_time": {
+        "description": "Sets the last time a deposit flush was done (used in migration)",
+        "type": [
+          "integer",
+          "null"
+        ],
+        "format": "uint64",
+        "minimum": 0.0
       },
       "owner": {
         "type": "string"
@@ -82,6 +91,17 @@
       "token_contract": {
         "description": "Contract that owns and creates token factory tokens.",
         "type": "string"
+      },
+      "total_deposited": {
+        "description": "Total amount of BTC deposited by the contract (used in migration)",
+        "anyOf": [
+          {
+            "$ref": "#/definitions/Uint128"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "additionalProperties": false,

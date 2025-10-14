@@ -69,7 +69,7 @@ export type UpdateOwnershipArgs = {
         new_owner: string;
     };
 } | "accept_ownership" | "renounce_ownership";
-export interface MaxbtcNeutronCoreSchema {
+export interface MaxbtcNeutronFactorySchema {
     responses: ConfigResponse | Decimal1 | OwnershipForString | SimulateDepositResponse;
     query: SimulateDepositArgs;
     execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
@@ -84,6 +84,7 @@ export interface ConfigResponse {
     deposit_denom: string;
     deposit_flush_period: number;
     fee_collector_contract: string;
+    maxbtc_denom: string;
 }
 /**
  * The contract's ownership info
@@ -172,22 +173,14 @@ export interface InstantiateMsg {
      */
     factory_contract: string;
     /**
-     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
+     * Instantiation parameters for the fee collector. This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
      */
     fee_collector_contract: string;
-    /**
-     * Sets the last time a deposit flush was done (used in migration)
-     */
-    last_deposit_flush_time?: number | null;
     owner: string;
     /**
      * Contract that owns and creates token factory tokens.
      */
     token_contract: string;
-    /**
-     * Total amount of BTC deposited by the contract (used in migration)
-     */
-    total_deposited?: Uint128 | null;
 }
 export declare class Client {
     private readonly client;

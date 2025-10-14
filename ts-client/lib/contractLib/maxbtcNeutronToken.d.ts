@@ -1,17 +1,16 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
+import { Coin } from "@cosmjs/amino";
 /**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ * A human readable address.
  *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal = string;
-/**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ * In Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.
  *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ * This type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.
+ *
+ * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
-export type Decimal1 = string;
+export type Addr = string;
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -69,21 +68,21 @@ export type UpdateOwnershipArgs = {
         new_owner: string;
     };
 } | "accept_ownership" | "renounce_ownership";
-export interface MaxbtcNeutronCoreSchema {
-    responses: ConfigResponse | Decimal1 | OwnershipForString | SimulateDepositResponse;
-    query: SimulateDepositArgs;
-    execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+export interface MaxbtcNeutronTokenSchema {
+    responses: Config | OwnershipForString;
+    execute: MintArgs | SetTokenMetadataArgs | UpdateConfigArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
-/**
- * Response for querying config
- */
-export interface ConfigResponse {
-    deposit_cost: Decimal;
-    deposit_denom: string;
-    deposit_flush_period: number;
-    fee_collector_contract: string;
+export interface Config {
+    /**
+     * The token-factory sub-denom used for the maxBTC token
+     */
+    denom: string;
+    /**
+     * Factory contract that owns all admin privileges
+     */
+    factory_contract: Addr;
 }
 /**
  * The contract's ownership info
@@ -102,92 +101,59 @@ export interface OwnershipForString {
      */
     pending_owner?: string | null;
 }
-export interface SimulateDepositResponse {
-    minted_amount: Uint128;
-}
-export interface SimulateDepositArgs {
+export interface MintArgs {
     amount: Uint128;
-}
-export interface DepositArgs {
-    min_receive_amount?: Uint128 | null;
     recipient: string;
 }
-/**
- * Message for updating configuration parameters (owner-only).
- */
+export interface SetTokenMetadataArgs {
+    token_metadata: DenomMetadata;
+}
+export interface DenomMetadata {
+    /**
+     * Even longer description, example: "The native staking token of the Cosmos Hub"
+     */
+    description: string;
+    /**
+     * Lowercase moniker to be displayed in clients, example: "atom"
+     */
+    display: string;
+    /**
+     * Number of decimals
+     */
+    exponent: number;
+    /**
+     * Descriptive token name, example: "Cosmos Hub Atom"
+     */
+    name: string;
+    /**
+     * Symbol to be displayed on exchanges, example: "ATOM"
+     */
+    symbol: string;
+    /**
+     * URI to a document that contains additional information
+     */
+    uri?: string | null;
+    /**
+     * SHA256 hash of a document pointed by URI
+     */
+    uri_hash?: string | null;
+}
 export interface UpdateConfigArgs {
-    description?: "Message for updating configuration parameters (owner-only).";
-    type?: "object";
-    properties?: {
-        [k: string]: unknown;
-    };
-    additionalProperties?: never;
-    required?: [];
-}
-export interface MintFeeArgs {
-    amount: Coin;
-}
-export interface Coin {
-    amount: Uint128;
-    denom: string;
+    factory_contract?: string | null;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
  */
 export interface InstantiateMsg {
     /**
-     * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
-     */
-    allowlist_contract: string;
-    /**
-     * One-off cost (Decimal) charged when a user deposits to mint maxBTC
-     */
-    deposit_cost: Decimal;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * Denom for user deposits (e.g. IBC-transferred BTC)
-     */
-    deposit_denom: string;
-    /**
-     * Minimum number of seconds that must elapse between two deposit-flush operations
-     */
-    deposit_flush_period: number;
-    /**
-     * Contract that forwards freshly-received deposits to the custody chain.
-     */
-    deposit_forwarder_contract: string;
-    /**
-     * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
-     */
-    deposits_cap?: Uint128 | null;
-    /**
-     * This contract provides the exchange rate for maxBTC
-     */
-    exchange_rate_provider_contract: string;
-    /**
-     * Admin contract with high privileges
+     * Factory contract that owns all admin privileges
      */
     factory_contract: string;
-    /**
-     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
-     */
-    fee_collector_contract: string;
-    /**
-     * Sets the last time a deposit flush was done (used in migration)
-     */
-    last_deposit_flush_time?: number | null;
     owner: string;
     /**
-     * Contract that owns and creates token factory tokens.
+     * The token-factory sub-denom used for the maxBTC token
      */
-    token_contract: string;
-    /**
-     * Total amount of BTC deposited by the contract (used in migration)
-     */
-    total_deposited?: Uint128 | null;
+    subdenom: string;
 }
 export declare class Client {
     private readonly client;
@@ -196,25 +162,23 @@ export declare class Client {
     mustBeSigningClient(): Error;
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
-    queryConfig: () => Promise<ConfigResponse>;
-    queryExchangeRate: () => Promise<Decimal>;
-    querySimulateDeposit: (args: SimulateDepositArgs) => Promise<SimulateDepositResponse>;
+    queryConfig: () => Promise<Config>;
     queryOwnership: () => Promise<OwnershipForString>;
-    deposit: (sender: string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    depositMsg: (args: DepositArgs) => {
-        deposit: DepositArgs;
+    mint: (sender: string, args: MintArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    mintMsg: (args: MintArgs) => {
+        mint: MintArgs;
     };
-    flushDeposits: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    flushDepositsMsg: () => {
-        flush_deposits: {};
+    burn: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    burnMsg: () => {
+        burn: {};
+    };
+    setTokenMetadata: (sender: string, args: SetTokenMetadataArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    setTokenMetadataMsg: (args: SetTokenMetadataArgs) => {
+        set_token_metadata: SetTokenMetadataArgs;
     };
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateConfigMsg: (args: UpdateConfigArgs) => {
         update_config: UpdateConfigArgs;
-    };
-    mintFee: (sender: string, args: MintFeeArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    mintFeeMsg: (args: MintFeeArgs) => {
-        mint_fee: MintFeeArgs;
     };
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateOwnershipMsg: (args: UpdateOwnershipArgs) => {

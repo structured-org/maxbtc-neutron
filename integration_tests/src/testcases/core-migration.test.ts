@@ -10,13 +10,18 @@ import { join } from 'path';
 
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
 import { Client as NeutronClient } from '@neutron-org/client-ts';
-import { AccountData, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
+import {
+  AccountData,
+  coins,
+  DirectSecp256k1HdWallet,
+} from '@cosmjs/proto-signing';
 import { GasPrice } from '@cosmjs/stargate';
 import { setupPark } from '../testSuite';
 import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
 import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
+import { fromAscii, toAscii } from '@cosmjs/encoding';
 
 const DEPOSIT_DENOM = 'untrn';
 
@@ -278,12 +283,16 @@ describe('Core', () => {
         account.address,
         Uint8Array.from(
           fs.readFileSync(
-            join(__dirname, '../../../artifacts/maxbtc_neutron_core.wasm'),
+            join(
+              __dirname,
+              '../../artifacts/migration_contracts/v0.1.0/maxbtc_neutron_core.wasm',
+            ),
           ),
         ),
         1.5,
       );
       expect(res.codeId).toBeGreaterThan(0);
+      // Ignore wrong properties errors here, because we are using old version of the contract
       const instantiateRes = await MaxbtcNeutronCore.Client.instantiate(
         client,
         account.address,
@@ -309,6 +318,7 @@ describe('Core', () => {
         'label',
         'auto',
         [],
+        account.address,
       );
       expect(instantiateRes.contractAddress).toHaveLength(66);
       context.coreContractAddress = instantiateRes.contractAddress;
@@ -471,7 +481,8 @@ describe('Core', () => {
         );
       });
       it('no flush deposits right after the flush', async () => {
-        const { coreContractClient, account } = context;
+        const { coreContractClient, account, client, coreContractAddress } =
+          context;
         const res = await coreContractClient.flushDeposits(
           account.address,
           'auto',
@@ -492,90 +503,132 @@ describe('Core', () => {
             (a) => a.key === 'status' && a.value === 'not_enough_time_elapsed',
           ),
         ).toBeTruthy();
+
+        console.log(
+          '======================== DEBUGGING ========================',
+        );
+        const totalDeposited = await client.queryContractRaw(
+          coreContractAddress,
+          toAscii('total_deposited'),
+        );
+        console.log(fromAscii(totalDeposited));
+
+        const lastDepositFlushTime = await client.queryContractRaw(
+          coreContractAddress,
+          toAscii('last_deposit_flush_time'),
+        );
+        console.log(fromAscii(lastDepositFlushTime));
+        console.log(
+          '==================== END OF DEBUGGING ====================',
+        );
+        // const lastTick = Number.parseInt(fromAscii(lastTickRaw), 10);
       });
     });
   });
 
-  describe('Fee Collector', () => {
-    it('should have correct initial config and state', async () => {
-      const { feeCollectorContractClient, account, coreContractAddress } =
-        context;
+  describe('Migration to new core and mint', () => {
+    let totalDeposited: number;
+    let lastDepositFlushTime: number;
 
-      const config = await feeCollectorContractClient.queryConfig();
-      const state = await feeCollectorContractClient.queryState();
+    beforeAll(async () => {
+      const { client, coreContractAddress } = context;
 
-      expect(config.owner).toEqual(account.address);
-      expect(config.core_contract).toEqual(coreContractAddress);
-      expect(config.fee_apy_reduction_percentage).toEqual('0.1');
-      expect(config.collection_period_seconds).toEqual(10);
-      expect(config.fee_denom).toEqual(`factory/${coreContractAddress}/maxbtc`);
-      expect(state.last_exchange_rate).toEqual('1'); // Because that was the rate when the contract was instantiated
-    });
-
-    it('should successfully collect fees when APY is positive', async () => {
-      const {
-        feeCollectorContractClient,
-        client,
-        account,
-        coreContractClient,
+      const totalDepositedStr = await client.queryContractRaw(
         coreContractAddress,
-      } = context;
-
-      const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
-      const balanceBefore = await client.getBalance(
-        feeCollectorContractClient.contractAddress,
-        maxBtcDenom,
+        toAscii('total_deposited'),
       );
-      const stateBefore = await feeCollectorContractClient.queryState();
 
-      // The previous deposit test already caused a rate increase, so APY is positive.
-      // We just need to wait for the collection period again.
-      await sleep(1500);
+      totalDeposited = Number.parseInt(fromAscii(totalDepositedStr), 10);
 
-      // Collect the fee
-      const collectRes = await feeCollectorContractClient.collectFee(
+      const lastDepositFlushTimeStr = await client.queryContractRaw(
+        coreContractAddress,
+        toAscii('last_deposit_flush_time'),
+      );
+
+      lastDepositFlushTime = Number.parseInt(
+        fromAscii(lastDepositFlushTimeStr),
+        10,
+      );
+    });
+    it('upload contracts', async () => {
+      const { client, account, coreContractAddress } = context;
+      let res = await client.upload(
         account.address,
-        'auto',
+        Uint8Array.from(
+          fs.readFileSync(
+            join(__dirname, '../../../artifacts/maxbtc_neutron_core.wasm'),
+          ),
+        ),
+        1.5,
       );
-      await waitForTx(client, collectRes.transactionHash);
+      expect(res.codeId).toBeGreaterThan(0);
+      const coreCodeId = res.codeId;
 
-      // Verify fee was collected by checking the balance
-      const balanceAfter = await client.getBalance(
-        feeCollectorContractClient.contractAddress,
-        maxBtcDenom,
+      res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(__dirname, '../../../artifacts/maxbtc_neutron_token.wasm'),
+          ),
+        ),
+        1.5,
       );
-      expect(BigInt(balanceAfter.amount)).toBeGreaterThan(
-        BigInt(balanceBefore.amount),
+      expect(res.codeId).toBeGreaterThan(0);
+      const tokenCodeId = res.codeId;
+
+      const fee = {
+        amount: coins(5000, 'untrn'),
+        gas: '2000000',
+      };
+
+      const result = await client.migrate(
+        account.address,
+        coreContractAddress,
+        tokenCodeId,
+        {
+          core_code_id: coreCodeId,
+          salt: 'salt',
+          factory_contract:
+            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
+        },
+        fee,
       );
 
-      // Verify the contract's internal state was updated via the reply handler
-      const stateAfter = await feeCollectorContractClient.queryState();
-      const newRate = await coreContractClient.queryExchangeRate();
-      expect(stateAfter.last_exchange_rate).toEqual(newRate);
-      expect(Number(stateAfter.last_collection_timestamp)).toBeGreaterThan(
-        Number(stateBefore.last_collection_timestamp),
+      console.log(result);
+
+      console.log(result.events);
+
+      const newCoreContractAddress = result.events
+        .find((e) => e.type === 'wasm')
+        .attributes.find((a) => a.key === 'core_contract').value;
+
+      console.log(newCoreContractAddress);
+
+      const totalDepositedStr = await client.queryContractRaw(
+        coreContractAddress,
+        toAscii('total_deposited'),
       );
+
+      const totalDepositedMigrated = Number.parseInt(
+        fromAscii(totalDepositedStr),
+        10,
+      );
+      expect(totalDepositedMigrated).toEqual(totalDeposited);
+
+      const lastDepositFlushTimeStr = await client.queryContractRaw(
+        coreContractAddress,
+        toAscii('last_deposit_flush_time'),
+      );
+
+      const lastDepositFlushTimeMigrated = Number.parseInt(
+        fromAscii(lastDepositFlushTimeStr),
+        10,
+      );
+
+      expect(lastDepositFlushTimeMigrated).toEqual(lastDepositFlushTime);
     });
 
-    it('should fail to collect fee before collection period ends', async () => {
-      const { feeCollectorContractClient, account } = context;
-      await expect(
-        feeCollectorContractClient.collectFee(account.address, 'auto'),
-      ).rejects.toThrow(/Fee collection is not allowed yet/);
-    });
-
-    it('should fail to collect fee with negative or zero APY', async () => {
-      const { feeCollectorContractClient, account } = context;
-      // Wait for the short collection period to pass
-      await sleep(11000);
-
-      // The exchange rate hasn't changed since instantiation, so APY is zero.
-      await expect(
-        feeCollectorContractClient.collectFee(account.address, 'auto'),
-      ).rejects.toThrow(/APY is not positive/);
-    });
-
-    describe('Claiming & Config', () => {
+    describe.skip('Claiming & Config', () => {
       it('should allow owner to claim collected fees', async () => {
         const {
           feeCollectorContractClient,

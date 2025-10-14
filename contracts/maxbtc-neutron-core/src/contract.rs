@@ -54,12 +54,15 @@ pub fn instantiate(
     };
     CONFIG.save(deps.storage, &cfg)?;
 
-    LAST_DEPOSIT_FLUSH_TIME.save(deps.storage, &env.block.time.seconds())?;
-    TOTAL_DEPOSITED.save(deps.storage, &Uint128::zero())?;
-
-    // Create the maxBTC denom via token factory
-    // let create_maxbtc_denom_msg =
-    //     create_tokenfactory_create_denom_msg(&env.clone(), cfg.maxbtc_denom.clone())?;
+    LAST_DEPOSIT_FLUSH_TIME.save(
+        deps.storage,
+        &msg.last_deposit_flush_time
+            .unwrap_or(env.block.time.seconds()),
+    )?;
+    TOTAL_DEPOSITED.save(
+        deps.storage,
+        &msg.total_deposited.unwrap_or(Uint128::zero()),
+    )?;
 
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
@@ -67,7 +70,6 @@ pub fn instantiate(
         .add_attribute("owner", msg.owner)
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
-        // .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
         .add_attribute(
             "instantiated_fee_collector_address",
             cfg.fee_collector_contract.to_string(),
