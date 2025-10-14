@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   MaxbtcNeutronCore,
+  MaxbtcNeutronToken,
   MaxbtcNeutronAllowList,
   MaxbtcNeutronExchangeRateProvider,
   MaxbtcNeutronFeeCollector,
@@ -8,7 +9,10 @@ import {
 
 import { join } from 'path';
 
-import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
+import {
+  instantiate2Address,
+  SigningCosmWasmClient,
+} from '@cosmjs/cosmwasm-stargate';
 import { Client as NeutronClient } from '@neutron-org/client-ts';
 import { AccountData, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { GasPrice } from '@cosmjs/stargate';
@@ -17,14 +21,18 @@ import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
 import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
+import { fromHex, toAscii } from '@cosmjs/encoding';
 
 const DEPOSIT_DENOM = 'untrn';
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
+const TokenContractClient = MaxbtcNeutronToken.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
 const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
 const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
+
+const SALT = 'salt';
 
 describe('Core', () => {
   const context: {
@@ -43,7 +51,13 @@ describe('Core', () => {
     coreContractAddress?: string;
     forwarderContractAddress?: string;
     forwarderLibraryContractAddress?: string;
-    fee_collector_code_id?: number;
+
+    feeCollectorCodeId?: number;
+    coreCodeId?: number;
+    tokenCodeId?: number;
+
+    tokenContractClient?: InstanceType<typeof TokenContractClient>;
+    tokenContractAddress?: string;
 
     feeCollectorContractClient?: InstanceType<
       typeof FeeCollectorContractClient
@@ -165,7 +179,37 @@ describe('Core', () => {
       );
       expect(res.codeId).toBeGreaterThan(0);
 
-      context.fee_collector_code_id = res.codeId;
+      context.feeCollectorCodeId = res.codeId;
+
+      context.feeCollectorContractAddress = instantiate2Address(
+        fromHex(res.checksum),
+        account.address,
+        toAscii(SALT),
+        'neutron',
+      );
+    });
+
+    it('upload token contract', async () => {
+      const { client, account } = context;
+      const res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(__dirname, '../../../artifacts/maxbtc_neutron_token.wasm'),
+          ),
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+
+      context.tokenCodeId = res.codeId;
+
+      context.tokenContractAddress = instantiate2Address(
+        fromHex(res.checksum),
+        account.address,
+        toAscii(SALT),
+        'neutron',
+      );
     });
 
     it('instantiate forwarder (valence base account)', async () => {
@@ -272,8 +316,8 @@ describe('Core', () => {
       await waitForTx(client, approveRes.transactionHash);
     });
 
-    it('instantiate core', async () => {
-      const { client, account, fee_collector_code_id } = context;
+    it('upload core', async () => {
+      const { client, account } = context;
       const res = await client.upload(
         account.address,
         Uint8Array.from(
@@ -284,52 +328,118 @@ describe('Core', () => {
         1.5,
       );
       expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronCore.Client.instantiate(
+      context.coreCodeId = res.codeId;
+
+      context.coreContractAddress = instantiate2Address(
+        fromHex(res.checksum),
+        account.address,
+        toAscii(SALT),
+        'neutron',
+      );
+    });
+
+    it('instantiate token contract', async () => {
+      const {
+        client,
+        account,
+        tokenCodeId,
+        coreContractAddress,
+        tokenContractAddress,
+      } = context;
+
+      const instantiateRes = await MaxbtcNeutronToken.Client.instantiate2(
         client,
         account.address,
-        res.codeId,
+        tokenCodeId,
+        toAscii(SALT),
         {
-          deposit_forwarder_contract: context.forwarderContractAddress,
-          deposit_decimals: 6,
-          deposit_denom: DEPOSIT_DENOM,
-          deposit_cost: '0.01',
-          deposit_flush_period: 60,
-          maxbtc_denom: 'maxbtc',
-          owner: account.address,
-          exchange_rate_provider_contract:
-            context.exchangeRateProviderContractClient.contractAddress,
-          allowlist_contract: context.allowlistContractClient.contractAddress,
-          fee_collector_params: {
-            code_id: fee_collector_code_id,
-            collection_period_seconds: 10,
-            fee_apy_reduction_percentage: '0.1',
-            salt: 'Z3Rmbw==',
-          },
+          owner: coreContractAddress,
+          factory_contract: coreContractAddress,
+          subdenom: 'maxbtc',
         },
         'label',
         'auto',
         [],
       );
       expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.coreContractAddress = instantiateRes.contractAddress;
+
+      context.tokenContractClient = new TokenContractClient(
+        client,
+        tokenContractAddress,
+      );
+    });
+
+    it('instantiate core', async () => {
+      const { client, account, coreCodeId } = context;
+
+      const instantiateRes = await MaxbtcNeutronCore.Client.instantiate2(
+        client,
+        account.address,
+        coreCodeId,
+        toAscii(SALT),
+        {
+          deposit_forwarder_contract: context.forwarderContractAddress,
+          deposit_decimals: 6,
+          deposit_denom: DEPOSIT_DENOM,
+          deposit_cost: '0.01',
+          deposit_flush_period: 60,
+          owner: account.address,
+          exchange_rate_provider_contract:
+            context.exchangeRateProviderContractClient.contractAddress,
+          allowlist_contract: context.allowlistContractClient.contractAddress,
+          fee_collector_contract: context.feeCollectorContractAddress,
+          token_contract: context.tokenContractAddress,
+          factory_contract: context.tokenContractAddress,
+        },
+        'label',
+        'auto',
+        [],
+      );
+      expect(instantiateRes.contractAddress).toHaveLength(66);
+      // context.coreContractAddress = instantiateRes.contractAddress;
       context.coreContractClient = new MaxbtcNeutronCore.Client(
         client,
         context.coreContractAddress,
       );
     });
+
     it('get fee collector address and instantiate client', async () => {
-      const { client, coreContractClient } = context;
-      // The core contract stores the address of the fee collector it created.
-      const coreConfig = await coreContractClient.queryConfig();
-      const feeCollectorAddress = coreConfig.fee_collector_contract;
+      const {
+        client,
+        account,
+        tokenContractClient,
+        feeCollectorCodeId,
+        feeCollectorContractAddress,
+        coreContractAddress,
+      } = context;
 
-      expect(feeCollectorAddress).toBeTruthy();
-      expect(feeCollectorAddress).toHaveLength(66);
+      // The token contract stores the denom of the maxBTC token it created.
+      const tokenConfig = await tokenContractClient.queryConfig();
+      const tokenDenom = tokenConfig.denom;
 
-      context.feeCollectorContractAddress = feeCollectorAddress;
+      const instantiateRes =
+        await MaxbtcNeutronFeeCollector.Client.instantiate2(
+          client,
+          account.address,
+          feeCollectorCodeId,
+          toAscii(SALT),
+          {
+            collection_period_seconds: 10,
+            fee_apy_reduction_percentage: '0.1',
+            core_contract: coreContractAddress,
+            owner: account.address,
+            maxbtc_decimals: 6,
+            fee_denom: tokenDenom,
+          },
+          'label',
+          'auto',
+          [],
+        );
+      expect(instantiateRes.contractAddress).toHaveLength(66);
+
       context.feeCollectorContractClient = new FeeCollectorContractClient(
         client,
-        feeCollectorAddress,
+        feeCollectorContractAddress,
       );
     });
   });
@@ -387,10 +497,10 @@ describe('Core', () => {
     });
 
     it('verify deposit', async () => {
-      const { client, account, coreContractAddress } = context;
+      const { client, account, tokenContractAddress } = context;
       const balance = await client.getBalance(
         account.address,
-        `factory/${coreContractAddress}/maxbtc`,
+        `factory/${tokenContractAddress}/maxbtc`,
       );
       expect(balance.amount).toEqual('198000');
     });
@@ -498,8 +608,12 @@ describe('Core', () => {
 
   describe('Fee Collector', () => {
     it('should have correct initial config and state', async () => {
-      const { feeCollectorContractClient, account, coreContractAddress } =
-        context;
+      const {
+        feeCollectorContractClient,
+        account,
+        coreContractAddress,
+        tokenContractAddress,
+      } = context;
 
       const config = await feeCollectorContractClient.queryConfig();
       const state = await feeCollectorContractClient.queryState();
@@ -508,7 +622,9 @@ describe('Core', () => {
       expect(config.core_contract).toEqual(coreContractAddress);
       expect(config.fee_apy_reduction_percentage).toEqual('0.1');
       expect(config.collection_period_seconds).toEqual(10);
-      expect(config.fee_denom).toEqual(`factory/${coreContractAddress}/maxbtc`);
+      expect(config.fee_denom).toEqual(
+        `factory/${tokenContractAddress}/maxbtc`,
+      );
       expect(state.last_exchange_rate).toEqual('1'); // Because that was the rate when the contract was instantiated
     });
 
@@ -518,10 +634,10 @@ describe('Core', () => {
         client,
         account,
         coreContractClient,
-        coreContractAddress,
+        tokenContractAddress,
       } = context;
 
-      const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
+      const maxBtcDenom = `factory/${tokenContractAddress}/maxbtc`;
       const balanceBefore = await client.getBalance(
         feeCollectorContractClient.contractAddress,
         maxBtcDenom,
@@ -581,9 +697,9 @@ describe('Core', () => {
           feeCollectorContractClient,
           client,
           account,
-          coreContractAddress,
+          tokenContractAddress,
         } = context;
-        const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
+        const maxBtcDenom = `factory/${tokenContractAddress}/maxbtc`;
 
         const feeCollectorBalance = await client.getBalance(
           feeCollectorContractClient.contractAddress,
