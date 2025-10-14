@@ -144,4 +144,12 @@ pub struct GetTwaerResponse {
 }
 
 #[cw_serde]
-pub struct MigrateMsg {}
+pub struct MigrateMintMsg {
+    pub amount: Uint128,
+    pub recipient: String,
+}
+
+#[cw_serde]
+pub struct MigrateMsg {
+    pub mint: Option<MigrateMintMsg>,
+}
