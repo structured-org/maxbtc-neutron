@@ -48,4 +48,9 @@ serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.12" }
 neutron-std = { git = "https://github.com/neutron-org/neutron-std", branch = "feat/respect-gogoproto-nullable" }
 
+maxbtc-neutron-allow-list = { path = "../maxbtc-neutron-allow-list" }
+maxbtc-neutron-exchange-rate-provider = { path = "../maxbtc-neutron-exchange-rate-provider" }
+maxbtc-neutron-fee-collector = { path = "../maxbtc-neutron-fee-collector" }
+maxbtc-base = { workspace = true }
+
 [dev-dependencies]

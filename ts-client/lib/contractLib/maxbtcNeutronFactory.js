@@ -26,46 +26,12 @@ class Client {
         });
         return res;
     }
-    queryConfig = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { config: {} });
-    };
-    queryExchangeRate = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
-    };
-    querySimulateDeposit = async (args) => {
-        return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
+    queryState = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { state: {} });
     };
     queryOwnership = async () => {
         return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
-    deposit = async (sender, args, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.depositMsg(args), fee || "auto", memo, funds);
-    };
-    depositMsg = (args) => { return { deposit: args }; };
-    flushDeposits = async (sender, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.flushDepositsMsg(), fee || "auto", memo, funds);
-    };
-    flushDepositsMsg = () => { return { flush_deposits: {} }; };
-    updateConfig = async (sender, args, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);
-    };
-    updateConfigMsg = (args) => { return { update_config: args }; };
-    mintFee = async (sender, args, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.mintFeeMsg(args), fee || "auto", memo, funds);
-    };
-    mintFeeMsg = (args) => { return { mint_fee: args }; };
     updateOwnership = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

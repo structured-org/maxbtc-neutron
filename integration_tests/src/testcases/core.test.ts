@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import {
   MaxbtcNeutronCore,
+  MaxbtcNeutronFactory,
   MaxbtcNeutronToken,
   MaxbtcNeutronAllowList,
   MaxbtcNeutronExchangeRateProvider,
@@ -9,10 +10,7 @@ import {
 
 import { join } from 'path';
 
-import {
-  instantiate2Address,
-  SigningCosmWasmClient,
-} from '@cosmjs/cosmwasm-stargate';
+import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
 import { Client as NeutronClient } from '@neutron-org/client-ts';
 import { AccountData, DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { GasPrice } from '@cosmjs/stargate';
@@ -21,18 +19,16 @@ import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
 import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
-import { fromHex, toAscii } from '@cosmjs/encoding';
 
 const DEPOSIT_DENOM = 'untrn';
 
 const CoreContractClient = MaxbtcNeutronCore.Client;
 const TokenContractClient = MaxbtcNeutronToken.Client;
+const FactoryContractClient = MaxbtcNeutronFactory.Client;
 const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
 const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
 const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
-
-const SALT = 'salt';
 
 describe('Core', () => {
   const context: {
@@ -53,8 +49,14 @@ describe('Core', () => {
     forwarderLibraryContractAddress?: string;
 
     feeCollectorCodeId?: number;
+    depositForwarderContractCodeId?: number;
+    depositForwarderLibraryContractCodeId?: number;
+    exchangeRateProviderContractCodeId?: number;
+    allowlistContractCodeId?: number;
+    feeCollectorContractCodeId?: number;
     coreCodeId?: number;
     tokenCodeId?: number;
+    factoryCodeId?: number;
 
     tokenContractClient?: InstanceType<typeof TokenContractClient>;
     tokenContractAddress?: string;
@@ -63,6 +65,9 @@ describe('Core', () => {
       typeof FeeCollectorContractClient
     >;
     feeCollectorContractAddress?: string;
+
+    factoryContractClient?: InstanceType<typeof FactoryContractClient>;
+    factoryContractAddress?: string;
 
     treasuryAddress?: string;
   } = {};
@@ -101,346 +106,243 @@ describe('Core', () => {
   });
 
   describe('upload and instantiate contracts', () => {
-    it('instantiate allowlist', async () => {
+    it('upload contracts', async () => {
       const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/maxbtc_neutron_allow_list.wasm',
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../../artifacts/maxbtc_neutron_allow_list.wasm',
+              ),
             ),
           ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronAllowList.Client.instantiate(
-        client,
-        account.address,
-        res.codeId,
-        { owner: account.address },
-        'label',
-        'auto',
-        [],
-      );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.allowlistContractClient = new MaxbtcNeutronAllowList.Client(
-        client,
-        instantiateRes.contractAddress,
-      );
-    });
-    it('instantiate exchange rate provider', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/maxbtc_neutron_exchange_rate_provider.wasm',
-            ),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronAllowList.Client.instantiate(
-        client,
-        account.address,
-        res.codeId,
-        { owner: account.address },
-        'label',
-        'auto',
-        [],
-      );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.exchangeRateProviderContractClient =
-        new MaxbtcNeutronExchangeRateProvider.Client(
-          client,
-          instantiateRes.contractAddress,
+          1.5,
         );
-    });
-
-    it('upload fee collector', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/maxbtc_neutron_fee_collector.wasm',
+        expect(res.codeId).toBeGreaterThan(0);
+        context.allowlistContractCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../../artifacts/maxbtc_neutron_exchange_rate_provider.wasm',
+              ),
             ),
           ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-
-      context.feeCollectorCodeId = res.codeId;
-
-      context.feeCollectorContractAddress = instantiate2Address(
-        fromHex(res.checksum),
-        account.address,
-        toAscii(SALT),
-        'neutron',
-      );
-    });
-
-    it('upload token contract', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(__dirname, '../../../artifacts/maxbtc_neutron_token.wasm'),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-
-      context.tokenCodeId = res.codeId;
-
-      context.tokenContractAddress = instantiate2Address(
-        fromHex(res.checksum),
-        account.address,
-        toAscii(SALT),
-        'neutron',
-      );
-    });
-
-    it('instantiate forwarder (valence base account)', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(__dirname, '../../../artifacts/valence_base_account.wasm'),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-
-      const instantiateMsg = {
-        admin: account.address,
-        approved_libraries: [],
-      };
-
-      const instantiateRes = await client.instantiate(
-        account.address,
-        res.codeId,
-        instantiateMsg,
-        'label',
-        'auto',
-      );
-
-      expect(instantiateRes.contractAddress).toBeTruthy();
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.forwarderContractAddress = instantiateRes.contractAddress;
-    });
-
-    it('instantiate forwarder library (valence ibc transfer library)', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/valence_neutron_ibc_transfer_library.wasm',
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.exchangeRateProviderContractCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../../artifacts/maxbtc_neutron_fee_collector.wasm',
+              ),
             ),
           ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
 
-      const instantiateMsg = {
-        owner: account.address,
-        processor: account.address,
-        config: {
-          input_addr: {
-            library_account_addr: context.forwarderContractAddress,
-          },
-          output_addr: {
-            library_account_addr: '0x1234567890123456789012345678901234567890',
-          },
-          denom: {
-            native:
-              'ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E',
-          },
-          amount: 'full_amount',
-          memo: '',
-          remote_chain_info: {
-            channel_id: 'channel-1',
-          },
-          denom_to_pfm_map: {},
-          eureka_config: {
-            callback_contract:
-              'cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22',
-            action_contract:
-              'cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5',
-            recover_address: 'cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26',
-            source_channel: '08-wasm-1369',
-          },
-        },
-      };
-
-      const instantiateRes = await client.instantiate(
-        account.address,
-        res.codeId,
-        instantiateMsg,
-        'label',
-        'auto',
-      );
-
-      expect(instantiateRes.contractAddress).toBeTruthy();
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.forwarderLibraryContractAddress = instantiateRes.contractAddress;
-
-      const approveRes = await client.execute(
-        account.address,
-        context.forwarderContractAddress,
-        {
-          approve_library: {
-            library: context.forwarderLibraryContractAddress,
-          },
-        },
-        'auto',
-      );
-      expect(approveRes.transactionHash).toHaveLength(64);
-      await waitForTx(client, approveRes.transactionHash);
-    });
-
-    it('upload core', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(__dirname, '../../../artifacts/maxbtc_neutron_core.wasm'),
+        context.feeCollectorCodeId = res.codeId;
+        context.feeCollectorContractCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(__dirname, '../../../artifacts/maxbtc_neutron_token.wasm'),
+            ),
           ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-      context.coreCodeId = res.codeId;
-
-      context.coreContractAddress = instantiate2Address(
-        fromHex(res.checksum),
-        account.address,
-        toAscii(SALT),
-        'neutron',
-      );
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.tokenCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(__dirname, '../../../artifacts/maxbtc_neutron_factory.wasm'),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.factoryCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(__dirname, '../../../artifacts/valence_base_account.wasm'),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.depositForwarderContractCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../../artifacts/valence_neutron_ibc_transfer_library.wasm',
+              ),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.depositForwarderLibraryContractCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(__dirname, '../../../artifacts/maxbtc_neutron_core.wasm'),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.coreCodeId = res.codeId;
+      }
     });
 
-    it('instantiate token contract', async () => {
+    it('instantiate factory contract', async () => {
       const {
         client,
         account,
+        factoryCodeId,
         tokenCodeId,
-        coreContractAddress,
-        tokenContractAddress,
+        coreCodeId,
+        feeCollectorCodeId,
+        depositForwarderContractCodeId,
+        depositForwarderLibraryContractCodeId,
+        exchangeRateProviderContractCodeId,
+        allowlistContractCodeId,
       } = context;
 
-      const instantiateRes = await MaxbtcNeutronToken.Client.instantiate2(
+      const instantiateRes = await MaxbtcNeutronFactory.Client.instantiate(
         client,
         account.address,
-        tokenCodeId,
-        toAscii(SALT),
+        factoryCodeId,
         {
-          owner: coreContractAddress,
-          factory_contract: coreContractAddress,
-          subdenom: 'maxbtc',
-        },
-        'label',
-        'auto',
-        [],
-      );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-
-      context.tokenContractClient = new TokenContractClient(
-        client,
-        tokenContractAddress,
-      );
-    });
-
-    it('instantiate core', async () => {
-      const { client, account, coreCodeId } = context;
-
-      const instantiateRes = await MaxbtcNeutronCore.Client.instantiate2(
-        client,
-        account.address,
-        coreCodeId,
-        toAscii(SALT),
-        {
-          deposit_forwarder_contract: context.forwarderContractAddress,
+          owner: account.address,
+          code_ids: {
+            token_code_id: tokenCodeId,
+            core_code_id: coreCodeId,
+            deposit_forwarder_contract_code_id: depositForwarderContractCodeId,
+            deposit_forwarder_library_contract_code_id:
+              depositForwarderLibraryContractCodeId,
+            exchange_rate_provider_contract_code_id:
+              exchangeRateProviderContractCodeId,
+            allowlist_contract_code_id: allowlistContractCodeId,
+            fee_collector_contract_code_id: feeCollectorCodeId,
+          },
+          salt: 'salt',
           deposit_decimals: 6,
           deposit_denom: DEPOSIT_DENOM,
           deposit_cost: '0.01',
           deposit_flush_period: 60,
-          owner: account.address,
-          exchange_rate_provider_contract:
-            context.exchangeRateProviderContractClient.contractAddress,
-          allowlist_contract: context.allowlistContractClient.contractAddress,
-          fee_collector_contract: context.feeCollectorContractAddress,
-          token_contract: context.tokenContractAddress,
-          factory_contract: context.tokenContractAddress,
+          maxbtc_denom: 'maxbtc',
+          fee_collector_params: {
+            fee_apy_reduction_percentage: '0.1',
+            collection_period_seconds: 10,
+          },
+          valence_ibc_transfer_params: {
+            input_addr: {
+              library_account_addr: '',
+            },
+            output_addr: {
+              library_account_addr:
+                '0x1234567890123456789012345678901234567890',
+            },
+            denom: {
+              native:
+                'ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E',
+            },
+            amount: 'full_amount',
+            memo: '',
+            remote_chain_info: {
+              channel_id: 'channel-1',
+            },
+            denom_to_pfm_map: {},
+            eureka_config: {
+              callback_contract:
+                'cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22',
+              action_contract:
+                'cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5',
+              recover_address: 'cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26',
+              source_channel: '08-wasm-1369',
+            },
+          },
         },
         'label',
         'auto',
         [],
       );
       expect(instantiateRes.contractAddress).toHaveLength(66);
-      // context.coreContractAddress = instantiateRes.contractAddress;
-      context.coreContractClient = new MaxbtcNeutronCore.Client(
+      context.factoryContractAddress = instantiateRes.contractAddress;
+
+      context.factoryContractClient = new FactoryContractClient(
         client,
-        context.coreContractAddress,
+        context.factoryContractAddress,
       );
     });
 
-    it('get fee collector address and instantiate client', async () => {
-      const {
+    it('get contracts addresses', async () => {
+      const { client } = context;
+
+      const factoryState = await context.factoryContractClient.queryState();
+
+      context.allowlistContractClient = new AllowlistContractClient(
         client,
-        account,
-        tokenContractClient,
-        feeCollectorCodeId,
-        feeCollectorContractAddress,
-        coreContractAddress,
-      } = context;
-
-      // The token contract stores the denom of the maxBTC token it created.
-      const tokenConfig = await tokenContractClient.queryConfig();
-      const tokenDenom = tokenConfig.denom;
-
-      const instantiateRes =
-        await MaxbtcNeutronFeeCollector.Client.instantiate2(
+        factoryState.allowlist_contract,
+      );
+      context.exchangeRateProviderContractClient =
+        new ExchangeRateProviderContractClient(
           client,
-          account.address,
-          feeCollectorCodeId,
-          toAscii(SALT),
-          {
-            collection_period_seconds: 10,
-            fee_apy_reduction_percentage: '0.1',
-            core_contract: coreContractAddress,
-            owner: account.address,
-            maxbtc_decimals: 6,
-            fee_denom: tokenDenom,
-          },
-          'label',
-          'auto',
-          [],
+          factoryState.exchange_rate_provider_contract,
         );
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-
       context.feeCollectorContractClient = new FeeCollectorContractClient(
         client,
-        feeCollectorContractAddress,
+        factoryState.fee_collector_contract,
       );
+      context.tokenContractClient = new TokenContractClient(
+        client,
+        factoryState.token_contract,
+      );
+      context.coreContractClient = new CoreContractClient(
+        client,
+        factoryState.core_contract,
+      );
+      context.coreContractAddress = factoryState.core_contract;
+      context.forwarderContractAddress =
+        factoryState.deposit_forwarder_contract;
+      context.forwarderLibraryContractAddress =
+        factoryState.deposit_forwarder_library_contract;
+      context.feeCollectorContractAddress = factoryState.fee_collector_contract;
+      context.tokenContractAddress = factoryState.token_contract;
     });
   });
 
