@@ -4,6 +4,19 @@
   "description": "ExecuteMsg enumerates all possible actions in this contract.",
   "oneOf": [
     {
+      "type": "object",
+      "required": [
+        "tick"
+      ],
+      "properties": {
+        "tick": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "User deposit flow",
       "type": "object",
       "required": [

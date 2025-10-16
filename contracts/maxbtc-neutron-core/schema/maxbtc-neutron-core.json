@@ -122,6 +122,19 @@
     "description": "ExecuteMsg enumerates all possible actions in this contract.",
     "oneOf": [
       {
+        "type": "object",
+        "required": [
+          "tick"
+        ],
+        "properties": {
+          "tick": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
         "description": "User deposit flow",
         "type": "object",
         "required": [
@@ -431,6 +444,19 @@
     "description": "QueryMsg for reading contract states.",
     "oneOf": [
       {
+        "type": "object",
+        "required": [
+          "contract_state"
+        ],
+        "properties": {
+          "contract_state": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
         "description": "Returns the Config state",
         "type": "object",
         "required": [
@@ -538,6 +564,17 @@
           "type": "string"
         }
       }
+    },
+    "contract_state": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ContractState",
+      "type": "string",
+      "enum": [
+        "idle",
+        "deposit_neutron",
+        "deposit_pending",
+        "deposit_j_l_p"
+      ]
     },
     "exchange_rate": {
       "$schema": "http://json-schema.org/draft-07/schema#",

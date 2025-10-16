@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Uint128};
 use cw_storage_plus::Item;
+use maxbtc_helpers::fsm::{Fsm, Transition};
 
 #[cw_serde]
 pub struct Config {
@@ -42,3 +43,32 @@ pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_tim
 
 /// Total amount of BTC deposited by the contract
 pub const TOTAL_DEPOSITED: Item<Uint128> = Item::new("total_deposited");
+
+#[cw_serde]
+pub enum ContractState {
+    Idle,
+    DepositNeutron,
+    DepositPending,
+    DepositJLP,
+}
+
+const TRANSITIONS: &[Transition<ContractState>] = &[
+    Transition {
+        from: ContractState::Idle,
+        to: ContractState::DepositNeutron,
+    },
+    Transition {
+        from: ContractState::DepositNeutron,
+        to: ContractState::DepositPending,
+    },
+    Transition {
+        from: ContractState::DepositPending,
+        to: ContractState::DepositJLP,
+    },
+    Transition {
+        from: ContractState::DepositJLP,
+        to: ContractState::Idle,
+    },
+];
+
+pub const FSM: Fsm<ContractState> = Fsm::new("machine_state", TRANSITIONS);

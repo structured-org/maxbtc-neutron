@@ -1,12 +1,15 @@
-use crate::contract::{execute, execute_flush_deposits, instantiate};
+use crate::contract::{execute, execute_tick, instantiate};
 use crate::error::ContractError;
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
 use cosmwasm_std::{
-    coin, Attribute, Decimal, DepsMut, Env, MessageInfo, OwnedDeps, Response, Uint128,
+    coin, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo, OwnedDeps,
+    Response, SubMsg, Uint128,
 };
 use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg};
-use maxbtc_base::state::core::{CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
+use maxbtc_base::state::core::{
+    ContractState, CONFIG, FSM, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED,
+};
 
 #[test]
 fn test_instantiate_success() {
@@ -301,10 +304,12 @@ fn test_deposit_wrong_denom() {
 }
 
 #[test]
-fn test_flush_guard_not_enough_time_elapsed() {
+fn test_idle_tick() {
     let (mut deps, env, _) = setup_contract();
 
     let cfg = CONFIG.load(&deps.storage).unwrap();
+    FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
+        .unwrap();
 
     // Deposit buffer: 0.5 wBTC.
     let buffer = Uint128::new(500_000);
@@ -318,23 +323,79 @@ fn test_flush_guard_not_enough_time_elapsed() {
         .save(&mut deps.storage, &(now - (cfg.deposit_flush_period / 2)))
         .unwrap();
 
-    let info = message_info(&deps.api.addr_make("flusher"), &[]);
+    let owner = deps.api.addr_make("owner");
+    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(&owner.as_str())).unwrap();
 
-    let resp = execute_flush_deposits(deps.as_mut(), env.clone(), info).unwrap();
+    let info = message_info(&owner, &[]);
 
-    // Status attribute.
-    let status_attr = resp
-        .attributes
-        .iter()
-        .find(|a| a.key == "status")
-        .expect("status attribute present");
-    assert_eq!(status_attr.value, "not_enough_time_elapsed");
+    let resp_err = execute_tick(deps.as_mut(), env.clone(), info).unwrap_err();
 
-    // LAST_DEPOSIT_FLUSH_TIME unchanged.
-    let stored = LAST_DEPOSIT_FLUSH_TIME.load(&deps.storage).unwrap();
-    assert_eq!(stored, now - (cfg.deposit_flush_period / 2));
-    // No transfer messages emitted.
-    assert!(resp.messages.is_empty());
+    assert_eq!(resp_err, ContractError::NotEnoughTimeElapsed {});
+}
+
+#[test]
+fn test_ticks_cycle() {
+    let (mut deps, env, _) = setup_contract();
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+    FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
+        .unwrap();
+
+    // Deposit buffer: 0.5 wBTC.
+    let buffer = Uint128::new(500_000);
+    deps.querier
+        .set_balance(env.contract.address.as_ref(), "wBTC", buffer);
+
+    // Set LAST_DEPOSIT_FLUSH_TIME so that *less* than `deposit_flush_period`
+    // seconds have elapsed.
+    let now = env.block.time.seconds();
+    LAST_DEPOSIT_FLUSH_TIME
+        .save(&mut deps.storage, &(now - (cfg.deposit_flush_period + 10)))
+        .unwrap();
+
+    let owner = deps.api.addr_make("owner");
+    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(&owner.as_str())).unwrap();
+
+    let info = message_info(&owner, &[]);
+
+    let resp = execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
+
+    println!("{:?}", resp.attributes);
+
+    assert_eq!(
+        resp.messages,
+        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.deposit_forwarder_contract.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom,
+                amount: Uint128::new(500_000),
+            }],
+        }))]
+    );
+
+    assert_eq!(
+        resp.attributes,
+        vec![
+            Attribute::new("action".to_string(), "flush_deposits".to_string()),
+            Attribute::new("sender".to_string(), owner.to_string()),
+            Attribute::new("flushed".to_string(), "500000".to_string()),
+        ]
+    );
+
+    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    assert_eq!(current_state, ContractState::DepositNeutron);
+
+    execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    assert_eq!(current_state, ContractState::DepositPending);
+
+    execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
+    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    assert_eq!(current_state, ContractState::DepositJLP);
+
+    execute_tick(deps.as_mut(), env.clone(), info).unwrap();
+    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    assert_eq!(current_state, ContractState::Idle);
 }
 
 /// -----------------------------------------------------------------------------------------------

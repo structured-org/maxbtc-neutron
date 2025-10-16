@@ -55,18 +55,19 @@ pub struct UpdateConfigMsg {
 #[cw_serde]
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
+    Tick {},
     /// User deposit flow
     Deposit {
         recipient: String,
         min_receive_amount: Option<Uint128>,
     },
-    /// Permissionless handler to flush deposits after `deposit_flush_period`
-    FlushDeposits {},
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
     /// Mints the requested amount of fees to the fee collector address. Can only be
     /// executed by the fee collector.
-    MintFee { amount: Coin },
+    MintFee {
+        amount: Coin,
+    },
 }
 
 /// QueryMsg for reading contract states.
@@ -74,6 +75,8 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
+    #[returns(crate::state::core::ContractState)]
+    ContractState {},
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},

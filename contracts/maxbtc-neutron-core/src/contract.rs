@@ -15,6 +15,7 @@ use maxbtc_base::msg::{
     },
     token::QueryMsg as TokenQueryMsg,
 };
+use maxbtc_base::state::core::{ContractState, FSM};
 use maxbtc_base::state::{
     core::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED},
     token::Config as TokenConfigResponse,
@@ -33,6 +34,8 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+
+    FSM.set_initial_state(deps.storage, ContractState::Idle)?;
 
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
@@ -87,17 +90,74 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig(updates) => execute_update_config(deps, info, updates),
+        ExecuteMsg::Tick {} => execute_tick(deps, env, info),
         ExecuteMsg::Deposit {
             recipient,
             min_receive_amount,
         } => execute_deposit(deps, env, info, recipient, min_receive_amount),
-        ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
         ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
         ExecuteMsg::UpdateOwnership(action) => {
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
     }
+}
+
+pub(crate) fn execute_tick(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    assert_owner(deps.storage, &info.sender)?;
+
+    let cfg = CONFIG.load(deps.storage)?;
+    if cfg.paused {
+        return Err(ContractError::ContractPaused {});
+    }
+
+    let current_state = FSM.get_current_state(deps.storage)?;
+
+    match current_state {
+        ContractState::Idle => execute_tick_idle(deps.branch(), env, info),
+        //
+        ContractState::DepositNeutron => execute_tick_deposit_neutron(deps.branch()),
+        //
+        ContractState::DepositPending => execute_tick_deposit_pending(deps.branch()),
+        ContractState::DepositJLP => execute_tick_deposit_jlp(deps.branch()),
+    }
+}
+
+fn execute_tick_idle(
+    mut deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response, ContractError> {
+    FSM.go_to(deps.storage, ContractState::DepositNeutron)?;
+    execute_flush_deposits(deps.branch(), env.clone(), info.clone())
+}
+
+fn execute_tick_deposit_neutron(deps: DepsMut) -> Result<Response, ContractError> {
+    FSM.go_to(deps.storage, ContractState::DepositPending)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "tick")
+        .add_attribute("stage", "deposit_neutron"))
+}
+
+fn execute_tick_deposit_pending(deps: DepsMut) -> Result<Response, ContractError> {
+    FSM.go_to(deps.storage, ContractState::DepositJLP)?;
+
+    // TODO: Implement
+
+    Ok(Response::new())
+}
+
+fn execute_tick_deposit_jlp(deps: DepsMut) -> Result<Response, ContractError> {
+    FSM.go_to(deps.storage, ContractState::Idle)?;
+
+    // TODO: Implement
+
+    Ok(Response::new())
 }
 
 fn execute_mint_fee(
@@ -276,11 +336,20 @@ pub(crate) fn execute_deposit(
 ///
 /// This handler can be triggered by any account, but its execution is rate-limited
 /// by the `deposit_flush_period` defined in the contract's configuration.
-pub(crate) fn execute_flush_deposits(
+fn execute_flush_deposits(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
+    // Only the current owner may flush deposit.
+    assert_owner(deps.storage, &info.sender)?;
+
+    // check if state is not in DepositNeutron
+    let current_state = FSM.get_current_state(deps.storage)?;
+    if current_state != ContractState::DepositNeutron {
+        return Err(ContractError::FlushDepositAllowedInDepositNeutron {});
+    }
+
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
@@ -290,11 +359,7 @@ pub(crate) fn execute_flush_deposits(
     let last_time = LAST_DEPOSIT_FLUSH_TIME.load(deps.storage)?;
     let now = env.block.time.seconds();
     if now < last_time + cfg.deposit_flush_period {
-        // Not enough time has passed, do nothing
-        return Ok(Response::new()
-            .add_messages(msgs)
-            .add_attribute("action", "flush_deposits")
-            .add_attribute("status", "not_enough_time_elapsed"));
+        return Err(ContractError::NotEnoughTimeElapsed {});
     }
 
     let amount_to_flush = deps
@@ -328,6 +393,7 @@ pub(crate) fn execute_flush_deposits(
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
+        QueryMsg::ContractState {} => Ok(to_json_binary(&FSM.get_current_state(deps.storage)?)?),
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {

@@ -25,6 +25,7 @@ neutron-std = { git = "https://github.com/neutron-org/neutron-std", branch = "fe
 semver = { version = "1.0.22", default-features = false }
 
 maxbtc-base = { path = "./packages/base" }
+maxbtc-helpers = { path = "./packages/helpers" }
 
 [profile.release]
 opt-level = 3

@@ -64,6 +64,13 @@ pub enum ContractError {
 
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),
+
     #[error("{0}")]
     Instantiate2Error(Instantiate2AddressError),
+
+    #[error("Flush deposit is allowed in DepositNeutron state only")]
+    FlushDepositAllowedInDepositNeutron {},
+
+    #[error("Not enough time has elapsed since the last deposit flush")]
+    NotEnoughTimeElapsed {},
 }

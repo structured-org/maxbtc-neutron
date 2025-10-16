@@ -3794,6 +3794,16 @@ dependencies = [
  "cosmwasm-std",
  "cw-ownable",
  "cw-storage-plus",
+ "maxbtc-helpers",
+]
+
+[[package]]
+name = "maxbtc-helpers"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-std",
+ "cw-storage-plus",
+ "serde",
 ]
 
 [[package]]
