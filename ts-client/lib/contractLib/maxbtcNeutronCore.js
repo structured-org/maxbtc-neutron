@@ -26,6 +26,9 @@ class Client {
         });
         return res;
     }
+    queryContractState = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
+    };
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
     };
@@ -38,6 +41,13 @@ class Client {
     queryOwnership = async () => {
         return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
+    tick = async (sender, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.tickMsg(), fee || "auto", memo, funds);
+    };
+    tickMsg = () => { return { tick: {} }; };
     deposit = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();
@@ -45,13 +55,6 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.depositMsg(args), fee || "auto", memo, funds);
     };
     depositMsg = (args) => { return { deposit: args }; };
-    flushDeposits = async (sender, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.flushDepositsMsg(), fee || "auto", memo, funds);
-    };
-    flushDepositsMsg = () => { return { flush_deposits: {} }; };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

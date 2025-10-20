@@ -19,6 +19,7 @@ import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
 import { waitForTx } from '../helpers/waitForTx';
 import { sleep } from '../helpers/sleep';
+import { State as FactoryState } from 'maxbtc-neutron-ts-client/lib/contractLib/maxbtcNeutronFactory';
 
 const DEPOSIT_DENOM = 'untrn';
 
@@ -34,6 +35,7 @@ describe('Core', () => {
   const context: {
     park?: Cosmopark;
     wallet?: DirectSecp256k1HdWallet;
+    secondWallet?: DirectSecp256k1HdWallet;
     coreContractClient?: InstanceType<typeof CoreContractClient>;
     allowlistContractClient?: InstanceType<typeof AllowlistContractClient>;
     exchangeRateProviderContractClient?: InstanceType<
@@ -42,6 +44,7 @@ describe('Core', () => {
 
     account?: AccountData;
     client?: SigningCosmWasmClient;
+    secondClient?: SigningCosmWasmClient;
     neutronClient?: InstanceType<typeof NeutronClient>;
 
     coreContractAddress?: string;
@@ -70,12 +73,20 @@ describe('Core', () => {
     factoryContractAddress?: string;
 
     treasuryAddress?: string;
+
+    factoryState?: FactoryState;
   } = {};
 
   beforeAll(async (t) => {
     context.park = await setupPark(t, ['neutron']);
     context.wallet = await DirectSecp256k1HdWallet.fromMnemonic(
       context.park.config.wallets.demowallet1.mnemonic,
+      {
+        prefix: 'neutron',
+      },
+    );
+    context.secondWallet = await DirectSecp256k1HdWallet.fromMnemonic(
+      context.park.config.wallets.demowallet2.mnemonic,
       {
         prefix: 'neutron',
       },
@@ -91,6 +102,14 @@ describe('Core', () => {
     context.client = await SigningCosmWasmClient.connectWithSigner(
       `http://127.0.0.1:${context.park.ports.neutron.rpc}`,
       context.wallet,
+      {
+        gasPrice: GasPrice.fromString('0.025untrn'),
+      },
+    );
+
+    context.secondClient = await SigningCosmWasmClient.connectWithSigner(
+      `http://127.0.0.1:${context.park.ports.neutron.rpc}`,
+      context.secondWallet,
       {
         gasPrice: GasPrice.fromString('0.025untrn'),
       },
@@ -313,36 +332,37 @@ describe('Core', () => {
     it('get contracts addresses', async () => {
       const { client } = context;
 
-      const factoryState = await context.factoryContractClient.queryState();
+      context.factoryState = await context.factoryContractClient.queryState();
 
       context.allowlistContractClient = new AllowlistContractClient(
         client,
-        factoryState.allowlist_contract,
+        context.factoryState.allowlist_contract,
       );
       context.exchangeRateProviderContractClient =
         new ExchangeRateProviderContractClient(
           client,
-          factoryState.exchange_rate_provider_contract,
+          context.factoryState.exchange_rate_provider_contract,
         );
       context.feeCollectorContractClient = new FeeCollectorContractClient(
         client,
-        factoryState.fee_collector_contract,
+        context.factoryState.fee_collector_contract,
       );
       context.tokenContractClient = new TokenContractClient(
         client,
-        factoryState.token_contract,
+        context.factoryState.token_contract,
       );
       context.coreContractClient = new CoreContractClient(
         client,
-        factoryState.core_contract,
+        context.factoryState.core_contract,
       );
-      context.coreContractAddress = factoryState.core_contract;
+      context.coreContractAddress = context.factoryState.core_contract;
       context.forwarderContractAddress =
-        factoryState.deposit_forwarder_contract;
+        context.factoryState.deposit_forwarder_contract;
       context.forwarderLibraryContractAddress =
-        factoryState.deposit_forwarder_library_contract;
-      context.feeCollectorContractAddress = factoryState.fee_collector_contract;
-      context.tokenContractAddress = factoryState.token_contract;
+        context.factoryState.deposit_forwarder_library_contract;
+      context.feeCollectorContractAddress =
+        context.factoryState.fee_collector_contract;
+      context.tokenContractAddress = context.factoryState.token_contract;
     });
   });
 
@@ -407,29 +427,30 @@ describe('Core', () => {
       expect(balance.amount).toEqual('198000');
     });
 
-    describe('flush deposits', () => {
-      it('try to flush deposits before flush period', async () => {
-        const { coreContractClient, account } = context;
-        const res = await coreContractClient.flushDeposits(
-          account.address,
-          'auto',
+    describe('run ticks', () => {
+      it('try to tick with unauthorized address', async () => {
+        const { secondClient, factoryState } = context;
+
+        const coreContractClient = new CoreContractClient(
+          secondClient,
+          factoryState.core_contract,
         );
-        expect(res.transactionHash).toBeTruthy();
-        const tx = await context.client.getTx(res.transactionHash);
-        const { events } = tx;
-        const wasmEvent = events.find(
-          (e) =>
-            e.type === 'wasm' &&
-            e.attributes.some(
-              (attr) =>
-                attr.key === 'action' && attr.value === 'flush_deposits',
-            ),
-        );
-        expect(
-          wasmEvent.attributes.find(
-            (a) => a.key === 'status' && a.value === 'not_enough_time_elapsed',
+
+        await expect(
+          coreContractClient.tick(
+            (await context.secondWallet.getAccounts())[0].address,
+            'auto',
           ),
-        ).toBeTruthy();
+        ).rejects.toThrow(/Caller is not the contract's current owner/);
+      });
+      it('try to tick to flush deposits before flush period', async () => {
+        const { coreContractClient, account } = context;
+
+        await expect(
+          coreContractClient.tick(account.address, 'auto'),
+        ).rejects.toThrow(
+          /Not enough time has elapsed since the last deposit flush/,
+        );
       });
       it('update config', async () => {
         const { coreContractClient, account } = context;
@@ -443,7 +464,7 @@ describe('Core', () => {
         expect(res.transactionHash).toBeTruthy();
         await waitForTx(context.client, res.transactionHash);
       });
-      it('flush deposits before flush period', async () => {
+      it('tick to flush deposits', async () => {
         const { coreContractClient, account } = context;
         const forwarderBalanceBefore = (
           await context.client.getBalance(
@@ -451,10 +472,7 @@ describe('Core', () => {
             DEPOSIT_DENOM,
           )
         ).amount;
-        const res = await coreContractClient.flushDeposits(
-          account.address,
-          'auto',
-        );
+        const res = await coreContractClient.tick(account.address, 'auto');
         expect(res.transactionHash).toBeTruthy();
         const tx = await context.client.getTx(res.transactionHash);
         const { events } = tx;
@@ -481,29 +499,31 @@ describe('Core', () => {
         expect(BigInt(forwarderBalanceAfter)).toBeGreaterThan(
           BigInt(forwarderBalanceBefore),
         );
+
+        const coreState = await context.coreContractClient.queryContractState();
+        expect(coreState).toEqual('deposit_neutron');
       });
-      it('no flush deposits right after the flush', async () => {
+
+      it('run ticks cycle', async () => {
         const { coreContractClient, account } = context;
-        const res = await coreContractClient.flushDeposits(
-          account.address,
-          'auto',
-        );
+
+        let res = await coreContractClient.tick(account.address, 'auto');
         expect(res.transactionHash).toBeTruthy();
-        const tx = await context.client.getTx(res.transactionHash);
-        const { events } = tx;
-        const wasmEvent = events.find(
-          (e) =>
-            e.type === 'wasm' &&
-            e.attributes.some(
-              (attr) =>
-                attr.key === 'action' && attr.value === 'flush_deposits',
-            ),
-        );
-        expect(
-          wasmEvent.attributes.find(
-            (a) => a.key === 'status' && a.value === 'not_enough_time_elapsed',
-          ),
-        ).toBeTruthy();
+
+        let coreState = await context.coreContractClient.queryContractState();
+        expect(coreState).toEqual('deposit_pending');
+
+        res = await coreContractClient.tick(account.address, 'auto');
+        expect(res.transactionHash).toBeTruthy();
+
+        coreState = await context.coreContractClient.queryContractState();
+        expect(coreState).toEqual('deposit_j_l_p');
+
+        res = await coreContractClient.tick(account.address, 'auto');
+        expect(res.transactionHash).toBeTruthy();
+
+        coreState = await context.coreContractClient.queryContractState();
+        expect(coreState).toEqual('idle');
       });
     });
   });

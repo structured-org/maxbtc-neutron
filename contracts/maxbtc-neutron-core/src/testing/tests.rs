@@ -324,7 +324,7 @@ fn test_idle_tick() {
         .unwrap();
 
     let owner = deps.api.addr_make("owner");
-    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(&owner.as_str())).unwrap();
+    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(owner.as_str())).unwrap();
 
     let info = message_info(&owner, &[]);
 
@@ -354,7 +354,7 @@ fn test_ticks_cycle() {
         .unwrap();
 
     let owner = deps.api.addr_make("owner");
-    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(&owner.as_str())).unwrap();
+    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(owner.as_str())).unwrap();
 
     let info = message_info(&owner, &[]);
 
@@ -382,19 +382,19 @@ fn test_ticks_cycle() {
         ]
     );
 
-    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::DepositNeutron);
 
     execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
-    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::DepositPending);
 
     execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
-    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::DepositJLP);
 
     execute_tick(deps.as_mut(), env.clone(), info).unwrap();
-    let current_state = FSM.get_current_state(&mut deps.storage).unwrap();
+    let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::Idle);
 }
 

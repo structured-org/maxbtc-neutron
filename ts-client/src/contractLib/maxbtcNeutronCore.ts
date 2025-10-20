@@ -6,6 +6,7 @@ import { StdFee } from "@cosmjs/amino";
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p";
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
@@ -77,7 +78,7 @@ export type UpdateOwnershipArgs =
   | "renounce_ownership";
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: ConfigResponse | Decimal1 | OwnershipForString | SimulateDepositResponse;
+  responses: ConfigResponse | ContractState | Decimal1 | OwnershipForString | SimulateDepositResponse;
   query: SimulateDepositArgs;
   execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
@@ -245,6 +246,9 @@ export class Client {
     });
     return res;
   }
+  queryContractState = async(): Promise<ContractState> => {
+    return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
+  }
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
@@ -257,16 +261,16 @@ export class Client {
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
+  tick = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.tickMsg(), fee || "auto", memo, funds);
+  }
+  tickMsg = (): { tick: {} } => { return { tick: {} } }
   deposit = async(sender:string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.depositMsg(args), fee || "auto", memo, funds);
   }
   depositMsg = (args: DepositArgs): { deposit: DepositArgs } => { return { deposit: args }; }
-  flushDeposits = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, this.flushDepositsMsg(), fee || "auto", memo, funds);
-  }
-  flushDepositsMsg = (): { flush_deposits: {} } => { return { flush_deposits: {} } }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);

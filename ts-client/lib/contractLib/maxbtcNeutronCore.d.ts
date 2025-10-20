@@ -6,6 +6,7 @@ import { StdFee } from "@cosmjs/amino";
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p";
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
@@ -70,7 +71,7 @@ export type UpdateOwnershipArgs = {
     };
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronCoreSchema {
-    responses: ConfigResponse | Decimal1 | OwnershipForString | SimulateDepositResponse;
+    responses: ConfigResponse | ContractState | Decimal1 | OwnershipForString | SimulateDepositResponse;
     query: SimulateDepositArgs;
     execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
@@ -196,17 +197,18 @@ export declare class Client {
     mustBeSigningClient(): Error;
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    queryContractState: () => Promise<ContractState>;
     queryConfig: () => Promise<ConfigResponse>;
     queryExchangeRate: () => Promise<Decimal>;
     querySimulateDeposit: (args: SimulateDepositArgs) => Promise<SimulateDepositResponse>;
     queryOwnership: () => Promise<OwnershipForString>;
+    tick: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    tickMsg: () => {
+        tick: {};
+    };
     deposit: (sender: string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     depositMsg: (args: DepositArgs) => {
         deposit: DepositArgs;
-    };
-    flushDeposits: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    flushDepositsMsg: () => {
-        flush_deposits: {};
     };
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateConfigMsg: (args: UpdateConfigArgs) => {

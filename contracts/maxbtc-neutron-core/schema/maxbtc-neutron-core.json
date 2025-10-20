@@ -167,20 +167,6 @@
         "additionalProperties": false
       },
       {
-        "description": "Permissionless handler to flush deposits after `deposit_flush_period`",
-        "type": "object",
-        "required": [
-          "flush_deposits"
-        ],
-        "properties": {
-          "flush_deposits": {
-            "type": "object",
-            "additionalProperties": false
-          }
-        },
-        "additionalProperties": false
-      },
-      {
         "description": "Owner-only message to update protocol configuration in-place",
         "type": "object",
         "required": [
