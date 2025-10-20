@@ -11,8 +11,13 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
-use maxbtc_base::msg::{
-    core::InstantiateMsg as CoreInstantiateMsg, token::InstantiateMsg as TokenFactoryInstantiateMsg,
+use maxbtc_base::{
+    msg::{
+        core::InstantiateMsg as CoreInstantiateMsg,
+        token::InstantiateMsg as TokenFactoryInstantiateMsg,
+        waitosaur_holder::InstantiateMsg as WaitosaurHolderInstantiateMsg,
+    },
+    state::waitosaur_holder::Config as WaitosaurHolderConfig,
 };
 use maxbtc_neutron_allow_list::msg::InstantiateMsg as AllowListInstantiateMsg;
 use maxbtc_neutron_exchange_rate_provider::msg::InstantiateMsg as ExchangeRateProviderInstantiateMsg;
@@ -134,6 +139,19 @@ pub fn instantiate(
     .map_err(ContractError::Instantiate2Error)?;
     let waitosaur_contract = deps.api.addr_humanize(&waitosaur_address)?;
 
+    let waitosaur_holder_code_info = deps
+        .querier
+        .query_wasm_code_info(msg.code_ids.waitosaur_holder_contract_code_id)?;
+    let waitosaur_holder_checksum = waitosaur_holder_code_info.checksum;
+    let waitosaur_holder_address = instantiate2_address(
+        waitosaur_holder_checksum.as_slice(),
+        &canonical_creator, // The creator is this core contract
+        salt,
+    )
+    .map_err(ContractError::Instantiate2Error)?;
+
+    let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
+
     // Instantiate contracts messages
 
     let instantiate_waitosaur_msg = WasmMsg::Instantiate2 {
@@ -234,6 +252,23 @@ pub fn instantiate(
         salt: Binary::from(salt),
     };
 
+    let instantiate_waitosaur_holder_msg = WasmMsg::Instantiate2 {
+        admin: Some(env.contract.address.to_string()), // The core contract owner is admin
+        code_id: msg.code_ids.waitosaur_holder_contract_code_id,
+        label: "maxBTC Waitosaur Holder Contract".to_string(),
+        msg: to_json_binary(&WaitosaurHolderInstantiateMsg {
+            owner: msg.owner.to_string(),
+            config: WaitosaurHolderConfig {
+                locker: deps.api.addr_validate(&msg.ceffu_backend)?,
+                unlocker: core_contract.clone(),
+                asset: msg.deposit_denom.clone(),
+                withdraw_manager_contract: core_contract.clone(),
+            },
+        })?,
+        funds: vec![],
+        salt: Binary::from(salt),
+    };
+
     let instantiate_core_msg = WasmMsg::Instantiate2 {
         admin: Some(env.contract.address.to_string()), // The core contract owner is admin
         code_id: msg.code_ids.core_code_id,
@@ -246,7 +281,6 @@ pub fn instantiate(
             deposit_forwarder_contract: deposit_forwarder_contract.to_string(),
             deposit_denom: msg.deposit_denom.clone(),
             deposit_decimals: msg.deposit_decimals,
-            deposit_flush_period: msg.deposit_flush_period,
             deposit_cost: msg.deposit_cost,
             deposits_cap: msg.deposits_cap,
             allowlist_contract: allowlist_contract.to_string(),
@@ -254,7 +288,9 @@ pub fn instantiate(
             fee_collector_contract: fee_collector_contract.to_string(),
             waitosaur_contract: waitosaur_contract.to_string(),
             last_deposit_flush_time: None,
+            withdrawal_notifier_contract: waitosaur_holder_contract.to_string(),
             total_deposited: None,
+            current_deposit_balance: None,
         })?,
         funds: vec![],
         salt: Binary::from(salt),
@@ -269,6 +305,7 @@ pub fn instantiate(
         deposit_forwarder_library_contract,
         core_contract,
         waitosaur_contract,
+        waitosaur_holder_contract,
     };
 
     STATE.save(deps.storage, &state)?;
@@ -281,6 +318,7 @@ pub fn instantiate(
         .add_message(instantiate_token_factory_msg)
         .add_message(instantiate_forwarder_msg)
         .add_message(instantiate_forwarder_library_msg)
+        .add_message(instantiate_waitosaur_holder_msg)
         .add_message(instantiate_core_msg)
         .add_message(instantiate_fee_collector_msg)
         .add_attribute("action", "instantiate")

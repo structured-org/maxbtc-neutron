@@ -18,13 +18,13 @@ pub struct InstantiateMsg {
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// Minimum number of seconds that must elapse between two deposit-flush operations
-    pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
+    /// Contract that holds amount of BTC received from CEFFU
+    pub withdrawal_notifier_contract: String,
     /// This contract provides the exchange rate for maxBTC
     pub exchange_rate_provider_contract: String,
     /// Contract address of the allow-list contract that manages
@@ -35,10 +35,10 @@ pub struct InstantiateMsg {
     pub fee_collector_contract: String,
     /// Address of the waitosaur contract
     pub waitosaur_contract: String,
-    /// Sets the last time a deposit flush was done (used in migration)
-    pub last_deposit_flush_time: Option<u64>,
     /// Total amount of BTC deposited by the contract (used in migration)
     pub total_deposited: Option<Uint128>,
+    /// Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
+    pub current_deposit_balance: Option<Uint128>,
 }
 
 /// Message for updating configuration parameters (owner-only).
@@ -47,13 +47,13 @@ pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
     pub operator: Option<String>,
     pub deposit_forwarder_contract: Option<String>,
-    pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
     pub exchange_rate_provider_contract: Option<String>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
     pub waitosaur_contract: Option<String>,
+    pub withdrawal_notifier_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -66,6 +66,12 @@ pub enum ExecuteMsg {
     Deposit {
         recipient: String,
         min_receive_amount: Option<Uint128>,
+    },
+    /// User withdraw flow
+    Withdraw {},
+    /// Claim withdrawal using redemption token
+    Claim {
+        recipient: String,
     },
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
@@ -83,11 +89,19 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     #[returns(crate::state::core::ContractState)]
     ContractState {},
+    #[returns(crate::state::core::Batch)]
+    ActiveBatch {},
+    #[returns(crate::state::core::Batch)]
+    WithdrawingBatch {},
+    #[returns(Vec<crate::state::core::Batch>)]
+    FinalizedBatches {},
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
     #[returns(Decimal)]
     ExchangeRate {},
+    #[returns(Uint128)]
+    DepositBalance {},
     /// Simulates a deposit and returns the amount of maxBTC that would be minted.
     #[returns(SimulateDepositResponse)]
     SimulateDeposit { amount: Uint128 },
@@ -103,9 +117,9 @@ pub struct SimulateDepositResponse {
 pub struct ConfigResponse {
     pub operator: String,
     pub deposit_denom: String,
-    pub deposit_flush_period: u64,
     pub deposit_cost: Decimal,
     pub fee_collector_contract: String,
+    pub withdrawal_notifier_contract: String,
 }
 
 #[cw_serde]

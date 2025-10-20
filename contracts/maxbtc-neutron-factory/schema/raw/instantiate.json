@@ -4,12 +4,15 @@
   "description": "InstantiateMsg configures the contract on initialization.",
   "type": "object",
   "required": [
+<<<<<<< HEAD
     "binance_aum_contract",
+=======
+    "ceffu_backend",
+>>>>>>> aff42d9 (add withdrawals support)
     "code_ids",
     "deposit_cost",
     "deposit_decimals",
     "deposit_denom",
-    "deposit_flush_period",
     "fee_collector_params",
     "maxbtc_denom",
     "operator",
@@ -19,8 +22,12 @@
     "waitosaur_unlocker"
   ],
   "properties": {
+<<<<<<< HEAD
     "binance_aum_contract": {
       "description": "Address of the binance AUM contract",
+=======
+    "ceffu_backend": {
+>>>>>>> aff42d9 (add withdrawals support)
       "type": "string"
     },
     "code_ids": {
@@ -43,12 +50,6 @@
     "deposit_denom": {
       "description": "Denom for user deposits (e.g. IBC-transferred BTC)",
       "type": "string"
-    },
-    "deposit_flush_period": {
-      "description": "Minimum number of seconds that must elapse between two deposit-flush operations",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     },
     "deposits_cap": {
       "description": "Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded",
@@ -107,7 +108,11 @@
         "exchange_rate_provider_contract_code_id",
         "fee_collector_contract_code_id",
         "token_code_id",
+<<<<<<< HEAD
         "waitosaur_contract_code_id"
+=======
+        "waitosaur_holder_contract_code_id"
+>>>>>>> aff42d9 (add withdrawals support)
       ],
       "properties": {
         "allowlist_contract_code_id": {
@@ -145,7 +150,11 @@
           "format": "uint64",
           "minimum": 0.0
         },
+<<<<<<< HEAD
         "waitosaur_contract_code_id": {
+=======
+        "waitosaur_holder_contract_code_id": {
+>>>>>>> aff42d9 (add withdrawals support)
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

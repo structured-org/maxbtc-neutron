@@ -29,6 +29,9 @@ class Client {
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
     };
+    queryGetDenom = async (args) => {
+        return this.client.queryContractSmart(this.contractAddress, { get_denom: args });
+    };
     queryOwnership = async () => {
         return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
@@ -53,6 +56,13 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.setTokenMetadataMsg(args), fee || "auto", memo, funds);
     };
     setTokenMetadataMsg = (args) => { return { set_token_metadata: args }; };
+    createRedemptionToken = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.createRedemptionTokenMsg(args), fee || "auto", memo, funds);
+    };
+    createRedemptionTokenMsg = (args) => { return { create_redemption_token: args }; };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

@@ -1,6 +1,5 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
-import { Coin } from "@cosmjs/amino";
 /**
  * A human readable address.
  *
@@ -11,6 +10,7 @@ import { Coin } from "@cosmjs/amino";
  * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
 export type Addr = string;
+export type String = string;
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -76,8 +76,9 @@ export type UpdateOwnershipArgs =
   | "renounce_ownership";
 
 export interface MaxbtcNeutronTokenSchema {
-  responses: Config | OwnershipForString;
-  execute: MintArgs | SetTokenMetadataArgs | UpdateConfigArgs | UpdateOwnershipArgs;
+  responses: Config | String | OwnershipForString;
+  query: GetDenomArgs;
+  execute: MintArgs | SetTokenMetadataArgs | CreateRedemptionTokenArgs | UpdateConfigArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -108,9 +109,16 @@ export interface OwnershipForString {
    */
   pending_owner?: string | null;
 }
+export interface GetDenomArgs {
+  subdenom?: string | null;
+}
 export interface MintArgs {
-  amount: Uint128;
+  amount: Coin;
   recipient: string;
+}
+export interface Coin {
+  amount: Uint128;
+  denom: string;
 }
 export interface SetTokenMetadataArgs {
   token_metadata: DenomMetadata;
@@ -144,6 +152,9 @@ export interface DenomMetadata {
    * SHA256 hash of a document pointed by URI
    */
   uri_hash?: string | null;
+}
+export interface CreateRedemptionTokenArgs {
+  redemption_subdenom: string;
 }
 export interface UpdateConfigArgs {
   factory_contract?: string | null;
@@ -214,6 +225,9 @@ export class Client {
   queryConfig = async(): Promise<Config> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
+  queryGetDenom = async(args: GetDenomArgs): Promise<String> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_denom: args });
+  }
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
@@ -232,6 +246,11 @@ export class Client {
     return this.client.execute(sender, this.contractAddress, this.setTokenMetadataMsg(args), fee || "auto", memo, funds);
   }
   setTokenMetadataMsg = (args: SetTokenMetadataArgs): { set_token_metadata: SetTokenMetadataArgs } => { return { set_token_metadata: args }; }
+  createRedemptionToken = async(sender:string, args: CreateRedemptionTokenArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.createRedemptionTokenMsg(args), fee || "auto", memo, funds);
+  }
+  createRedemptionTokenMsg = (args: CreateRedemptionTokenArgs): { create_redemption_token: CreateRedemptionTokenArgs } => { return { create_redemption_token: args }; }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);

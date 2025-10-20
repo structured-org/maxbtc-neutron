@@ -1,6 +1,6 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, SignedDecimal256, Uint128};
-use cw_storage_plus::Item;
+use cw_storage_plus::{Item, Map};
 use maxbtc_helpers::fsm::{Fsm, Transition};
 
 #[cw_serde]
@@ -20,13 +20,13 @@ pub struct Config {
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// Minimum number of seconds between two deposit-flush operations
-    pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Optional upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
+    /// Contract that holds amount of BTC received from CEFFU
+    pub waitosaur_holder_contract: Addr,
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: Addr,
@@ -42,11 +42,11 @@ pub struct Config {
 /// A single global config item
 pub const CONFIG: Item<Config> = Item::new("config");
 
-/// Tracks the last time a deposit flush was done
-pub const LAST_DEPOSIT_FLUSH_TIME: Item<u64> = Item::new("last_deposit_flush_time");
-
 /// Total amount of BTC deposited by the contract
 pub const TOTAL_DEPOSITED: Item<Uint128> = Item::new("total_deposited");
+
+/// Deposit balance holder
+pub const CURRENT_DEPOSIT_BALANCE: Item<Uint128> = Item::new("current_deposit_balance");
 
 #[cw_serde]
 pub enum ContractState {
@@ -54,6 +54,9 @@ pub enum ContractState {
     DepositNeutron,
     DepositPending,
     DepositJLP,
+    WithdrawJLP,
+    WithdrawPending,
+    WithdrawNeutron,
 }
 
 #[cw_serde]
@@ -71,6 +74,10 @@ const TRANSITIONS: &[Transition<ContractState>] = &[
         to: ContractState::DepositNeutron,
     },
     Transition {
+        from: ContractState::Idle,
+        to: ContractState::WithdrawJLP,
+    },
+    Transition {
         from: ContractState::DepositNeutron,
         to: ContractState::DepositPending,
     },
@@ -82,6 +89,46 @@ const TRANSITIONS: &[Transition<ContractState>] = &[
         from: ContractState::DepositJLP,
         to: ContractState::Idle,
     },
+    Transition {
+        from: ContractState::WithdrawJLP,
+        to: ContractState::WithdrawPending,
+    },
+    Transition {
+        from: ContractState::WithdrawPending,
+        to: ContractState::WithdrawNeutron,
+    },
+    Transition {
+        from: ContractState::WithdrawNeutron,
+        to: ContractState::Idle,
+    },
 ];
 
 pub const FSM: Fsm<ContractState> = Fsm::new("machine_state", TRANSITIONS);
+
+/// Each batch has a batch_id, which increments.
+#[cw_serde]
+pub struct Batch {
+    pub batch_id: u64,
+    /// If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+    pub btc_requested: Uint128,
+    /// The amount of maxBTC burned for this batch
+    pub maxbtc_burned: Uint128,
+    /// If in FINALIZED state, how much BTC was actually collected?
+    pub collected_amount: Uint128,
+    /// If in FINALIZED state, how much BTC was already paid to users?
+    pub paid_amount: Uint128,
+    /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+    pub collector_historical_balance: Uint128,
+}
+
+/// The current active batch
+pub const ACTIVE_BATCH: Item<Batch> = Item::new("active_batch");
+
+/// The current withdrawing batch
+pub const WITHDRAWING_BATCH: Item<Option<Batch>> = Item::new("withdrawing_batch");
+
+/// Mapping from batch_id to a Batch (which will be in FINALIZED state)
+pub const FINALIZED_BATCHES: Map<u64, Batch> = Map::new("finalized_batches");
+
+/// A simple incrementing batch counter
+pub const BATCH_ID_COUNTER: Item<u64> = Item::new("batch_id_counter");

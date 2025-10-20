@@ -6,6 +6,9 @@
     "idle",
     "deposit_neutron",
     "deposit_pending",
-    "deposit_j_l_p"
+    "deposit_j_l_p",
+    "withdraw_j_l_p",
+    "withdraw_pending",
+    "withdraw_neutron"
   ]
 }

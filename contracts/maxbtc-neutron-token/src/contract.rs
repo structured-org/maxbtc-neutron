@@ -7,9 +7,15 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
 use cw_storage_plus::Item;
-use maxbtc_base::msg::core::InstantiateMsg as CoreInstantiateMsg;
-use maxbtc_base::msg::token::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use maxbtc_base::state::token::{Config, CONFIG};
+use maxbtc_base::msg::{
+    core::InstantiateMsg as CoreInstantiateMsg,
+    token::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    waitosaur_holder::InstantiateMsg as WaitosaurHolderInstantiateMsg,
+};
+use maxbtc_base::state::{
+    token::{Config, CONFIG},
+    waitosaur_holder::Config as WaitosaurHolderConfig,
+};
 use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{
@@ -65,11 +71,34 @@ pub fn execute(
         ExecuteMsg::SetTokenMetadata { token_metadata } => {
             execute_set_token_metadata(deps, env, info, token_metadata)
         }
+        ExecuteMsg::CreateRedemptionToken {
+            redemption_subdenom,
+        } => execute_create_redemption_token(deps, env, info, redemption_subdenom),
         ExecuteMsg::UpdateOwnership(action) => {
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
     }
+}
+
+fn execute_create_redemption_token(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    redemption_subdenom: String,
+) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)?;
+
+    // Creates the redemption token factory denom
+    let create_denom_msg =
+        create_tokenfactory_create_denom_msg(&env.clone(), redemption_subdenom.to_string())?;
+
+    // Return the response
+    Ok(Response::new()
+        .add_message(create_denom_msg)
+        .add_attribute("action", "create_redemption_token")
+        .add_attribute("sender", info.sender)
+        .add_attribute("redemption_subdenom", redemption_subdenom))
 }
 
 /// Owner-only handler that updates the configuration in-place.
@@ -104,26 +133,14 @@ pub(crate) fn execute_mint(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    amount: Uint128,
+    amount: Coin,
     recipient: String,
 ) -> Result<Response, ContractError> {
     cw_ownable::assert_owner(deps.storage, &info.sender)?;
     let cfg = CONFIG.load(deps.storage)?;
 
-    // Can be equal to zero if rounding kicks in with a very high ER.
-    if amount.is_zero() {
-        return Err(ContractError::InvalidDepositAmount {});
-    }
-
     // Mint the maxBTC to the recipient
-    let mint_msg = create_tokenfactory_mint_msg(
-        &env.clone(),
-        recipient.clone(),
-        Coin {
-            amount,
-            denom: cfg.denom.clone(),
-        },
-    )?;
+    let mint_msg = create_tokenfactory_mint_msg(&env.clone(), recipient.clone(), amount.clone())?;
 
     // Return the response
     Ok(Response::new()
@@ -136,30 +153,28 @@ pub(crate) fn execute_mint(
 }
 
 pub(crate) fn execute_burn(
-    deps: DepsMut,
+    _deps: DepsMut,
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-
-    let amount = cw_utils::must_pay(&info, &cfg.denom.clone())?;
+    if info.funds.len() != 1 {
+        return Err(ContractError::WrongFundsAttached {});
+    }
+    let first_coin = &info
+        .funds
+        .first()
+        .cloned()
+        .ok_or(ContractError::WrongFundsAttached {})?;
 
     // Mint the maxBTC to the recipient
-    let mint_msg = create_tokenfactory_burn_msg(
-        &env.clone(),
-        Coin {
-            amount,
-            denom: cfg.denom.clone(),
-        },
-    )?;
+    let mint_msg = create_tokenfactory_burn_msg(&env.clone(), first_coin.clone())?;
 
     // Return the response
     Ok(Response::new()
         .add_message(mint_msg)
         .add_attribute("action", "burn")
         .add_attribute("sender", info.sender)
-        .add_attribute("amount", amount.to_string())
-        .add_attribute("denom", cfg.denom))
+        .add_attribute("burned_amount", first_coin.to_string()))
 }
 
 pub(crate) fn execute_set_token_metadata(
@@ -193,13 +208,23 @@ pub(crate) fn execute_set_token_metadata(
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<cosmwasm_std::Binary, ContractError> {
     match msg {
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
             Ok(to_json_binary(&cfg)?)
         }
         QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
+        QueryMsg::GetDenom { subdenom } => Ok(to_json_binary(&get_denom(deps, env, subdenom)?)?),
+    }
+}
+
+pub fn get_denom(deps: Deps, env: Env, subdenom: Option<String>) -> Result<String, ContractError> {
+    let cfg = CONFIG.load(deps.storage)?;
+    if let Some(subdenom) = subdenom {
+        Ok(get_maxbtc_denom(env.contract.address.to_string(), subdenom))
+    } else {
+        Ok(cfg.denom)
     }
 }
 
@@ -227,6 +252,18 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             salt,
         )?;
         let core_contract = deps.api.addr_humanize(&core_address)?;
+
+        let waitosaur_holder_code_info = deps
+            .querier
+            .query_wasm_code_info(msg.waitosaur_holder_code_id)?;
+        let waitosaur_holder_checksum = waitosaur_holder_code_info.checksum;
+        let waitosaur_holder_address = instantiate2_address(
+            waitosaur_holder_checksum.as_slice(),
+            &canonical_self_address,
+            salt,
+        )?;
+        let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
+
         initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
 
         let waitosaur_code_info = deps.querier.query_wasm_code_info(msg.waitosaur_code_id)?;
@@ -284,8 +321,27 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         });
 
         let total_deposited = Item::<Uint128>::new("total_deposited").load(deps.storage)?;
-        let last_deposit_flush_time =
-            Item::<u64>::new("last_deposit_flush_time").load(deps.storage)?;
+
+        let deposit_balance = deps
+            .querier
+            .query_balance(env.contract.address.to_string(), &old_config.deposit_denom)?;
+
+        let instantiate_withdrawal_notifier_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
+            admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
+            code_id: msg.waitosaur_holder_code_id,
+            label: "maxBTC Withdrawal Notifier Contract".to_string(),
+            msg: to_json_binary(&WaitosaurHolderInstantiateMsg {
+                owner: msg.factory_contract.to_string(),
+                config: WaitosaurHolderConfig {
+                    locker: deps.api.addr_validate(msg.ceffu_backend.as_str())?,
+                    unlocker: core_contract.clone(),
+                    asset: old_config.deposit_denom.clone(),
+                    withdraw_manager_contract: core_contract.clone(),
+                },
+            })?,
+            funds: vec![],
+            salt: Binary::from(salt),
+        });
 
         let instantiate_core_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
@@ -299,9 +355,9 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 deposit_forwarder_contract: old_config.deposit_forwarder_contract.into_string(),
                 deposit_denom: old_config.deposit_denom,
                 deposit_decimals: old_config.deposit_decimals,
-                deposit_flush_period: old_config.deposit_flush_period,
                 deposit_cost: old_config.deposit_cost,
                 deposits_cap: old_config.deposits_cap,
+                withdrawal_notifier_contract: waitosaur_holder_contract.into_string(),
                 allowlist_contract: old_config.allowlist_contract.into_string(),
                 exchange_rate_provider_contract: old_config
                     .exchange_rate_provider_contract
@@ -310,6 +366,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 waitosaur_contract: waitosaur_contract.into_string(),
                 last_deposit_flush_time: Some(last_deposit_flush_time),
                 total_deposited: Some(total_deposited),
+                current_deposit_balance: Some(deposit_balance.amount),
             })?,
             funds: vec![],
             salt: Binary::from(salt),

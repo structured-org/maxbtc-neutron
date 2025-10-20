@@ -10,3 +10,7 @@ import * as _4 from './maxbtcNeutronFeeCollector';
 export declare const MaxbtcNeutronFeeCollector: typeof _4;
 import * as _5 from './maxbtcNeutronToken';
 export declare const MaxbtcNeutronToken: typeof _5;
+import * as _6 from './maxbtcNeutronWaitosaurHolder';
+export declare const MaxbtcNeutronWaitosaurHolder: typeof _6;
+import * as _7 from './maxbtcOracleBinanceAumMock';
+export declare const MaxbtcOracleBinanceAumMock: typeof _7;

@@ -1,6 +1,7 @@
 use cosmwasm_std::{
     DecimalRangeExceeded, DivideByZeroError, Instantiate2AddressError, OverflowError, StdError,
 };
+use cw_utils::PaymentError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -71,9 +72,9 @@ pub enum ContractError {
     #[error("Flush deposit is allowed in DepositNeutron state only")]
     FlushDepositAllowedInDepositNeutron {},
 
-    #[error("Not enough time has elapsed since the last deposit flush")]
-    NotEnoughTimeElapsed {},
-
     #[error("Waitosaur is locked")]
     WaitosaurLocked {},
+
+    #[error("{0}")]
+    PaymentError(#[from] PaymentError),
 }

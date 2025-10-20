@@ -13,12 +13,11 @@ pub struct InstantiateMsg {
     pub salt: String,
     pub owner: String,
     pub operator: String,
+    pub ceffu_backend: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// Minimum number of seconds that must elapse between two deposit-flush operations
-    pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap

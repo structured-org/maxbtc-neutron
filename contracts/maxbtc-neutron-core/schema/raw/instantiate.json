@@ -8,7 +8,6 @@
     "deposit_cost",
     "deposit_decimals",
     "deposit_denom",
-    "deposit_flush_period",
     "deposit_forwarder_contract",
     "exchange_rate_provider_contract",
     "factory_contract",
@@ -16,12 +15,27 @@
     "operator",
     "owner",
     "token_contract",
+<<<<<<< HEAD
     "waitosaur_contract"
+=======
+    "withdrawal_notifier_contract"
+>>>>>>> aff42d9 (add withdrawals support)
   ],
   "properties": {
     "allowlist_contract": {
       "description": "Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC",
       "type": "string"
+    },
+    "current_deposit_balance": {
+      "description": "Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Uint128"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "deposit_cost": {
       "description": "One-off cost (Decimal) charged when a user deposits to mint maxBTC",
@@ -40,12 +54,6 @@
     "deposit_denom": {
       "description": "Denom for user deposits (e.g. IBC-transferred BTC)",
       "type": "string"
-    },
-    "deposit_flush_period": {
-      "description": "Minimum number of seconds that must elapse between two deposit-flush operations",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     },
     "deposit_forwarder_contract": {
       "description": "Contract that forwards freshly-received deposits to the custody chain.",
@@ -74,15 +82,6 @@
       "description": "This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR",
       "type": "string"
     },
-    "last_deposit_flush_time": {
-      "description": "Sets the last time a deposit flush was done (used in migration)",
-      "type": [
-        "integer",
-        "null"
-      ],
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "operator": {
       "description": "Operator address",
       "type": "string"
@@ -105,8 +104,13 @@
         }
       ]
     },
+<<<<<<< HEAD
     "waitosaur_contract": {
       "description": "Address of the waitosaur contract",
+=======
+    "withdrawal_notifier_contract": {
+      "description": "Contract that holds amount of BTC received from CEFFU",
+>>>>>>> aff42d9 (add withdrawals support)
       "type": "string"
     }
   },

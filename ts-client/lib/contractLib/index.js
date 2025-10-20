@@ -23,7 +23,7 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MaxbtcNeutronToken = exports.MaxbtcNeutronFeeCollector = exports.MaxbtcNeutronFactory = exports.MaxbtcNeutronExchangeRateProvider = exports.MaxbtcNeutronCore = exports.MaxbtcNeutronAllowList = void 0;
+exports.MaxbtcOracleBinanceAumMock = exports.MaxbtcNeutronWaitosaurHolder = exports.MaxbtcNeutronToken = exports.MaxbtcNeutronFeeCollector = exports.MaxbtcNeutronFactory = exports.MaxbtcNeutronExchangeRateProvider = exports.MaxbtcNeutronCore = exports.MaxbtcNeutronAllowList = void 0;
 const _0 = __importStar(require("./maxbtcNeutronAllowList"));
 exports.MaxbtcNeutronAllowList = _0;
 const _1 = __importStar(require("./maxbtcNeutronCore"));
@@ -36,3 +36,7 @@ const _4 = __importStar(require("./maxbtcNeutronFeeCollector"));
 exports.MaxbtcNeutronFeeCollector = _4;
 const _5 = __importStar(require("./maxbtcNeutronToken"));
 exports.MaxbtcNeutronToken = _5;
+const _6 = __importStar(require("./maxbtcNeutronWaitosaurHolder"));
+exports.MaxbtcNeutronWaitosaurHolder = _6;
+const _7 = __importStar(require("./maxbtcOracleBinanceAumMock"));
+exports.MaxbtcOracleBinanceAumMock = _7;

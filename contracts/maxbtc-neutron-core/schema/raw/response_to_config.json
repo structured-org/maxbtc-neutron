@@ -6,9 +6,9 @@
   "required": [
     "deposit_cost",
     "deposit_denom",
-    "deposit_flush_period",
     "fee_collector_contract",
-    "operator"
+    "operator",
+    "withdrawal_notifier_contract"
   ],
   "properties": {
     "deposit_cost": {
@@ -17,15 +17,13 @@
     "deposit_denom": {
       "type": "string"
     },
-    "deposit_flush_period": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "fee_collector_contract": {
       "type": "string"
     },
     "operator": {
+      "type": "string"
+    },
+    "withdrawal_notifier_contract": {
       "type": "string"
     }
   },

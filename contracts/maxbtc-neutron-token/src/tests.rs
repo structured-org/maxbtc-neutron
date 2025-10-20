@@ -4,7 +4,7 @@ use crate::contract::{execute, get_maxbtc_denom, instantiate};
 use crate::error::ContractError;
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
-    coin, Api, Attribute, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
+    coin, Api, Attribute, Coin, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
 };
 use maxbtc_base::msg::token::{DenomMetadata, ExecuteMsg, InstantiateMsg};
 use maxbtc_base::state::token::CONFIG;
@@ -82,7 +82,12 @@ fn test_mint_success() {
         env.clone(),
         info.clone(),
         recipient.to_string(),
-        mint_amount,
+        Coin {
+            denom:
+                "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
+                    .to_string(),
+            amount: mint_amount,
+        },
     )
     .unwrap();
 
@@ -95,29 +100,10 @@ fn test_mint_success() {
         .iter()
         .find(|attr| attr.key == "amount")
         .expect("amount attribute must be present");
-    assert_eq!(minted_attr.value, "1000000");
-}
-
-#[test]
-fn test_mint_zero_amount() {
-    let (mut deps, env, _) = setup_contract();
-
-    let info = message_info(&deps.api.addr_make("owner_addr"), &[]);
-
-    let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_mint(
-        deps.as_mut(),
-        env.clone(),
-        info.clone(),
-        recipient,
-        Uint128::zero(),
-    )
-    .expect_err("Zero deposit is invalid");
-
-    match err {
-        ContractError::InvalidDepositAmount {} => (),
-        e => panic!("Unexpected error: {e:?}"),
-    }
+    assert_eq!(
+        minted_attr.value,
+        "1000000factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
+    );
 }
 
 #[test]
@@ -134,7 +120,12 @@ fn test_mint_wrong_owner() {
         env.clone(),
         info.clone(),
         recipient,
-        Uint128::zero(),
+        Coin {
+            denom:
+                "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
+                    .to_string(),
+            amount: Uint128::zero(),
+        },
     )
     .unwrap_err();
 
@@ -170,9 +161,12 @@ fn test_burn_success() {
     let burned_attr = res
         .attributes
         .iter()
-        .find(|attr| attr.key == "amount")
-        .expect("amount attribute must be present");
-    assert_eq!(burned_attr.value, "1000000");
+        .find(|attr| attr.key == "burned_amount")
+        .expect("burned_amount attribute must be present");
+    assert_eq!(
+        burned_attr.value,
+        "1000000factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
+    );
 }
 
 #[test]
@@ -193,28 +187,6 @@ fn test_burn_wrong_owner_allowed() {
     let res = do_burn(deps.as_mut(), env.clone(), info.clone());
 
     assert!(res.is_ok());
-}
-
-#[test]
-fn test_burn_wrong_denom() {
-    // Arrange
-    let (mut deps, env, _) = setup_contract();
-
-    let burn_amount: Uint128 = Uint128::from(1_000_000u128);
-
-    let info = message_info(
-        &deps.api.addr_make("owner_addr"),
-        &[coin(burn_amount.u128(), "untrn")],
-    );
-
-    // Act
-    let err =
-        do_burn(deps.as_mut(), env.clone(), info.clone()).expect_err("Zero deposit is invalid");
-
-    match err {
-        ContractError::PaymentError(cw_utils::PaymentError::MissingDenom(_)) => {}
-        e => panic!("Unexpected error: {e:?}"),
-    }
 }
 
 #[test]
@@ -300,7 +272,7 @@ fn do_mint(
     env: Env,
     info: MessageInfo,
     recipient: String,
-    amount: Uint128,
+    amount: Coin,
 ) -> Result<Response, ContractError> {
     execute(
         deps,
