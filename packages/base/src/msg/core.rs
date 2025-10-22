@@ -1,11 +1,13 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
+use cosmwasm_std::{Coin, Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
+    /// Operator address
+    pub operator: String,
     /// Contract that owns and creates token factory tokens.
     pub token_contract: String,
     /// Admin contract with high privileges
@@ -41,6 +43,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
+    pub operator: Option<String>,
     pub deposit_forwarder_contract: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
@@ -95,41 +98,11 @@ pub struct SimulateDepositResponse {
 /// Response for querying config
 #[cw_serde]
 pub struct ConfigResponse {
+    pub operator: String,
     pub deposit_denom: String,
     pub deposit_flush_period: u64,
     pub deposit_cost: Decimal,
     pub fee_collector_contract: String,
-}
-
-/// Describes the queries that can be sent to the liquidation buffer contract.
-#[cw_serde]
-pub enum LiquidationBufferContractQueryMsg {
-    GetBTCBalance {},
-    GetMaxBTCBalance {},
-}
-
-// (This is the InstantiateMsg for the fee collector contract, shown for context)
-#[cw_serde]
-pub struct FeeCollectorInstantiateMsg {
-    pub owner: String,
-    pub core_contract: String,
-    pub fee_apy_reduction_percentage: Decimal,
-    pub collection_period_seconds: u64,
-    pub fee_denom: String,
-    pub maxbtc_decimals: u32,
-}
-
-/// New struct to hold parameters for instantiating the fee collector contract.
-#[cw_serde]
-pub struct FeeMinterParams {
-    /// The code ID of the fee collector contract wasm.
-    pub code_id: u64,
-    /// A unique salt for generating a predictable address with Instantiate2.
-    pub salt: Binary,
-    /// The percentage of APY to be taken as a fee.
-    pub fee_apy_reduction_percentage: Decimal,
-    /// The duration in seconds for each fee collection period.
-    pub collection_period_seconds: u64,
 }
 
 #[cw_serde]

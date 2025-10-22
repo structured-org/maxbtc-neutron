@@ -146,6 +146,7 @@ export interface InstantiateMsg {
    * Token factory sub-denom
    */
   maxbtc_denom: string;
+  operator: string;
   owner: string;
   salt: string;
   /**

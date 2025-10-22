@@ -304,6 +304,22 @@ fn test_deposit_wrong_denom() {
 }
 
 #[test]
+fn test_idle_tick_wrong_operator() {
+    let (mut deps, env, _) = setup_contract();
+
+    FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
+        .unwrap();
+
+    let random_user = deps.api.addr_make("random_user");
+
+    let info = message_info(&random_user, &[]);
+
+    let resp_err = execute_tick(deps.as_mut(), env.clone(), info).unwrap_err();
+
+    assert_eq!(resp_err, ContractError::Unauthorized {});
+}
+
+#[test]
 fn test_idle_tick() {
     let (mut deps, env, _) = setup_contract();
 
@@ -323,10 +339,9 @@ fn test_idle_tick() {
         .save(&mut deps.storage, &(now - (cfg.deposit_flush_period / 2)))
         .unwrap();
 
-    let owner = deps.api.addr_make("owner");
-    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(owner.as_str())).unwrap();
+    let operator = deps.api.addr_make("operator_addr");
 
-    let info = message_info(&owner, &[]);
+    let info = message_info(&operator, &[]);
 
     let resp_err = execute_tick(deps.as_mut(), env.clone(), info).unwrap_err();
 
@@ -353,10 +368,9 @@ fn test_ticks_cycle() {
         .save(&mut deps.storage, &(now - (cfg.deposit_flush_period + 10)))
         .unwrap();
 
-    let owner = deps.api.addr_make("owner");
-    cw_ownable::initialize_owner(&mut deps.storage, &deps.api, Some(owner.as_str())).unwrap();
+    let operator = deps.api.addr_make("operator_addr");
 
-    let info = message_info(&owner, &[]);
+    let info = message_info(&operator, &[]);
 
     let resp = execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
 
@@ -377,7 +391,7 @@ fn test_ticks_cycle() {
         resp.attributes,
         vec![
             Attribute::new("action".to_string(), "flush_deposits".to_string()),
-            Attribute::new("sender".to_string(), owner.to_string()),
+            Attribute::new("sender".to_string(), operator.to_string()),
             Attribute::new("flushed".to_string(), "500000".to_string()),
         ]
     );
@@ -424,6 +438,7 @@ fn default_instantiate_msg(
 ) -> InstantiateMsg {
     InstantiateMsg {
         owner: deps.api.addr_make("owner_addr").to_string(),
+        operator: deps.api.addr_make("operator_addr").to_string(),
         token_contract: deps.api.addr_make("token_contract_addr").to_string(),
         factory_contract: deps.api.addr_make("factory_contract_addr").to_string(),
         deposit_forwarder_contract: deps.api.addr_make("forwarder_addr").to_string(),

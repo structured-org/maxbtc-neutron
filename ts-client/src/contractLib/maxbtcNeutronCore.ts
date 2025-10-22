@@ -92,6 +92,7 @@ export interface ConfigResponse {
   deposit_denom: string;
   deposit_flush_period: number;
   fee_collector_contract: string;
+  operator: string;
 }
 /**
  * The contract's ownership info
@@ -187,6 +188,10 @@ export interface InstantiateMsg {
    * Sets the last time a deposit flush was done (used in migration)
    */
   last_deposit_flush_time?: number | null;
+  /**
+   * Operator address
+   */
+  operator: string;
   owner: string;
   /**
    * Contract that owns and creates token factory tokens.

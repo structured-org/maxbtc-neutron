@@ -11,6 +11,7 @@
     "deposit_flush_period",
     "fee_collector_params",
     "maxbtc_denom",
+    "operator",
     "owner",
     "salt",
     "valence_ibc_transfer_params"
@@ -64,6 +65,9 @@
     },
     "maxbtc_denom": {
       "description": "Token factory sub-denom",
+      "type": "string"
+    },
+    "operator": {
       "type": "string"
     },
     "owner": {

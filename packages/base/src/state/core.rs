@@ -8,6 +8,8 @@ pub struct Config {
     /// When `true`, user-initiated actions are rejected; can be set
     /// automatically on emergencies or manually by the owner.
     pub paused: bool,
+    /// Operator address
+    pub operator: Addr,
     /// Admin contract with high privileges
     pub factory_contract: Addr,
     /// Contract that owns and creates token factory tokens.

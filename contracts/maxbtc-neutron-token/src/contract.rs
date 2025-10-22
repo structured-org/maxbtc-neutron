@@ -256,6 +256,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             label: "maxBTC Core Contract".to_string(),
             msg: to_json_binary(&CoreInstantiateMsg {
                 owner: msg.factory_contract.to_string(),
+                operator: msg.operator.to_string(),
                 token_contract: env.contract.address.to_string(),
                 factory_contract: msg.factory_contract.to_string(),
                 deposit_forwarder_contract: old_config.deposit_forwarder_contract.into_string(),

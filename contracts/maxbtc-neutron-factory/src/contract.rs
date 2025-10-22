@@ -210,6 +210,7 @@ pub fn instantiate(
         label: "maxBTC Core Contract".to_string(),
         msg: to_json_binary(&CoreInstantiateMsg {
             owner: msg.owner.to_string(),
+            operator: msg.operator.to_string(),
             token_contract: token_contract.to_string(),
             factory_contract: env.contract.address.to_string(),
             deposit_forwarder_contract: deposit_forwarder_contract.to_string(),

@@ -17,6 +17,7 @@
       "exchange_rate_provider_contract",
       "factory_contract",
       "fee_collector_contract",
+      "operator",
       "owner",
       "token_contract"
     ],
@@ -84,6 +85,10 @@
         ],
         "format": "uint64",
         "minimum": 0.0
+      },
+      "operator": {
+        "description": "Operator address",
+        "type": "string"
       },
       "owner": {
         "type": "string"
@@ -413,6 +418,12 @@
               "null"
             ]
           },
+          "operator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "paused": {
             "type": [
               "boolean",
@@ -525,7 +536,8 @@
         "deposit_cost",
         "deposit_denom",
         "deposit_flush_period",
-        "fee_collector_contract"
+        "fee_collector_contract",
+        "operator"
       ],
       "properties": {
         "deposit_cost": {
@@ -540,6 +552,9 @@
           "minimum": 0.0
         },
         "fee_collector_contract": {
+          "type": "string"
+        },
+        "operator": {
           "type": "string"
         }
       },

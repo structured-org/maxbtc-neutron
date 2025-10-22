@@ -407,11 +407,15 @@ describe('Core', () => {
 
     describe('flush deposits', () => {
       it('try to flush deposits before flush period', async () => {
-        const { coreContractClient, account } = context;
-        const res = await coreContractClient.flushDeposits(
+        const { account, client, coreContractAddress } = context;
+
+        const res = await client.execute(
           account.address,
+          coreContractAddress,
+          { flush_deposits: {} },
           'auto',
         );
+
         expect(res.transactionHash).toBeTruthy();
         const tx = await context.client.getTx(res.transactionHash);
         const { events } = tx;
@@ -442,15 +446,17 @@ describe('Core', () => {
         await waitForTx(context.client, res.transactionHash);
       });
       it('flush deposits before flush period', async () => {
-        const { coreContractClient, account } = context;
+        const { client, coreContractAddress, account } = context;
         const forwarderBalanceBefore = (
           await context.client.getBalance(
             context.forwarderContractAddress,
             DEPOSIT_DENOM,
           )
         ).amount;
-        const res = await coreContractClient.flushDeposits(
+        const res = await client.execute(
           account.address,
+          coreContractAddress,
+          { flush_deposits: {} },
           'auto',
         );
         expect(res.transactionHash).toBeTruthy();
@@ -481,10 +487,11 @@ describe('Core', () => {
         );
       });
       it('no flush deposits right after the flush', async () => {
-        const { coreContractClient, account, client, coreContractAddress } =
-          context;
-        const res = await coreContractClient.flushDeposits(
+        const { account, client, coreContractAddress } = context;
+        const res = await client.execute(
           account.address,
+          coreContractAddress,
+          { flush_deposits: {} },
           'auto',
         );
         expect(res.transactionHash).toBeTruthy();
@@ -503,25 +510,6 @@ describe('Core', () => {
             (a) => a.key === 'status' && a.value === 'not_enough_time_elapsed',
           ),
         ).toBeTruthy();
-
-        console.log(
-          '======================== DEBUGGING ========================',
-        );
-        const totalDeposited = await client.queryContractRaw(
-          coreContractAddress,
-          toAscii('total_deposited'),
-        );
-        console.log(fromAscii(totalDeposited));
-
-        const lastDepositFlushTime = await client.queryContractRaw(
-          coreContractAddress,
-          toAscii('last_deposit_flush_time'),
-        );
-        console.log(fromAscii(lastDepositFlushTime));
-        console.log(
-          '==================== END OF DEBUGGING ====================',
-        );
-        // const lastTick = Number.parseInt(fromAscii(lastTickRaw), 10);
       });
     });
   });
@@ -587,6 +575,8 @@ describe('Core', () => {
         tokenCodeId,
         {
           core_code_id: coreCodeId,
+          operator:
+            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           salt: 'salt',
           factory_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
@@ -626,68 +616,6 @@ describe('Core', () => {
       );
 
       expect(lastDepositFlushTimeMigrated).toEqual(lastDepositFlushTime);
-    });
-
-    describe.skip('Claiming & Config', () => {
-      it('should allow owner to claim collected fees', async () => {
-        const {
-          feeCollectorContractClient,
-          client,
-          account,
-          coreContractAddress,
-        } = context;
-        const maxBtcDenom = `factory/${coreContractAddress}/maxbtc`;
-
-        const feeCollectorBalance = await client.getBalance(
-          feeCollectorContractClient.contractAddress,
-          maxBtcDenom,
-        );
-        // Ensure there's a balance to claim from the previous test
-        expect(BigInt(feeCollectorBalance.amount)).toBeGreaterThan(0n);
-
-        const recipientBalanceBefore = await client.getBalance(
-          account.address,
-          maxBtcDenom,
-        );
-        const claimAmount = { denom: maxBtcDenom, amount: '10' };
-
-        await feeCollectorContractClient.claim(
-          account.address,
-          { amount: claimAmount, recipient: account.address },
-          'auto',
-        );
-
-        const recipientBalanceAfter = await client.getBalance(
-          account.address,
-          maxBtcDenom,
-        );
-
-        const expectedBalance =
-          BigInt(recipientBalanceBefore.amount) + BigInt(claimAmount.amount);
-        expect(BigInt(recipientBalanceAfter.amount)).toEqual(expectedBalance);
-      });
-
-      it('should allow owner to update the configuration', async () => {
-        const { feeCollectorContractClient, account, client } = context;
-        const newPeriodHours = 2;
-        const newPercentage = '0.25';
-
-        const updateRes = await feeCollectorContractClient.updateConfig(
-          account.address,
-          {
-            collection_period_hours: newPeriodHours,
-            fee_apy_reduction_percentage: newPercentage,
-          },
-          'auto',
-        );
-        await waitForTx(client, updateRes.transactionHash);
-
-        const newConfig = await feeCollectorContractClient.queryConfig();
-        expect(newConfig.collection_period_seconds).toEqual(
-          newPeriodHours * 3600,
-        );
-        expect(newConfig.fee_apy_reduction_percentage).toEqual(newPercentage);
-      });
     });
   });
 });

@@ -13,6 +13,7 @@
     "exchange_rate_provider_contract",
     "factory_contract",
     "fee_collector_contract",
+    "operator",
     "owner",
     "token_contract"
   ],
@@ -80,6 +81,10 @@
       ],
       "format": "uint64",
       "minimum": 0.0
+    },
+    "operator": {
+      "description": "Operator address",
+      "type": "string"
     },
     "owner": {
       "type": "string"

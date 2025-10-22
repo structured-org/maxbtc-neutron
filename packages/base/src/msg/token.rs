@@ -64,6 +64,7 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct MigrateMsg {
     pub factory_contract: Addr,
+    pub operator: Addr,
     pub core_code_id: u64,
     pub salt: String,
 }

@@ -40,6 +40,7 @@ pub fn instantiate(
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
+        operator: deps.api.addr_validate(&msg.operator)?,
         token_contract: deps.api.addr_validate(&msg.token_contract)?,
         factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
         deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
@@ -108,11 +109,13 @@ pub(crate) fn execute_tick(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    assert_owner(deps.storage, &info.sender)?;
-
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
+    }
+
+    if cfg.operator != info.sender {
+        return Err(ContractError::Unauthorized {});
     }
 
     let current_state = FSM.get_current_state(deps.storage)?;
@@ -225,6 +228,11 @@ fn execute_update_config(
     if let Some(paused) = updates.paused {
         cfg.paused = paused;
         res = res.add_attribute("paused_updated", paused.to_string());
+    }
+    if let Some(operator) = updates.operator {
+        let validated_addr = deps.api.addr_validate(&operator)?;
+        cfg.operator = validated_addr.clone();
+        res = res.add_attribute("operator", operator.to_string());
     }
     if let Some(addr) = updates.deposit_forwarder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
@@ -341,9 +349,6 @@ fn execute_flush_deposits(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
-    // Only the current owner may flush deposit.
-    assert_owner(deps.storage, &info.sender)?;
-
     // check if state is not in DepositNeutron
     let current_state = FSM.get_current_state(deps.storage)?;
     if current_state != ContractState::DepositNeutron {
@@ -397,6 +402,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
+                operator: cfg.operator.to_string(),
                 deposit_denom: cfg.deposit_denom,
                 deposit_flush_period: cfg.deposit_flush_period,
                 deposit_cost: cfg.deposit_cost,

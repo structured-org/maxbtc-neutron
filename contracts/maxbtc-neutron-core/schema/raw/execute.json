@@ -295,6 +295,12 @@
             "null"
           ]
         },
+        "operator": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "paused": {
           "type": [
             "boolean",

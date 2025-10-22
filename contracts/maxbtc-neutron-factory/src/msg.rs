@@ -12,6 +12,7 @@ pub struct InstantiateMsg {
     pub code_ids: CodeIds,
     pub salt: String,
     pub owner: String,
+    pub operator: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
