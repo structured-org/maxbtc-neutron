@@ -9,7 +9,8 @@
     "deposit_forwarder_library_contract",
     "exchange_rate_provider_contract",
     "fee_collector_contract",
-    "token_contract"
+    "token_contract",
+    "waitosaur_contract"
   ],
   "properties": {
     "allowlist_contract": {
@@ -31,6 +32,9 @@
       "$ref": "#/definitions/Addr"
     },
     "token_contract": {
+      "$ref": "#/definitions/Addr"
+    },
+    "waitosaur_contract": {
       "$ref": "#/definitions/Addr"
     }
   },

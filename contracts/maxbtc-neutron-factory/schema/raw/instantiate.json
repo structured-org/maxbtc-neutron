@@ -4,6 +4,7 @@
   "description": "InstantiateMsg configures the contract on initialization.",
   "type": "object",
   "required": [
+    "binance_aum_contract",
     "code_ids",
     "deposit_cost",
     "deposit_decimals",
@@ -17,6 +18,10 @@
     "valence_ibc_transfer_params"
   ],
   "properties": {
+    "binance_aum_contract": {
+      "description": "Address of the binance AUM contract",
+      "type": "string"
+    },
     "code_ids": {
       "$ref": "#/definitions/CodeIds"
     },
@@ -96,7 +101,8 @@
         "deposit_forwarder_library_contract_code_id",
         "exchange_rate_provider_contract_code_id",
         "fee_collector_contract_code_id",
-        "token_code_id"
+        "token_code_id",
+        "waitosaur_contract_code_id"
       ],
       "properties": {
         "allowlist_contract_code_id": {
@@ -130,6 +136,11 @@
           "minimum": 0.0
         },
         "token_code_id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "waitosaur_contract_code_id": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

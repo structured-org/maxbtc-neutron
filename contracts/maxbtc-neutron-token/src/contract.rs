@@ -229,6 +229,12 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         let core_contract = deps.api.addr_humanize(&core_address)?;
         initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
 
+        let waitosaur_code_info = deps.querier.query_wasm_code_info(msg.waitosaur_code_id)?;
+        let waitosaur_checksum = waitosaur_code_info.checksum;
+        let waitosaur_address =
+            instantiate2_address(waitosaur_checksum.as_slice(), &canonical_self_address, salt)?;
+        let waitosaur_contract = deps.api.addr_humanize(&waitosaur_address)?;
+
         #[cosmwasm_schema::cw_serde]
         pub struct OldConfig {
             pub paused: bool,
@@ -245,6 +251,37 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         }
 
         let old_config = Item::<OldConfig>::new("config").load(deps.storage)?;
+
+        #[cosmwasm_schema::cw_serde]
+        pub struct WaitosaurConfig {
+            pub locker: Addr,
+            pub unlocker: Addr,
+            pub contract: Addr,
+            pub asset: String,
+        }
+
+        #[cosmwasm_schema::cw_serde]
+        pub struct WaitosaurInstantiateMsg {
+            pub config: WaitosaurConfig,
+            pub owner: String,
+        }
+
+        let instantiate_waitosaur_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
+            admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
+            code_id: msg.waitosaur_code_id,
+            label: "maxBTC Waitosaur Contract".to_string(),
+            msg: to_json_binary(&WaitosaurInstantiateMsg {
+                owner: msg.factory_contract.to_string(),
+                config: WaitosaurConfig {
+                    locker: core_contract.clone(),
+                    unlocker: core_contract.clone(),
+                    contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
+                    asset: old_config.deposit_denom.clone(),
+                },
+            })?,
+            funds: vec![],
+            salt: Binary::from(salt),
+        });
 
         let total_deposited = Item::<Uint128>::new("total_deposited").load(deps.storage)?;
         let last_deposit_flush_time =
@@ -270,6 +307,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                     .exchange_rate_provider_contract
                     .into_string(),
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
+                waitosaur_contract: waitosaur_contract.into_string(),
                 last_deposit_flush_time: Some(last_deposit_flush_time),
                 total_deposited: Some(total_deposited),
             })?,
@@ -284,6 +322,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         CONFIG.save(deps.storage, &new_config)?;
 
         return Ok(Response::new()
+            .add_message(instantiate_waitosaur_contract_msg)
             .add_message(instantiate_core_contract_msg)
             .add_attribute("core_contract", core_contract.to_string()));
     }

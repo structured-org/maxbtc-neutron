@@ -4,7 +4,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
-use crate::state::CodeIds;
+use crate::state::{CodeIds, WaitosaurConfig};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -30,6 +30,14 @@ pub struct InstantiateMsg {
     pub fee_collector_params: FeeMinterParams,
     /// Valence IBC transfer
     pub valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams,
+    /// Address of the binance AUM contract
+    pub binance_aum_contract: String,
+}
+
+#[cw_serde]
+pub struct WaitosaurInstantiateMsg {
+    pub config: WaitosaurConfig,
+    pub owner: String,
 }
 
 /// New struct to hold parameters for instantiating the fee collector contract.

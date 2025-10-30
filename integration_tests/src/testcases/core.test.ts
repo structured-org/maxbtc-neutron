@@ -62,6 +62,7 @@ describe('Core', () => {
     coreCodeId?: number;
     tokenCodeId?: number;
     factoryCodeId?: number;
+    waitosaurCodeId?: number;
 
     tokenContractClient?: InstanceType<typeof TokenContractClient>;
     tokenContractAddress?: string;
@@ -248,6 +249,22 @@ describe('Core', () => {
         expect(res.codeId).toBeGreaterThan(0);
         context.coreCodeId = res.codeId;
       }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../artifacts/contracts_thirdparty/waitasaurus.wasm',
+              ),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.waitosaurCodeId = res.codeId;
+      }
     });
 
     it('instantiate factory contract', async () => {
@@ -258,6 +275,7 @@ describe('Core', () => {
         factoryCodeId,
         tokenCodeId,
         coreCodeId,
+        waitosaurCodeId,
         feeCollectorCodeId,
         depositForwarderContractCodeId,
         depositForwarderLibraryContractCodeId,
@@ -282,6 +300,7 @@ describe('Core', () => {
               exchangeRateProviderContractCodeId,
             allowlist_contract_code_id: allowlistContractCodeId,
             fee_collector_contract_code_id: feeCollectorCodeId,
+            waitosaur_contract_code_id: waitosaurCodeId,
           },
           salt: 'salt',
           deposit_decimals: 6,
@@ -289,6 +308,8 @@ describe('Core', () => {
           deposit_cost: '0.01',
           deposit_flush_period: 60,
           maxbtc_denom: 'maxbtc',
+          binance_aum_contract:
+            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           fee_collector_params: {
             fee_apy_reduction_percentage: '0.1',
             collection_period_seconds: 10,

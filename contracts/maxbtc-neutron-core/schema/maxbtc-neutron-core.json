@@ -19,7 +19,8 @@
       "fee_collector_contract",
       "operator",
       "owner",
-      "token_contract"
+      "token_contract",
+      "waitosaur_contract"
     ],
     "properties": {
       "allowlist_contract": {
@@ -107,6 +108,10 @@
             "type": "null"
           }
         ]
+      },
+      "waitosaur_contract": {
+        "description": "Address of the waitosaur contract",
+        "type": "string"
       }
     },
     "additionalProperties": false,
@@ -427,6 +432,12 @@
           "paused": {
             "type": [
               "boolean",
+              "null"
+            ]
+          },
+          "waitosaur_contract": {
+            "type": [
+              "string",
               "null"
             ]
           }

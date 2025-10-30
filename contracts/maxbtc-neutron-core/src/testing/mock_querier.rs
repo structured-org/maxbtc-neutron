@@ -4,10 +4,12 @@ use cosmwasm_std::{
     ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
     SystemResult, Uint128, WasmQuery,
 };
+use maxbtc_base::msg::core::WaitosaurQueryMsg;
 use maxbtc_base::msg::{
     core::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse},
     token::QueryMsg as TokenConfigQueryMsg,
 };
+use maxbtc_base::state::core::WaitosaurState;
 use maxbtc_base::state::token::Config as TokenConfigResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -40,6 +42,8 @@ pub struct WasmMockQuerier {
     supplies: HashMap<String, Uint128>,
 
     allowed_recipient: bool,
+
+    waitosaur_state: WaitosaurState,
 
     denom: String,
 
@@ -75,6 +79,7 @@ impl WasmMockQuerier {
             allowed_recipient: true,
             denom: "maxBTC".to_string(),
             exchange_rate: Decimal::one(),
+            waitosaur_state: WaitosaurState::Unlocked {},
         }
     }
 
@@ -85,6 +90,10 @@ impl WasmMockQuerier {
 
     pub fn set_allowed_recipient(&mut self, allowed: bool) {
         self.allowed_recipient = allowed;
+    }
+
+    pub fn set_waitosaur_state(&mut self, state: WaitosaurState) {
+        self.waitosaur_state = state;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -175,6 +184,26 @@ impl WasmMockQuerier {
                 return match q {
                     AllowlistQueryMsg::IsAddressAllowed { .. } => {
                         let val = self.allowed_recipient;
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
+                    }
+                };
+            }
+            // If parse failed or unsupported => fallback
+            return self
+                .base
+                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
+                    contract_addr: contract_addr.into(),
+                    msg: msg.clone(),
+                }));
+        }
+
+        // Waitosaur contract
+        if contract_addr == "cosmwasm1603h02gmafrs2ar32mcx83885aqt8yms86smppjstl223swgyjps0f242x" {
+            let parsed: Result<WaitosaurQueryMsg, _> = from_json(msg);
+            if let Ok(q) = parsed {
+                return match q {
+                    WaitosaurQueryMsg::GetState {} => {
+                        let val = self.waitosaur_state.clone();
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };

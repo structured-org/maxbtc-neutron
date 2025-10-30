@@ -564,6 +564,21 @@ describe('Core', () => {
       expect(res.codeId).toBeGreaterThan(0);
       const tokenCodeId = res.codeId;
 
+      res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(
+              __dirname,
+              '../../artifacts/contracts_thirdparty/waitasaurus.wasm',
+            ),
+          ),
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+      const waitosaurCodeId = res.codeId;
+
       const fee = {
         amount: coins(5000, 'untrn'),
         gas: '2000000',
@@ -575,6 +590,9 @@ describe('Core', () => {
         tokenCodeId,
         {
           core_code_id: coreCodeId,
+          waitosaur_code_id: waitosaurCodeId,
+          binance_aum_contract:
+            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           operator:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           salt: 'salt',

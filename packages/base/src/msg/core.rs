@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Uint128};
+use cosmwasm_std::{Coin, Decimal, SignedDecimal256, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
@@ -33,6 +33,8 @@ pub struct InstantiateMsg {
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: String,
+    /// Address of the waitosaur contract
+    pub waitosaur_contract: String,
     /// Sets the last time a deposit flush was done (used in migration)
     pub last_deposit_flush_time: Option<u64>,
     /// Total amount of BTC deposited by the contract (used in migration)
@@ -51,6 +53,7 @@ pub struct UpdateConfigMsg {
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
+    pub waitosaur_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -123,6 +126,18 @@ pub enum ExchangeRateProviderQueryMsg {
 pub struct GetTwaerResponse {
     pub twaer: Decimal,
     pub published_at: u64,
+}
+
+#[cw_serde]
+#[derive(QueryResponses)]
+pub enum WaitosaurQueryMsg {
+    #[returns(crate::state::core::WaitosaurState)]
+    GetState {},
+}
+
+#[cw_serde]
+pub enum WaitosaurExecuteMsg {
+    Lock { amount: SignedDecimal256 },
 }
 
 #[cw_serde]
