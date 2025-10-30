@@ -591,6 +591,7 @@ describe('Core', () => {
         {
           core_code_id: coreCodeId,
           waitosaur_code_id: waitosaurCodeId,
+          waitosaur_unlocker: account.address,
           binance_aum_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           operator:

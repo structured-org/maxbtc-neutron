@@ -151,6 +151,10 @@ export interface InstantiateMsg {
      * Valence IBC transfer
      */
     valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams;
+    /**
+     * Address of the waitosaur unlocker
+     */
+    waitosaur_unlocker: string;
 }
 export interface CodeIds {
     allowlist_contract_code_id: number;

@@ -15,7 +15,8 @@
     "operator",
     "owner",
     "salt",
-    "valence_ibc_transfer_params"
+    "valence_ibc_transfer_params",
+    "waitosaur_unlocker"
   ],
   "properties": {
     "binance_aum_contract": {
@@ -88,6 +89,10 @@
           "$ref": "#/definitions/ValenceIbcTransferLibraryConfigParams"
         }
       ]
+    },
+    "waitosaur_unlocker": {
+      "description": "Address of the waitosaur unlocker",
+      "type": "string"
     }
   },
   "additionalProperties": false,

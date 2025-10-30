@@ -32,6 +32,8 @@ pub struct InstantiateMsg {
     pub valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams,
     /// Address of the binance AUM contract
     pub binance_aum_contract: String,
+    /// Address of the waitosaur unlocker
+    pub waitosaur_unlocker: String,
 }
 
 #[cw_serde]

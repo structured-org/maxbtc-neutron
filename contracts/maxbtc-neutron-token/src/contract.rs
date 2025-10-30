@@ -274,7 +274,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 owner: msg.factory_contract.to_string(),
                 config: WaitosaurConfig {
                     locker: core_contract.clone(),
-                    unlocker: core_contract.clone(),
+                    unlocker: deps.api.addr_validate(&msg.waitosaur_unlocker)?,
                     contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
                     asset: old_config.deposit_denom.clone(),
                 },

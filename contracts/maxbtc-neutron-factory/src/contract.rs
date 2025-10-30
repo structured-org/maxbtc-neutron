@@ -144,7 +144,7 @@ pub fn instantiate(
             owner: msg.owner.to_string(),
             config: WaitosaurConfig {
                 locker: core_contract.clone(),
-                unlocker: core_contract.clone(),
+                unlocker: deps.api.addr_validate(&msg.waitosaur_unlocker)?,
                 contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
                 asset: msg.deposit_denom.clone(),
             },
