@@ -73,4 +73,7 @@ pub enum ContractError {
 
     #[error("Not enough time has elapsed since the last deposit flush")]
     NotEnoughTimeElapsed {},
+
+    #[error("Waitosaur is locked")]
+    WaitosaurLocked {},
 }

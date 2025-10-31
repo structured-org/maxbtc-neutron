@@ -201,6 +201,10 @@ export interface InstantiateMsg {
    * Total amount of BTC deposited by the contract (used in migration)
    */
   total_deposited?: Uint128 | null;
+  /**
+   * Address of the waitosaur contract
+   */
+  waitosaur_contract: string;
 }
 
 

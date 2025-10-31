@@ -2,8 +2,9 @@ use crate::error::ContractError;
 use crate::msg::{
     ExecuteMsg, InputAddr, InstantiateMsg, MigrateMsg, QueryMsg, ValenceBaseAccountInstantiateMsg,
     ValenceIbcTransferLibraryConfigParams, ValenceIbcTransferLibraryInstantiateMsg,
+    WaitosaurInstantiateMsg,
 };
-use crate::state::{State, STATE};
+use crate::state::{State, WaitosaurConfig, STATE};
 use cosmwasm_std::{
     entry_point, instantiate2_address, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo,
     Response, StdResult, WasmMsg,
@@ -121,7 +122,36 @@ pub fn instantiate(
     .map_err(ContractError::Instantiate2Error)?;
     let core_contract = deps.api.addr_humanize(&core_address)?;
 
+    let waitosaur_code_info = deps
+        .querier
+        .query_wasm_code_info(msg.code_ids.waitosaur_contract_code_id)?;
+    let waitosaur_checksum = waitosaur_code_info.checksum;
+    let waitosaur_address = instantiate2_address(
+        waitosaur_checksum.as_slice(),
+        &canonical_creator, // The creator is this core contract
+        salt,
+    )
+    .map_err(ContractError::Instantiate2Error)?;
+    let waitosaur_contract = deps.api.addr_humanize(&waitosaur_address)?;
+
     // Instantiate contracts messages
+
+    let instantiate_waitosaur_msg = WasmMsg::Instantiate2 {
+        admin: Some(env.contract.address.to_string()), // The core contract owner is admin
+        code_id: msg.code_ids.waitosaur_contract_code_id,
+        label: "maxBTC Waitosaur Contract".to_string(),
+        msg: to_json_binary(&WaitosaurInstantiateMsg {
+            owner: msg.owner.to_string(),
+            config: WaitosaurConfig {
+                locker: core_contract.clone(),
+                unlocker: deps.api.addr_validate(&msg.waitosaur_unlocker)?,
+                contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
+                asset: msg.deposit_denom.clone(),
+            },
+        })?,
+        funds: vec![],
+        salt: Binary::from(salt),
+    };
 
     let instantiate_allowlist_msg = WasmMsg::Instantiate2 {
         admin: Some(env.contract.address.to_string()), // The core contract owner is admin
@@ -222,6 +252,7 @@ pub fn instantiate(
             allowlist_contract: allowlist_contract.to_string(),
             exchange_rate_provider_contract: exchange_rate_provider_contract.to_string(),
             fee_collector_contract: fee_collector_contract.to_string(),
+            waitosaur_contract: waitosaur_contract.to_string(),
             last_deposit_flush_time: None,
             total_deposited: None,
         })?,
@@ -237,12 +268,14 @@ pub fn instantiate(
         deposit_forwarder_contract,
         deposit_forwarder_library_contract,
         core_contract,
+        waitosaur_contract,
     };
 
     STATE.save(deps.storage, &state)?;
 
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
+        .add_message(instantiate_waitosaur_msg)
         .add_message(instantiate_allowlist_msg)
         .add_message(instantiate_exchange_rate_provider_msg)
         .add_message(instantiate_token_factory_msg)

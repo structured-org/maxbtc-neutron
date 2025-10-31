@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, Uint128};
+use cosmwasm_std::{Addr, Decimal, SignedDecimal256, Uint128};
 use cw_storage_plus::Item;
 use maxbtc_helpers::fsm::{Fsm, Transition};
 
@@ -35,6 +35,8 @@ pub struct Config {
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,
+    /// Address of the waitosaur contract
+    pub waitosaur_contract: Addr,
 }
 
 /// A single global config item
@@ -52,6 +54,15 @@ pub enum ContractState {
     DepositNeutron,
     DepositPending,
     DepositJLP,
+}
+
+#[cw_serde]
+pub enum WaitosaurState {
+    Locked {
+        amount: SignedDecimal256,
+        at_timestamp: u64,
+    },
+    Unlocked {},
 }
 
 const TRANSITIONS: &[Transition<ContractState>] = &[

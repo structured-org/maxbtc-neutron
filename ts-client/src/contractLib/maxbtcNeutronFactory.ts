@@ -112,11 +112,16 @@ export interface State {
   exchange_rate_provider_contract: Addr;
   fee_collector_contract: Addr;
   token_contract: Addr;
+  waitosaur_contract: Addr;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
  */
 export interface InstantiateMsg {
+  /**
+   * Address of the binance AUM contract
+   */
+  binance_aum_contract: string;
   code_ids: CodeIds;
   /**
    * One-off cost (Decimal) charged when a user deposits to mint maxBTC
@@ -153,6 +158,10 @@ export interface InstantiateMsg {
    * Valence IBC transfer
    */
   valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams;
+  /**
+   * Address of the waitosaur unlocker
+   */
+  waitosaur_unlocker: string;
 }
 export interface CodeIds {
   allowlist_contract_code_id: number;
@@ -162,6 +171,7 @@ export interface CodeIds {
   exchange_rate_provider_contract_code_id: number;
   fee_collector_contract_code_id: number;
   token_code_id: number;
+  waitosaur_contract_code_id: number;
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.
