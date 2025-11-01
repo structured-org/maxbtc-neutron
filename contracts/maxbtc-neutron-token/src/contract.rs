@@ -326,7 +326,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             .querier
             .query_balance(env.contract.address.to_string(), &old_config.deposit_denom)?;
 
-        let instantiate_withdrawal_notifier_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
+        let instantiate_waitosaur_holder_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
             code_id: msg.waitosaur_holder_code_id,
             label: "maxBTC Withdrawal Notifier Contract".to_string(),
@@ -357,14 +357,13 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 deposit_decimals: old_config.deposit_decimals,
                 deposit_cost: old_config.deposit_cost,
                 deposits_cap: old_config.deposits_cap,
-                withdrawal_notifier_contract: waitosaur_holder_contract.into_string(),
+                waitosaur_holder_contract: waitosaur_holder_contract.into_string(),
                 allowlist_contract: old_config.allowlist_contract.into_string(),
                 exchange_rate_provider_contract: old_config
                     .exchange_rate_provider_contract
                     .into_string(),
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
                 waitosaur_contract: waitosaur_contract.into_string(),
-                last_deposit_flush_time: Some(last_deposit_flush_time),
                 total_deposited: Some(total_deposited),
                 current_deposit_balance: Some(deposit_balance.amount),
             })?,
@@ -380,6 +379,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
         return Ok(Response::new()
             .add_message(instantiate_waitosaur_contract_msg)
+            .add_message(instantiate_waitosaur_holder_contract_msg)
             .add_message(instantiate_core_contract_msg)
             .add_attribute("core_contract", core_contract.to_string()));
     }

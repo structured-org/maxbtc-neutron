@@ -25,11 +25,18 @@ pub fn query(_deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::B
     match msg {
         QueryMsg::GetData {} => Ok(to_json_binary(&GetDataResponse {
             last_published_data: Some(ConsensusOutcome {
+                round: 1,
+                timestamp: 2,
                 data: BinanceData {
+                    unimmr: SignedDecimal256::zero(),
+                    positions: vec![],
+                    um_balance_usdt: SignedDecimal256::zero(),
                     spot_balances: vec![SpotBalance {
                         asset: "untrn".to_string(),
-                        amount: SignedDecimal256::from_str("10.23").unwrap(),
+                        amount: SignedDecimal256::from_str("200000").unwrap(),
                     }],
+                    pm_account_actual_equity: SignedDecimal256::zero(),
+                    withdrawable_usdt: SignedDecimal256::zero(),
                 },
             }),
         })?),

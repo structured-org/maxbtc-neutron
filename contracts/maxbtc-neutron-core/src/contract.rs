@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 pub(crate) use crate::utils::dec_to_amount;
 use cosmwasm_std::{
-    entry_point, to_json_binary, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
+    entry_point, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
     MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
@@ -21,8 +21,8 @@ use maxbtc_base::msg::{
 };
 use maxbtc_base::state::{
     core::{
-        Batch, ContractState, ACTIVE_BATCH, BATCH_ID_COUNTER, CURRENT_DEPOSIT_BALANCE,
-        FINALIZED_BATCHES, FSM, WITHDRAWING_BATCH, WaitosaurState, FSM, Config, CONFIG, TOTAL_DEPOSITED
+        Batch, Config, ContractState, WaitosaurState, ACTIVE_BATCH, BATCH_ID_COUNTER, CONFIG,
+        CURRENT_DEPOSIT_BALANCE, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitosaurHolderState,
 };
@@ -61,7 +61,7 @@ pub fn instantiate(
         // Store the predicted address in the config
         fee_collector_contract: deps.api.addr_validate(&msg.fee_collector_contract)?,
         waitosaur_contract: deps.api.addr_validate(&msg.waitosaur_contract)?,
-        waitosaur_holder_contract: deps.api.addr_validate(&msg.withdrawal_notifier_contract)?,
+        waitosaur_holder_contract: deps.api.addr_validate(&msg.waitosaur_holder_contract)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -161,12 +161,12 @@ fn execute_tick_withdraw_pending(deps: DepsMut) -> Result<Response, ContractErro
     let mut msgs = vec![];
 
     if let Some(mut withdrawing_batch) = withdrawing_batch {
-        let waitosaur_state = deps.querier.query_wasm_smart::<WaitosaurHolderState>(
+        let waitosaur_holder_state = deps.querier.query_wasm_smart::<WaitosaurHolderState>(
             &cfg.waitosaur_holder_contract,
             &WaitsaurHolderQueryMsg::GetState {},
         )?;
 
-        if let WaitosaurHolderState::Locked { amount, .. } = waitosaur_state {
+        if let WaitosaurHolderState::Locked { amount, .. } = waitosaur_holder_state {
             withdrawing_batch.collected_amount += amount;
 
             attrs.push(Attribute::new(
@@ -428,6 +428,8 @@ fn execute_update_config(
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.waitosaur_contract = validated_addr.clone();
         res = res.add_attribute("waitosaur_contract_updated", validated_addr.to_string());
+    }
+
     if let Some(addr) = updates.withdrawal_notifier_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.waitosaur_holder_contract = validated_addr.clone();
@@ -715,7 +717,7 @@ fn execute_flush_deposits(
         msgs.push(msg);
     }
 
-    // Set wairosaur in lock with the amount to flush
+    // Set waitosaur observer lock with the amount to flush
     let lock_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: cfg.waitosaur_contract.to_string(),
         msg: to_json_binary(&WaitosaurExecuteMsg::Lock {

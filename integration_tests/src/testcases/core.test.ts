@@ -59,6 +59,7 @@ describe('Core', () => {
     ceffuBackendAccount?: AccountData;
     client?: SigningCosmWasmClient;
     operatorClient?: SigningCosmWasmClient;
+    ceffuBackendClient?: SigningCosmWasmClient;
     neutronClient?: InstanceType<typeof NeutronClient>;
 
     coreContractAddress?: string;
@@ -141,6 +142,14 @@ describe('Core', () => {
     context.operatorClient = await SigningCosmWasmClient.connectWithSigner(
       `http://127.0.0.1:${context.park.ports.neutron.rpc}`,
       context.operatorWallet,
+      {
+        gasPrice: GasPrice.fromString('0.025untrn'),
+      },
+    );
+
+    context.ceffuBackendClient = await SigningCosmWasmClient.connectWithSigner(
+      `http://127.0.0.1:${context.park.ports.neutron.rpc}`,
+      context.ceffuBackendWallet,
       {
         gasPrice: GasPrice.fromString('0.025untrn'),
       },
@@ -283,7 +292,7 @@ describe('Core', () => {
             fs.readFileSync(
               join(
                 __dirname,
-                '../../../artifacts/maxbtc_neutron_waitsaur_holder.wasm',
+                '../../../artifacts/maxbtc_neutron_waitosaur_holder.wasm',
               ),
             ),
           ),
@@ -357,6 +366,7 @@ describe('Core', () => {
         allowlistContractCodeId,
         waitosaurHolderContractCodeId,
         ceffuBackendAccount,
+        binanceAumOracleAddress,
       } = context;
 
       const instantiateRes = await MaxbtcNeutronFactory.Client.instantiate(
@@ -385,8 +395,7 @@ describe('Core', () => {
           deposit_denom: DEPOSIT_DENOM,
           deposit_cost: '0.01',
           maxbtc_denom: 'maxbtc',
-          binance_aum_contract:
-            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
+          binance_aum_contract: binanceAumOracleAddress,
           waitosaur_unlocker: account.address,
           fee_collector_params: {
             fee_apy_reduction_percentage: '0.1',
@@ -434,7 +443,7 @@ describe('Core', () => {
     });
 
     it('get contracts addresses', async () => {
-      const { client, operatorClient } = context;
+      const { client, operatorClient, ceffuBackendClient } = context;
 
       context.factoryState = await context.factoryContractClient.queryState();
 
@@ -477,7 +486,7 @@ describe('Core', () => {
       context.waitosaurHolderContractAddress =
         context.factoryState.waitosaur_holder_contract;
       context.waitosaurHolderContractClient = new WaitosaurHolderContractClient(
-        operatorClient,
+        ceffuBackendClient,
         context.waitosaurHolderContractAddress,
       );
     });
@@ -558,30 +567,6 @@ describe('Core', () => {
           coreContractClient.tick(account.address, 'auto'),
         ).rejects.toThrow(/Unauthorized/);
       });
-      it('try to tick to flush deposits with not enough deposit amount', async () => {
-        const { coreContractOperatorClient, operatorAccount } = context;
-
-        const res = await coreContractOperatorClient.tick(
-          operatorAccount.address,
-          'auto',
-        );
-        expect(res.transactionHash).toBeTruthy();
-
-        const state = await coreContractOperatorClient.queryContractState();
-        expect(state).toEqual('idle');
-      });
-      it('update config', async () => {
-        const { coreContractClient, account } = context;
-        const res = await coreContractClient.updateConfig(
-          account.address,
-          {
-            deposit_flush_min_amount: '150000',
-          } as any,
-          'auto',
-        );
-        expect(res.transactionHash).toBeTruthy();
-        await waitForTx(context.client, res.transactionHash);
-      });
       it('tick to flush deposits', async () => {
         const { coreContractOperatorClient, operatorAccount } = context;
         const forwarderBalanceBefore = (
@@ -627,6 +612,8 @@ describe('Core', () => {
 
       it('unlock waitosaur', async () => {
         const { client, account, waitosaurContractAddress } = context;
+
+        // Amount to unlock should be the same as the amount of the deposit and set in the maxbtc-oracle-binance-aum-mock contract
 
         const result = await client.execute(
           account.address,
@@ -807,14 +794,14 @@ describe('Core', () => {
       expect(state).toEqual('withdraw_j_l_p');
 
       const depositBalance = await coreContractClient.queryDepositBalance();
-      expect(depositBalance).toEqual('27421');
+      expect(depositBalance).toEqual('0');
 
       const withdrawingBatch = await coreContractClient.queryWithdrawingBatch();
       expect(withdrawingBatch).toEqual({
         batch_id: 2,
         btc_requested: '121821',
         maxbtc_burned: '120000',
-        collected_amount: '71062',
+        collected_amount: '98483',
         paid_amount: '0',
         collector_historical_balance: '0',
       });
@@ -832,29 +819,47 @@ describe('Core', () => {
       expect(coreState).toEqual('withdraw_pending');
     });
 
-    it('try to tick to withdraw neutron without ceffu notification', async () => {
+    it('try to tick to withdraw neutron without ceffu notification, stays in withdraw_pending', async () => {
       const { coreContractOperatorClient, operatorAccount } = context;
 
-      await expect(
-        coreContractOperatorClient.tick(operatorAccount.address, 'auto'),
-      ).rejects.toThrow(/Batch not finalized/);
+      const res = await coreContractOperatorClient.tick(
+        operatorAccount.address,
+        'auto',
+      );
+      expect(res.transactionHash).toBeTruthy();
 
       const coreState = await context.coreContractClient.queryContractState();
       expect(coreState).toEqual('withdraw_pending');
     });
 
-    it('apply withdrawal notification data', async () => {
-      const {
-        operatorAccount,
-        waitosaurHolderContractClient: withdrawalNotifierContractClient,
-      } = context;
+    it('lock waitosaur holder', async () => {
+      const { ceffuBackendAccount, waitosaurHolderContractClient } = context;
 
-      const res = await withdrawalNotifierContractClient.lock(
-        operatorAccount.address,
+      const res = await waitosaurHolderContractClient.lock(
+        ceffuBackendAccount.address,
         { amount: '50000' },
         'auto',
       );
       expect(res.transactionHash).toBeTruthy();
+    });
+
+    it('try to tick without actual means to unlock waitosaur', async () => {
+      const { coreContractOperatorClient, operatorAccount } = context;
+
+      await expect(
+        coreContractOperatorClient.tick(operatorAccount.address, 'auto'),
+      ).rejects.toThrow(/Insufficient asset amount to unlock/);
+    });
+
+    it('send wBTC to waitosaur holder to be unlocked', async () => {
+      const { account, waitosaurHolderContractAddress, client } = context;
+
+      await client.sendTokens(
+        account.address,
+        waitosaurHolderContractAddress,
+        [{ denom: DEPOSIT_DENOM, amount: '50000' }],
+        { amount: [{ denom: 'untrn', amount: '200000' }], gas: '2000000' },
+      );
     });
 
     it('tick to idle', async () => {
@@ -878,7 +883,7 @@ describe('Core', () => {
         batch_id: 2,
         btc_requested: '121821',
         maxbtc_burned: '120000',
-        collected_amount: '121062',
+        collected_amount: '148483',
         paid_amount: '0',
         collector_historical_balance: '0',
       });
@@ -964,7 +969,7 @@ describe('Core', () => {
       expect(
         BigInt(operatorAccountBTCBalanceAfter2) -
           BigInt(operatorAccountBTCBalanceAfter),
-      ).toEqual(BigInt('50442'));
+      ).toEqual(BigInt('61867'));
     });
 
     it('try to withdraw from not finalized batch', async () => {

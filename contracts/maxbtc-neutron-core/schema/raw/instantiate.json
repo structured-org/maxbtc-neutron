@@ -15,11 +15,8 @@
     "operator",
     "owner",
     "token_contract",
-<<<<<<< HEAD
-    "waitosaur_contract"
-=======
-    "withdrawal_notifier_contract"
->>>>>>> aff42d9 (add withdrawals support)
+    "waitosaur_contract",
+    "waitosaur_holder_contract"
   ],
   "properties": {
     "allowlist_contract": {
@@ -104,13 +101,12 @@
         }
       ]
     },
-<<<<<<< HEAD
     "waitosaur_contract": {
       "description": "Address of the waitosaur contract",
-=======
-    "withdrawal_notifier_contract": {
-      "description": "Contract that holds amount of BTC received from CEFFU",
->>>>>>> aff42d9 (add withdrawals support)
+      "type": "string"
+    },
+    "waitosaur_holder_contract": {
+      "description": "Address of the waitosaur holder contract",
       "type": "string"
     }
   },

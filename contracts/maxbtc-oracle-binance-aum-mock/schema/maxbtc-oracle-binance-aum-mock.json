@@ -53,14 +53,37 @@
         "BinanceData": {
           "type": "object",
           "required": [
-            "spot_balances"
+            "pm_account_actual_equity",
+            "positions",
+            "spot_balances",
+            "um_balance_usdt",
+            "unimmr",
+            "withdrawable_usdt"
           ],
           "properties": {
+            "pm_account_actual_equity": {
+              "$ref": "#/definitions/SignedDecimal256"
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Position"
+              }
+            },
             "spot_balances": {
               "type": "array",
               "items": {
                 "$ref": "#/definitions/SpotBalance"
               }
+            },
+            "um_balance_usdt": {
+              "$ref": "#/definitions/SignedDecimal256"
+            },
+            "unimmr": {
+              "$ref": "#/definitions/SignedDecimal256"
+            },
+            "withdrawable_usdt": {
+              "$ref": "#/definitions/SignedDecimal256"
             }
           },
           "additionalProperties": false
@@ -68,16 +91,43 @@
         "ConsensusOutcome_for_BinanceData": {
           "type": "object",
           "required": [
-            "data"
+            "data",
+            "round",
+            "timestamp"
           ],
           "properties": {
             "data": {
-              "description": "The data submitted by the messengers",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/BinanceData"
-                }
-              ]
+              "$ref": "#/definitions/BinanceData"
+            },
+            "round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "timestamp": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
+          "additionalProperties": false
+        },
+        "Position": {
+          "type": "object",
+          "required": [
+            "amount",
+            "pnl",
+            "symbol"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/SignedDecimal256"
+            },
+            "pnl": {
+              "$ref": "#/definitions/SignedDecimal256"
+            },
+            "symbol": {
+              "type": "string"
             }
           },
           "additionalProperties": false

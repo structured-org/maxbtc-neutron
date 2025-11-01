@@ -102,9 +102,6 @@ fn execute_unlock(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response
                 .querier
                 .query_balance(env.contract.address, config.asset.as_str())?;
 
-            println!("waitosaur_balance: {waitosaur_balance:?}");
-            println!("amount: {amount:?}");
-
             if waitosaur_balance.amount < amount {
                 return Err(ContractError::InsufficientAssetAmount {});
             }

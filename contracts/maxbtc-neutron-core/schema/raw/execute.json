@@ -335,11 +335,13 @@
             "null"
           ]
         },
-<<<<<<< HEAD
         "waitosaur_contract": {
-=======
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "withdrawal_notifier_contract": {
->>>>>>> aff42d9 (add withdrawals support)
           "type": [
             "string",
             "null"

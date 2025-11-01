@@ -11,18 +11,12 @@ use cosmwasm_std::{
 use cw_utils::PaymentError;
 use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, WaitosaurExecuteMsg};
 use maxbtc_base::msg::{
-    core::{ExecuteMsg, InstantiateMsg},
-    token::ExecuteMsg as TokenExecuteMsg,
-    waitosaur_holder::ExecuteMsg as WaitosaurHolderExecuteMsg,
-};
-use maxbtc_base::state::core::{
-    ContractState, OwnedDeps, Response, SubMsg, Uint128, WaitosaurState, WasmMsg, CONFIG, FSM,
-    LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED,
+    token::ExecuteMsg as TokenExecuteMsg, waitosaur_holder::ExecuteMsg as WaitosaurHolderExecuteMsg,
 };
 use maxbtc_base::state::{
     core::{
-        Batch, ContractState, ACTIVE_BATCH, CONFIG, CURRENT_DEPOSIT_BALANCE, FINALIZED_BATCHES,
-        FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
+        Batch, ContractState, WaitosaurState, ACTIVE_BATCH, CONFIG, CURRENT_DEPOSIT_BALANCE,
+        FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -955,7 +949,7 @@ fn test_withdraw_pending_tick_collect_ceffu_amount() {
         Response::new()
             .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr:
-                    "cosmwasm1tytt4glle6a0aqy8qkntcuwznh68zrsjrdcdhfa0hw33arr49n9s0752zt"
+                    "cosmwasm1nylrq8x440yzqme262zy5875tt7vyn5yghjg5u807gms0359zl9svnrlrp"
                         .to_string(),
                 msg: to_json_binary(&WaitosaurHolderExecuteMsg::Unlock {}).unwrap(),
                 funds: vec![],
@@ -1285,13 +1279,13 @@ fn test_idle_tick_goes_to_deposit_neutron() {
                 to_address: cfg.deposit_forwarder_contract.to_string(),
                 amount: vec![Coin {
                     denom: cfg.deposit_denom,
-                    amount: Uint128::new(500_000),
+                    amount: Uint128::new(200_000),
                 }],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: cfg.waitosaur_contract.to_string(),
                 msg: to_json_binary(&WaitosaurExecuteMsg::Lock {
-                    amount: SignedDecimal256::from(Decimal::from_atomics(500_000u64, 0).unwrap()),
+                    amount: SignedDecimal256::from(Decimal::from_atomics(200_000u64, 0).unwrap()),
                 })
                 .unwrap(),
                 funds: vec![],
@@ -1320,11 +1314,6 @@ fn test_ticks_deposit_cycle() {
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // // Deposit buffer: 0.5 wBTC.
-    // let buffer = Uint128::new(500_000);
-    // deps.querier
-    //     .set_balance(env.contract.address.as_ref(), "wBTC", buffer);
-
     // Set CURRENT_DEPOSIT_BALANCE so that *more* than `deposit_flush_min_amount`
     CURRENT_DEPOSIT_BALANCE
         .save(&mut deps.storage, &Uint128::new(200_000u128))
@@ -1338,13 +1327,25 @@ fn test_ticks_deposit_cycle() {
 
     assert_eq!(
         resp.messages,
-        vec![SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
-            to_address: cfg.deposit_forwarder_contract.to_string(),
-            amount: vec![Coin {
-                denom: cfg.deposit_denom,
-                amount: Uint128::new(200_000),
-            }],
-        }))]
+        vec![
+            SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
+                to_address: cfg.deposit_forwarder_contract.to_string(),
+                amount: vec![Coin {
+                    denom: cfg.deposit_denom,
+                    amount: Uint128::new(200_000),
+                }],
+            })),
+            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.waitosaur_contract.to_string(),
+                msg: to_json_binary(&WaitosaurExecuteMsg::Lock {
+                    amount: SignedDecimal256::from(
+                        Decimal::from_atomics(Uint128::new(200_000u128), 0).unwrap()
+                    ),
+                })
+                .unwrap(),
+                funds: vec![],
+            }))
+        ]
     );
 
     assert_eq!(
@@ -1413,8 +1414,7 @@ fn default_instantiate_msg(
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_contract: deps.api.addr_make("fee_collector_addr").to_string(),
         waitosaur_contract: deps.api.addr_make("waitosaur_addr").to_string(),
-        last_deposit_flush_time: None,
-        withdrawal_notifier_contract: deps.api.addr_make("withdrawal_notifier_addr").to_string(),
+        waitosaur_holder_contract: deps.api.addr_make("waitosaur_holder_contract").to_string(),
         total_deposited: None,
         current_deposit_balance: None,
     }

@@ -105,24 +105,18 @@ export interface State {
     exchange_rate_provider_contract: Addr;
     fee_collector_contract: Addr;
     token_contract: Addr;
-<<<<<<< HEAD
     waitosaur_contract: Addr;
-=======
     waitosaur_holder_contract: Addr;
->>>>>>> aff42d9 (add withdrawals support)
 }
 /**
  * InstantiateMsg configures the contract on initialization.
  */
 export interface InstantiateMsg {
-<<<<<<< HEAD
     /**
      * Address of the binance AUM contract
      */
     binance_aum_contract: string;
-=======
     ceffu_backend: string;
->>>>>>> aff42d9 (add withdrawals support)
     code_ids: CodeIds;
     /**
      * One-off cost (Decimal) charged when a user deposits to mint maxBTC
@@ -168,11 +162,8 @@ export interface CodeIds {
     exchange_rate_provider_contract_code_id: number;
     fee_collector_contract_code_id: number;
     token_code_id: number;
-<<<<<<< HEAD
     waitosaur_contract_code_id: number;
-=======
     waitosaur_holder_contract_code_id: number;
->>>>>>> aff42d9 (add withdrawals support)
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.

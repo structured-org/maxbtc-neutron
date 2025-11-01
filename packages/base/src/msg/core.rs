@@ -23,8 +23,6 @@ pub struct InstantiateMsg {
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// Contract that holds amount of BTC received from CEFFU
-    pub withdrawal_notifier_contract: String,
     /// This contract provides the exchange rate for maxBTC
     pub exchange_rate_provider_contract: String,
     /// Contract address of the allow-list contract that manages
@@ -35,6 +33,8 @@ pub struct InstantiateMsg {
     pub fee_collector_contract: String,
     /// Address of the waitosaur contract
     pub waitosaur_contract: String,
+    /// Address of the waitosaur holder contract
+    pub waitosaur_holder_contract: String,
     /// Total amount of BTC deposited by the contract (used in migration)
     pub total_deposited: Option<Uint128>,
     /// Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)

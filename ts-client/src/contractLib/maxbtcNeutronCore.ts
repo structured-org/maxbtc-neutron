@@ -310,15 +310,13 @@ export interface InstantiateMsg {
    */
   total_deposited?: Uint128 | null;
   /**
-<<<<<<< HEAD
    * Address of the waitosaur contract
    */
   waitosaur_contract: string;
-=======
-   * Contract that holds amount of BTC received from CEFFU
+  /**
+   * Address of the waitosaur holder contract
    */
-  withdrawal_notifier_contract: string;
->>>>>>> aff42d9 (add withdrawals support)
+  waitosaur_holder_contract: string;
 }
 
 

@@ -227,7 +227,7 @@ pub fn instantiate(
         code_id: msg.code_ids.deposit_forwarder_contract_code_id,
         label: "maxBTC Valence IBC Transfer Contract".to_string(),
         msg: to_json_binary(&ValenceBaseAccountInstantiateMsg {
-            admin: env.contract.address.to_string(), // Same owner as the core contract
+            admin: msg.owner.to_string(), // Same owner as the core contract
             approved_libraries: vec![deposit_forwarder_library_contract.to_string()],
         })?,
         funds: vec![],
@@ -239,7 +239,7 @@ pub fn instantiate(
         code_id: msg.code_ids.deposit_forwarder_library_contract_code_id,
         label: "maxBTC Valence IBC Transfer Library Contract".to_string(),
         msg: to_json_binary(&ValenceIbcTransferLibraryInstantiateMsg {
-            owner: env.contract.address.to_string(),
+            owner: msg.owner.to_string(),
             processor: core_contract.to_string(),
             config: ValenceIbcTransferLibraryConfigParams {
                 input_addr: InputAddr {
@@ -287,8 +287,7 @@ pub fn instantiate(
             exchange_rate_provider_contract: exchange_rate_provider_contract.to_string(),
             fee_collector_contract: fee_collector_contract.to_string(),
             waitosaur_contract: waitosaur_contract.to_string(),
-            last_deposit_flush_time: None,
-            withdrawal_notifier_contract: waitosaur_holder_contract.to_string(),
+            waitosaur_holder_contract: waitosaur_holder_contract.to_string(),
             total_deposited: None,
             current_deposit_balance: None,
         })?,

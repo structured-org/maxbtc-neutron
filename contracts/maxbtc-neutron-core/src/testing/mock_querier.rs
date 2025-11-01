@@ -11,7 +11,6 @@ use maxbtc_base::msg::{
     waitosaur_holder::QueryMsg as WaitosaurHolderQueryMsg,
 };
 use maxbtc_base::state::core::WaitosaurState;
-use maxbtc_base::state::token::Config as TokenConfigResponse;
 use maxbtc_base::state::{
     token::Config as TokenConfigResponse, waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -237,7 +236,7 @@ impl WasmMockQuerier {
         }
 
         // Waitosaur holder contract
-        if contract_addr == "cosmwasm1tytt4glle6a0aqy8qkntcuwznh68zrsjrdcdhfa0hw33arr49n9s0752zt" {
+        if contract_addr == "cosmwasm1nylrq8x440yzqme262zy5875tt7vyn5yghjg5u807gms0359zl9svnrlrp" {
             let parsed_query_msg: Result<WaitosaurHolderQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed_query_msg {
                 return match q {

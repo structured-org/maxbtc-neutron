@@ -22,11 +22,24 @@ pub struct SpotBalance {
 
 #[cw_serde]
 pub struct BinanceData {
+    pub unimmr: SignedDecimal256,
+    pub positions: Vec<Position>,
+    pub um_balance_usdt: SignedDecimal256,
+    pub pm_account_actual_equity: SignedDecimal256,
+    pub withdrawable_usdt: SignedDecimal256,
     pub spot_balances: Vec<SpotBalance>,
 }
 
 #[cw_serde]
+pub struct Position {
+    pub symbol: String,
+    pub amount: SignedDecimal256,
+    pub pnl: SignedDecimal256,
+}
+
+#[cw_serde]
 pub struct ConsensusOutcome<T> {
-    /// The data submitted by the messengers
+    pub round: u64,
+    pub timestamp: u64,
     pub data: T,
 }

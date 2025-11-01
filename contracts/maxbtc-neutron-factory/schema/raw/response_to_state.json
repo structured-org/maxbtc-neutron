@@ -10,11 +10,8 @@
     "exchange_rate_provider_contract",
     "fee_collector_contract",
     "token_contract",
-<<<<<<< HEAD
-    "waitosaur_contract"
-=======
+    "waitosaur_contract",
     "waitosaur_holder_contract"
->>>>>>> aff42d9 (add withdrawals support)
   ],
   "properties": {
     "allowlist_contract": {
@@ -38,11 +35,10 @@
     "token_contract": {
       "$ref": "#/definitions/Addr"
     },
-<<<<<<< HEAD
     "waitosaur_contract": {
-=======
+      "$ref": "#/definitions/Addr"
+    },
     "waitosaur_holder_contract": {
->>>>>>> aff42d9 (add withdrawals support)
       "$ref": "#/definitions/Addr"
     }
   },
