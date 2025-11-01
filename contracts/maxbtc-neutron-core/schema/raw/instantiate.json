@@ -16,7 +16,8 @@
     "owner",
     "token_contract",
     "waitosaur_holder_contract",
-    "waitosaur_observer_contract"
+    "waitosaur_observer_contract",
+    "withdrawal_manager_contract"
   ],
   "properties": {
     "allowlist_contract": {
@@ -107,6 +108,10 @@
     },
     "waitosaur_observer_contract": {
       "description": "Address of the waitosaur contract",
+      "type": "string"
+    },
+    "withdrawal_manager_contract": {
+      "description": "Address of the withdrawal manager contract",
       "type": "string"
     }
   },

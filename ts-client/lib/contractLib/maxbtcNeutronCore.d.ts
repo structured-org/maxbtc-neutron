@@ -87,8 +87,8 @@ export type UpdateOwnershipArgs = {
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronCoreSchema {
     responses: Batch | ConfigResponse | ContractState | Uint1281 | Decimal1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch2;
-    query: SimulateDepositArgs;
-    execute: DepositArgs | ClaimArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+    query: FinalizedBatchesArgs | SimulateDepositArgs;
+    execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -110,13 +110,13 @@ export interface Batch {
      */
     collector_historical_balance: Uint128;
     /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
      * The amount of maxBTC burned for this batch
      */
     maxbtc_burned: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was already paid to users?
-     */
-    paid_amount: Uint128;
 }
 /**
  * Response for querying config
@@ -126,7 +126,9 @@ export interface ConfigResponse {
     deposit_denom: string;
     fee_collector_contract: string;
     operator: string;
-    withdrawal_notifier_contract: string;
+    waitosaur_observer_contract: string;
+    waitsaur_holder_contract: string;
+    withdrawal_manager_contract: string;
 }
 /**
  * Each batch has a batch_id, which increments.
@@ -146,13 +148,13 @@ export interface Batch1 {
      */
     collector_historical_balance: Uint128;
     /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
      * The amount of maxBTC burned for this batch
      */
     maxbtc_burned: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was already paid to users?
-     */
-    paid_amount: Uint128;
 }
 /**
  * The contract's ownership info
@@ -192,22 +194,22 @@ export interface Batch2 {
      */
     collector_historical_balance: Uint128;
     /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
      * The amount of maxBTC burned for this batch
      */
     maxbtc_burned: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was already paid to users?
-     */
-    paid_amount: Uint128;
+}
+export interface FinalizedBatchesArgs {
+    batch_id?: number | null;
 }
 export interface SimulateDepositArgs {
     amount: Uint128;
 }
 export interface DepositArgs {
     min_receive_amount?: Uint128 | null;
-    recipient: string;
-}
-export interface ClaimArgs {
     recipient: string;
 }
 /**
@@ -294,6 +296,10 @@ export interface InstantiateMsg {
      * Address of the waitosaur contract
      */
     waitosaur_observer_contract: string;
+    /**
+     * Address of the withdrawal manager contract
+     */
+    withdrawal_manager_contract: string;
 }
 export declare class Client {
     private readonly client;
@@ -305,7 +311,7 @@ export declare class Client {
     queryContractState: () => Promise<ContractState>;
     queryActiveBatch: () => Promise<Batch>;
     queryWithdrawingBatch: () => Promise<Batch>;
-    queryFinalizedBatches: () => Promise<ArrayOfBatch>;
+    queryFinalizedBatches: (args: FinalizedBatchesArgs) => Promise<ArrayOfBatch>;
     queryConfig: () => Promise<ConfigResponse>;
     queryExchangeRate: () => Promise<Decimal>;
     queryDepositBalance: () => Promise<Uint128>;
@@ -322,10 +328,6 @@ export declare class Client {
     withdraw: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     withdrawMsg: () => {
         withdraw: {};
-    };
-    claim: (sender: string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    claimMsg: (args: ClaimArgs) => {
-        claim: ClaimArgs;
     };
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateConfigMsg: (args: UpdateConfigArgs) => {

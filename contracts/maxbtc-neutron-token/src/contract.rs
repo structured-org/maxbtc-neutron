@@ -11,6 +11,7 @@ use maxbtc_base::msg::{
     core::InstantiateMsg as CoreInstantiateMsg,
     token::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
     waitosaur_holder::InstantiateMsg as WaitosaurHolderInstantiateMsg,
+    withdrawal_manager,
 };
 use maxbtc_base::state::{
     token::{Config, CONFIG},
@@ -253,6 +254,8 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         )?;
         let core_contract = deps.api.addr_humanize(&core_address)?;
 
+        initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
+
         let waitosaur_holder_code_info = deps
             .querier
             .query_wasm_code_info(msg.waitosaur_holder_code_id)?;
@@ -264,8 +267,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         )?;
         let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
 
-        initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
-
         let waitosaur_observer_code_info = deps
             .querier
             .query_wasm_code_info(msg.waitosaur_observer_code_id)?;
@@ -276,6 +277,17 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             salt,
         )?;
         let waitosaur_observer_contract = deps.api.addr_humanize(&waitosaur_observer_address)?;
+
+        let withdrawal_manager_code_info = deps
+            .querier
+            .query_wasm_code_info(msg.withdrawal_manager_code_id)?;
+        let withdrawal_manager_checksum = withdrawal_manager_code_info.checksum;
+        let withdrawal_manager_address = instantiate2_address(
+            withdrawal_manager_checksum.as_slice(),
+            &canonical_self_address,
+            salt,
+        )?;
+        let withdrawal_manager_contract = deps.api.addr_humanize(&withdrawal_manager_address)?;
 
         #[cosmwasm_schema::cw_serde]
         pub struct OldConfig {
@@ -307,6 +319,21 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             pub config: WaitosaurObserverConfig,
             pub owner: String,
         }
+
+        let instantiate_withdrawal_manager_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
+            admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
+            code_id: msg.withdrawal_manager_code_id,
+            label: "maxBTC Withdrawal Manager Contract".to_string(),
+            msg: to_json_binary(&withdrawal_manager::InstantiateMsg {
+                owner: msg.factory_contract.to_string(),
+                factory_contract: msg.factory_contract.to_string(),
+                core_contract: core_contract.to_string(),
+                token_contract: env.contract.address.to_string(),
+                deposit_denom: old_config.deposit_denom.clone(),
+            })?,
+            funds: vec![],
+            salt: Binary::from(salt),
+        });
 
         let instantiate_waitosaur_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
@@ -341,7 +368,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                     locker: deps.api.addr_validate(msg.ceffu_backend.as_str())?,
                     unlocker: core_contract.clone(),
                     asset: old_config.deposit_denom.clone(),
-                    withdraw_manager_contract: core_contract.clone(),
+                    withdraw_manager_contract: withdrawal_manager_contract.clone(),
                 },
             })?,
             funds: vec![],
@@ -369,6 +396,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                     .into_string(),
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
                 waitosaur_observer_contract: waitosaur_observer_contract.into_string(),
+                withdrawal_manager_contract: withdrawal_manager_contract.into_string(),
                 total_deposited: Some(total_deposited),
                 current_deposit_balance: Some(deposit_balance.amount),
             })?,
@@ -383,6 +411,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         CONFIG.save(deps.storage, &new_config)?;
 
         return Ok(Response::new()
+            .add_message(instantiate_withdrawal_manager_contract_msg)
             .add_message(instantiate_waitosaur_contract_msg)
             .add_message(instantiate_waitosaur_holder_contract_msg)
             .add_message(instantiate_core_contract_msg)

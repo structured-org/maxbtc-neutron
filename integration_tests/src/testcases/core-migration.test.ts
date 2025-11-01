@@ -571,6 +571,21 @@ describe('Core', () => {
         account.address,
         Uint8Array.from(
           fs.readFileSync(
+            join(
+              __dirname,
+              '../../../artifacts/maxbtc_neutron_withdrawal_manager.wasm',
+            ),
+          ),
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+      const withdrawalManagerCodeId = res.codeId;
+
+      res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
             join(__dirname, '../../../artifacts/maxbtc_neutron_token.wasm'),
           ),
         ),
@@ -604,26 +619,24 @@ describe('Core', () => {
         coreContractAddress,
         tokenCodeId,
         {
+          waitosaur_observer_code_id: waitosaurCodeId,
+
+          waitosaur_holder_code_id: waitosaurHolderCodeId,
+          core_code_id: coreCodeId,
+          withdrawal_manager_code_id: withdrawalManagerCodeId,
           factory_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           operator:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           waitosaur_observer_unlocker: account.address,
-          core_code_id: coreCodeId,
-          waitosaur_observer_code_id: waitosaurCodeId,
           binance_aum_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           ceffu_backend:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
-          waitosaur_holder_code_id: waitosaurHolderCodeId,
           salt: 'salt',
         },
         fee,
       );
-
-      console.log(result);
-
-      console.log(result.events);
 
       const newCoreContractAddress = result.events
         .find((e) => e.type === 'wasm')

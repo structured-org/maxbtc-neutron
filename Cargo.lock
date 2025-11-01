@@ -3920,6 +3920,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxbtc-neutron-withdrawal-manager"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw2",
+ "maxbtc-base",
+ "semver 1.0.25",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "maxbtc-oracle-binance-aum-mock"
 version = "0.2.0"
 dependencies = [

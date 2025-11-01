@@ -16,6 +16,7 @@ use maxbtc_base::{
         core::InstantiateMsg as CoreInstantiateMsg,
         token::InstantiateMsg as TokenFactoryInstantiateMsg,
         waitosaur_holder::InstantiateMsg as WaitosaurHolderInstantiateMsg,
+        withdrawal_manager::InstantiateMsg as WithdrawalManagerInstantiateMsg,
     },
     state::waitosaur_holder::Config as WaitosaurHolderConfig,
 };
@@ -152,7 +153,33 @@ pub fn instantiate(
 
     let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
 
+    let withdrawal_magnager_code_info = deps
+        .querier
+        .query_wasm_code_info(msg.code_ids.withdrawal_manager_contract_code_id)?;
+    let withdrawal_magnager_checksum = withdrawal_magnager_code_info.checksum;
+    let withdrawal_magnager_address = instantiate2_address(
+        withdrawal_magnager_checksum.as_slice(),
+        &canonical_creator, // The creator is this core contract
+        salt,
+    )
+    .map_err(ContractError::Instantiate2Error)?;
+    let withdrawal_manager_contract = deps.api.addr_humanize(&withdrawal_magnager_address)?;
+
     // Instantiate contracts messages
+    let instantiate_withdrawal_manager_msg = WasmMsg::Instantiate2 {
+        admin: Some(env.contract.address.to_string()), // The core contract owner is admin
+        code_id: msg.code_ids.withdrawal_manager_contract_code_id,
+        label: "maxBTC Withdrawal Manager Contract".to_string(),
+        msg: to_json_binary(&WithdrawalManagerInstantiateMsg {
+            owner: msg.owner.to_string(),
+            factory_contract: env.contract.address.to_string(),
+            core_contract: core_contract.to_string(),
+            token_contract: token_contract.to_string(),
+            deposit_denom: msg.deposit_denom.clone(),
+        })?,
+        funds: vec![],
+        salt: Binary::from(salt),
+    };
 
     let instantiate_waitosaur_observer_msg = WasmMsg::Instantiate2 {
         admin: Some(env.contract.address.to_string()), // The core contract owner is admin
@@ -262,7 +289,7 @@ pub fn instantiate(
                 locker: deps.api.addr_validate(&msg.ceffu_backend)?,
                 unlocker: core_contract.clone(),
                 asset: msg.deposit_denom.clone(),
-                withdraw_manager_contract: core_contract.clone(),
+                withdraw_manager_contract: withdrawal_manager_contract.clone(),
             },
         })?,
         funds: vec![],
@@ -288,6 +315,7 @@ pub fn instantiate(
             fee_collector_contract: fee_collector_contract.to_string(),
             waitosaur_observer_contract: waitosaur_observer_contract.to_string(),
             waitosaur_holder_contract: waitosaur_holder_contract.to_string(),
+            withdrawal_manager_contract: withdrawal_manager_contract.to_string(),
             total_deposited: None,
             current_deposit_balance: None,
         })?,
@@ -305,6 +333,7 @@ pub fn instantiate(
         core_contract,
         waitosaur_observer_contract,
         waitosaur_holder_contract,
+        withdrawal_manager_contract,
     };
 
     STATE.save(deps.storage, &state)?;
@@ -312,6 +341,7 @@ pub fn instantiate(
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
         .add_message(instantiate_waitosaur_observer_msg)
+        .add_message(instantiate_withdrawal_manager_msg)
         .add_message(instantiate_allowlist_msg)
         .add_message(instantiate_exchange_rate_provider_msg)
         .add_message(instantiate_token_factory_msg)

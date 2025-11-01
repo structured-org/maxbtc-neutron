@@ -50,6 +50,16 @@
       "properties": {
         "finalized_batches": {
           "type": "object",
+          "properties": {
+            "batch_id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          },
           "additionalProperties": false
         }
       },

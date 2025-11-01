@@ -8,8 +8,8 @@
     "btc_requested",
     "collected_amount",
     "collector_historical_balance",
-    "maxbtc_burned",
-    "paid_amount"
+    "deposit_decimals",
+    "maxbtc_burned"
   ],
   "properties": {
     "batch_id": {
@@ -41,16 +41,14 @@
         }
       ]
     },
+    "deposit_decimals": {
+      "description": "Number of decimals carried by the `deposit_denom` asset",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
     "maxbtc_burned": {
       "description": "The amount of maxBTC burned for this batch",
-      "allOf": [
-        {
-          "$ref": "#/definitions/Uint128"
-        }
-      ]
-    },
-    "paid_amount": {
-      "description": "If in FINALIZED state, how much BTC was already paid to users?",
       "allOf": [
         {
           "$ref": "#/definitions/Uint128"

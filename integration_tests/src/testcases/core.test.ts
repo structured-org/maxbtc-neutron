@@ -8,6 +8,7 @@ import {
   MaxbtcNeutronFeeCollector,
   MaxbtcNeutronWaitosaurHolder,
   MaxbtcOracleBinanceAumMock,
+  MaxbtcNeutronWithdrawalManager,
 } from 'maxbtc-neutron-ts-client';
 
 import { join } from 'path';
@@ -37,6 +38,7 @@ const ExchangeRateProviderContractClient =
   MaxbtcNeutronExchangeRateProvider.Client;
 const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
 const WaitosaurHolderContractClient = MaxbtcNeutronWaitosaurHolder.Client;
+const WithdrawalManagerContractClient = MaxbtcNeutronWithdrawalManager.Client;
 
 describe('Core', () => {
   const context: {
@@ -53,6 +55,10 @@ describe('Core', () => {
     waitosaurHolderContractClient?: InstanceType<
       typeof WaitosaurHolderContractClient
     >;
+    withdrawalManagerContractClient?: InstanceType<
+      typeof WithdrawalManagerContractClient
+    >;
+    withdrawalManagerContractAddress?: string;
 
     account?: AccountData;
     operatorAccount?: AccountData;
@@ -78,6 +84,7 @@ describe('Core', () => {
     tokenCodeId?: number;
     factoryCodeId?: number;
     waitosaurObserverCodeId?: number;
+    withdrawalManagerCodeId?: number;
 
     tokenContractClient?: InstanceType<typeof TokenContractClient>;
     tokenContractAddress?: string;
@@ -292,6 +299,22 @@ describe('Core', () => {
             fs.readFileSync(
               join(
                 __dirname,
+                '../../../artifacts/maxbtc_neutron_withdrawal_manager.wasm',
+              ),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+        context.withdrawalManagerCodeId = res.codeId;
+      }
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
                 '../../../artifacts/maxbtc_neutron_waitosaur_holder.wasm',
               ),
             ),
@@ -367,6 +390,7 @@ describe('Core', () => {
         waitosaurHolderContractCodeId,
         ceffuBackendAccount,
         binanceAumOracleAddress,
+        withdrawalManagerCodeId,
       } = context;
 
       const instantiateRes = await MaxbtcNeutronFactory.Client.instantiate(
@@ -389,6 +413,7 @@ describe('Core', () => {
             fee_collector_contract_code_id: feeCollectorCodeId,
             waitosaur_observer_contract_code_id: waitosaurObserverCodeId,
             waitosaur_holder_contract_code_id: waitosaurHolderContractCodeId,
+            withdrawal_manager_contract_code_id: withdrawalManagerCodeId,
           },
           salt: 'salt',
           deposit_decimals: 6,
@@ -489,6 +514,14 @@ describe('Core', () => {
         ceffuBackendClient,
         context.waitosaurHolderContractAddress,
       );
+
+      context.withdrawalManagerContractAddress =
+        context.factoryState.withdrawal_manager_contract;
+      context.withdrawalManagerContractClient =
+        new WithdrawalManagerContractClient(
+          client,
+          context.withdrawalManagerContractAddress,
+        );
     });
   });
 
@@ -753,14 +786,16 @@ describe('Core', () => {
       const depositBalance = await coreContractClient.queryDepositBalance();
       expect(depositBalance).toEqual('98483');
 
-      const finalizedBatches = await coreContractClient.queryFinalizedBatches();
+      const finalizedBatches = await coreContractClient.queryFinalizedBatches(
+        {},
+      );
       expect(finalizedBatches).toEqual([
         {
           batch_id: 1,
           btc_requested: '101517',
           maxbtc_burned: '100000',
           collected_amount: '101517',
-          paid_amount: '0',
+          deposit_decimals: 6,
           collector_historical_balance: '0',
         },
       ]);
@@ -806,7 +841,7 @@ describe('Core', () => {
         btc_requested: '121821',
         maxbtc_burned: '120000',
         collected_amount: '98483',
-        paid_amount: '0',
+        deposit_decimals: 6,
         collector_historical_balance: '0',
       });
     });
@@ -841,7 +876,7 @@ describe('Core', () => {
 
       const res = await waitosaurHolderContractClient.lock(
         ceffuBackendAccount.address,
-        { amount: '50000' },
+        { amount: '100000' },
         'auto',
       );
       expect(res.transactionHash).toBeTruthy();
@@ -861,7 +896,7 @@ describe('Core', () => {
       await client.sendTokens(
         account.address,
         waitosaurHolderContractAddress,
-        [{ denom: DEPOSIT_DENOM, amount: '50000' }],
+        [{ denom: DEPOSIT_DENOM, amount: '100000' }],
         { amount: [{ denom: 'untrn', amount: '200000' }], gas: '2000000' },
       );
     });
@@ -887,8 +922,8 @@ describe('Core', () => {
         batch_id: 2,
         btc_requested: '121821',
         maxbtc_burned: '120000',
-        collected_amount: '148483',
-        paid_amount: '0',
+        collected_amount: '198483',
+        deposit_decimals: 6,
         collector_historical_balance: '0',
       });
 
@@ -906,12 +941,12 @@ describe('Core', () => {
   describe('Claim withdrawed amount', () => {
     it('should be able to claim tokens from finalized batches', async () => {
       const {
-        coreContractClient,
         tokenContractAddress,
         client,
         account,
         operatorAccount,
         neutronClient,
+        withdrawalManagerContractClient,
       } = context;
 
       const operatorAccountBTCBalanceBefore = (
@@ -921,7 +956,7 @@ describe('Core', () => {
         )
       ).data.balance.amount;
 
-      let claimRes = await coreContractClient.claim(
+      let claimRes = await withdrawalManagerContractClient.claim(
         account.address,
         { recipient: operatorAccount.address },
         'auto',
@@ -948,7 +983,7 @@ describe('Core', () => {
           BigInt(operatorAccountBTCBalanceBefore),
       ).toEqual(BigInt('50758'));
 
-      claimRes = await coreContractClient.claim(
+      claimRes = await withdrawalManagerContractClient.claim(
         account.address,
         { recipient: operatorAccount.address },
         'auto',
@@ -973,7 +1008,7 @@ describe('Core', () => {
       expect(
         BigInt(operatorAccountBTCBalanceAfter2) -
           BigInt(operatorAccountBTCBalanceAfter),
-      ).toEqual(BigInt('61867'));
+      ).toEqual(BigInt('82701'));
     });
 
     it('try to withdraw from not finalized batch', async () => {
@@ -982,6 +1017,7 @@ describe('Core', () => {
         account,
         tokenContractAddress,
         operatorAccount,
+        withdrawalManagerContractClient,
       } = context;
       const { client } = context;
 
@@ -999,7 +1035,7 @@ describe('Core', () => {
       await waitForTx(client, res.transactionHash);
 
       await expect(
-        coreContractClient.claim(
+        withdrawalManagerContractClient.claim(
           account.address,
           { recipient: operatorAccount.address },
           'auto',
@@ -1011,7 +1047,7 @@ describe('Core', () => {
             },
           ],
         ),
-      ).rejects.toThrow(/Batch not in FINALIZED stat/);
+      ).rejects.toThrow(/Batch is not withdrawn yet/);
     });
   });
 

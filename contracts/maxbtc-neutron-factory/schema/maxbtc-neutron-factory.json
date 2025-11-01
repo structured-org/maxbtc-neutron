@@ -109,7 +109,8 @@
           "fee_collector_contract_code_id",
           "token_code_id",
           "waitosaur_holder_contract_code_id",
-          "waitosaur_observer_contract_code_id"
+          "waitosaur_observer_contract_code_id",
+          "withdrawal_manager_contract_code_id"
         ],
         "properties": {
           "allowlist_contract_code_id": {
@@ -153,6 +154,11 @@
             "minimum": 0.0
           },
           "waitosaur_observer_contract_code_id": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0.0
+          },
+          "withdrawal_manager_contract_code_id": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0.0
@@ -585,7 +591,8 @@
         "fee_collector_contract",
         "token_contract",
         "waitosaur_holder_contract",
-        "waitosaur_observer_contract"
+        "waitosaur_observer_contract",
+        "withdrawal_manager_contract"
       ],
       "properties": {
         "allowlist_contract": {
@@ -613,6 +620,9 @@
           "$ref": "#/definitions/Addr"
         },
         "waitosaur_observer_contract": {
+          "$ref": "#/definitions/Addr"
+        },
+        "withdrawal_manager_contract": {
           "$ref": "#/definitions/Addr"
         }
       },

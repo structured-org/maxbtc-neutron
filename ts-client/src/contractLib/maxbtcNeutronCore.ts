@@ -110,8 +110,8 @@ export interface MaxbtcNeutronCoreSchema {
     | OwnershipForString
     | SimulateDepositResponse
     | Batch2;
-  query: SimulateDepositArgs;
-  execute: DepositArgs | ClaimArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+  query: FinalizedBatchesArgs | SimulateDepositArgs;
+  execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -133,13 +133,13 @@ export interface Batch {
    */
   collector_historical_balance: Uint128;
   /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
    * The amount of maxBTC burned for this batch
    */
   maxbtc_burned: Uint128;
-  /**
-   * If in FINALIZED state, how much BTC was already paid to users?
-   */
-  paid_amount: Uint128;
 }
 /**
  * Response for querying config
@@ -149,7 +149,9 @@ export interface ConfigResponse {
   deposit_denom: string;
   fee_collector_contract: string;
   operator: string;
-  withdrawal_notifier_contract: string;
+  waitosaur_observer_contract: string;
+  waitsaur_holder_contract: string;
+  withdrawal_manager_contract: string;
 }
 /**
  * Each batch has a batch_id, which increments.
@@ -169,13 +171,13 @@ export interface Batch1 {
    */
   collector_historical_balance: Uint128;
   /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
    * The amount of maxBTC burned for this batch
    */
   maxbtc_burned: Uint128;
-  /**
-   * If in FINALIZED state, how much BTC was already paid to users?
-   */
-  paid_amount: Uint128;
 }
 /**
  * The contract's ownership info
@@ -215,22 +217,22 @@ export interface Batch2 {
    */
   collector_historical_balance: Uint128;
   /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
    * The amount of maxBTC burned for this batch
    */
   maxbtc_burned: Uint128;
-  /**
-   * If in FINALIZED state, how much BTC was already paid to users?
-   */
-  paid_amount: Uint128;
+}
+export interface FinalizedBatchesArgs {
+  batch_id?: number | null;
 }
 export interface SimulateDepositArgs {
   amount: Uint128;
 }
 export interface DepositArgs {
   min_receive_amount?: Uint128 | null;
-  recipient: string;
-}
-export interface ClaimArgs {
   recipient: string;
 }
 /**
@@ -317,6 +319,10 @@ export interface InstantiateMsg {
    * Address of the waitosaur contract
    */
   waitosaur_observer_contract: string;
+  /**
+   * Address of the withdrawal manager contract
+   */
+  withdrawal_manager_contract: string;
 }
 
 
@@ -376,8 +382,8 @@ export class Client {
   queryWithdrawingBatch = async(): Promise<Batch> => {
     return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
   }
-  queryFinalizedBatches = async(): Promise<ArrayOfBatch> => {
-    return this.client.queryContractSmart(this.contractAddress, { finalized_batches: {} });
+  queryFinalizedBatches = async(args: FinalizedBatchesArgs): Promise<ArrayOfBatch> => {
+    return this.client.queryContractSmart(this.contractAddress, { finalized_batches: args });
   }
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
@@ -409,11 +415,6 @@ export class Client {
     return this.client.execute(sender, this.contractAddress, this.withdrawMsg(), fee || "auto", memo, funds);
   }
   withdrawMsg = (): { withdraw: {} } => { return { withdraw: {} } }
-  claim = async(sender:string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
-          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, this.claimMsg(args), fee || "auto", memo, funds);
-  }
-  claimMsg = (args: ClaimArgs): { claim: ClaimArgs } => { return { claim: args }; }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);

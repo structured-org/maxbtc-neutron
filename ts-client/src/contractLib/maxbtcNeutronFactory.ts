@@ -114,6 +114,7 @@ export interface State {
   token_contract: Addr;
   waitosaur_holder_contract: Addr;
   waitosaur_observer_contract: Addr;
+  withdrawal_manager_contract: Addr;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
@@ -171,6 +172,7 @@ export interface CodeIds {
   token_code_id: number;
   waitosaur_holder_contract_code_id: number;
   waitosaur_observer_contract_code_id: number;
+  withdrawal_manager_contract_code_id: number;
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.

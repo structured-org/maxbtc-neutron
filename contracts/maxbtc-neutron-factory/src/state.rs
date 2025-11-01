@@ -13,6 +13,7 @@ pub struct CodeIds {
     pub fee_collector_contract_code_id: u64,
     pub waitosaur_observer_contract_code_id: u64,
     pub waitosaur_holder_contract_code_id: u64,
+    pub withdrawal_manager_contract_code_id: u64,
 }
 
 #[cw_serde]
@@ -26,6 +27,7 @@ pub struct State {
     pub core_contract: Addr,
     pub waitosaur_observer_contract: Addr,
     pub waitosaur_holder_contract: Addr,
+    pub withdrawal_manager_contract: Addr,
 }
 
 #[cw_serde]

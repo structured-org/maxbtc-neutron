@@ -19,5 +19,8 @@ export const MaxbtcNeutronToken = _5;
 import * as _6 from './maxbtcNeutronWaitosaurHolder';
 export const MaxbtcNeutronWaitosaurHolder = _6;
 
-import * as _7 from './maxbtcOracleBinanceAumMock';
-export const MaxbtcOracleBinanceAumMock = _7;
+import * as _7 from './maxbtcNeutronWithdrawalManager';
+export const MaxbtcNeutronWithdrawalManager = _7;
+
+import * as _8 from './maxbtcOracleBinanceAumMock';
+export const MaxbtcOracleBinanceAumMock = _8;

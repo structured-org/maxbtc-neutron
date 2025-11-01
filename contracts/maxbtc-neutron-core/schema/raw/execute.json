@@ -63,28 +63,6 @@
       "additionalProperties": false
     },
     {
-      "description": "Claim withdrawal using redemption token",
-      "type": "object",
-      "required": [
-        "claim"
-      ],
-      "properties": {
-        "claim": {
-          "type": "object",
-          "required": [
-            "recipient"
-          ],
-          "properties": {
-            "recipient": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
       "description": "Owner-only message to update protocol configuration in-place",
       "type": "object",
       "required": [
@@ -341,7 +319,13 @@
             "null"
           ]
         },
-        "withdrawal_notifier_contract": {
+        "waitsaur_holder_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withdrawal_manager_contract": {
           "type": [
             "string",
             "null"

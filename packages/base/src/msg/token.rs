@@ -68,13 +68,14 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub struct MigrateMsg {
+    pub waitosaur_observer_code_id: u64,
+    pub waitosaur_holder_code_id: u64,
+    pub core_code_id: u64,
+    pub withdrawal_manager_code_id: u64,
     pub factory_contract: Addr,
     pub operator: Addr,
     pub waitosaur_observer_unlocker: String,
-    pub core_code_id: u64,
-    pub waitosaur_observer_code_id: u64,
     pub binance_aum_contract: String,
     pub ceffu_backend: Addr,
-    pub waitosaur_holder_code_id: u64,
     pub salt: String,
 }

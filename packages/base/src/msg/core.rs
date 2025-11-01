@@ -35,6 +35,8 @@ pub struct InstantiateMsg {
     pub waitosaur_observer_contract: String,
     /// Address of the waitosaur holder contract
     pub waitosaur_holder_contract: String,
+    /// Address of the withdrawal manager contract
+    pub withdrawal_manager_contract: String,
     /// Total amount of BTC deposited by the contract (used in migration)
     pub total_deposited: Option<Uint128>,
     /// Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
@@ -53,7 +55,8 @@ pub struct UpdateConfigMsg {
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
     pub waitosaur_observer_contract: Option<String>,
-    pub withdrawal_notifier_contract: Option<String>,
+    pub waitsaur_holder_contract: Option<String>,
+    pub withdrawal_manager_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
@@ -69,10 +72,6 @@ pub enum ExecuteMsg {
     },
     /// User withdraw flow
     Withdraw {},
-    /// Claim withdrawal using redemption token
-    Claim {
-        recipient: String,
-    },
     /// Owner-only message to update protocol configuration in-place
     UpdateConfig(UpdateConfigMsg),
     /// Mints the requested amount of fees to the fee collector address. Can only be
@@ -94,7 +93,7 @@ pub enum QueryMsg {
     #[returns(crate::state::core::Batch)]
     WithdrawingBatch {},
     #[returns(Vec<crate::state::core::Batch>)]
-    FinalizedBatches {},
+    FinalizedBatches { batch_id: Option<u64> },
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},
@@ -119,7 +118,9 @@ pub struct ConfigResponse {
     pub deposit_denom: String,
     pub deposit_cost: Decimal,
     pub fee_collector_contract: String,
-    pub withdrawal_notifier_contract: String,
+    pub waitsaur_holder_contract: String,
+    pub withdrawal_manager_contract: String,
+    pub waitosaur_observer_contract: String,
 }
 
 #[cw_serde]

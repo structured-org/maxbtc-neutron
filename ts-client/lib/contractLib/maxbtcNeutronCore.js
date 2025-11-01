@@ -35,8 +35,8 @@ class Client {
     queryWithdrawingBatch = async () => {
         return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
     };
-    queryFinalizedBatches = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { finalized_batches: {} });
+    queryFinalizedBatches = async (args) => {
+        return this.client.queryContractSmart(this.contractAddress, { finalized_batches: args });
     };
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
@@ -74,13 +74,6 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.withdrawMsg(), fee || "auto", memo, funds);
     };
     withdrawMsg = () => { return { withdraw: {} }; };
-    claim = async (sender, args, fee, memo, funds) => {
-        if (!isSigningCosmWasmClient(this.client)) {
-            throw this.mustBeSigningClient();
-        }
-        return this.client.execute(sender, this.contractAddress, this.claimMsg(args), fee || "auto", memo, funds);
-    };
-    claimMsg = (args) => { return { claim: args }; };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

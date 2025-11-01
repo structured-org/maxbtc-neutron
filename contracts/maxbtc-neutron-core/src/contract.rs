@@ -63,6 +63,7 @@ pub fn instantiate(
         fee_collector_contract: deps.api.addr_validate(&msg.fee_collector_contract)?,
         waitosaur_observer_contract: deps.api.addr_validate(&msg.waitosaur_observer_contract)?,
         waitosaur_holder_contract: deps.api.addr_validate(&msg.waitosaur_holder_contract)?,
+        withdrawal_manager_contract: deps.api.addr_validate(&msg.withdrawal_manager_contract)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -77,7 +78,7 @@ pub fn instantiate(
 
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
 
-    create_new_batch(deps)?;
+    create_new_batch(deps, &cfg)?;
 
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
@@ -112,7 +113,6 @@ pub fn execute(
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
         ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
-        ExecuteMsg::Claim { recipient } => execute_claim(deps, env, info, recipient),
     }
 }
 
@@ -230,8 +230,10 @@ fn execute_tick_idle(
             )?)?
             .to_uint_floor();
 
+        active_withdraw_batch.collected_amount =
+            active_withdraw_batch.btc_requested.min(deposit_balance);
+
         if active_withdraw_batch.btc_requested <= deposit_balance {
-            active_withdraw_batch.collected_amount = active_withdraw_batch.btc_requested;
             FINALIZED_BATCHES.save(
                 deps.storage,
                 active_withdraw_batch.batch_id,
@@ -244,34 +246,34 @@ fn execute_tick_idle(
                     Ok(balance - active_withdraw_batch.btc_requested)
                 },
             )?;
-
-            let new_batch_id = create_new_batch(deps.branch())?;
-
-            return Ok(Response::new()
-                .add_attribute("action", "tick")
-                .add_attribute("stage", "idle")
-                .add_attribute("amount", active_withdraw_batch.btc_requested.to_string())
-                .add_attribute(
-                    "covered_from_deposit",
-                    active_withdraw_batch.btc_requested.to_string(),
-                )
-                .add_attribute("new_batch_id", new_batch_id.to_string()));
         } else {
-            active_withdraw_batch.collected_amount = deposit_balance;
             WITHDRAWING_BATCH.save(deps.storage, &Some(active_withdraw_batch.clone()))?;
 
             CURRENT_DEPOSIT_BALANCE.save(deps.storage, &Uint128::zero())?;
 
-            let new_batch_id = create_new_batch(deps.branch())?;
-
             FSM.go_to(deps.storage, ContractState::WithdrawJLP)?;
-
-            return Ok(Response::new()
-                .add_attribute("action", "tick")
-                .add_attribute("stage", "idle")
-                .add_attribute("amount", deposit_balance.to_string())
-                .add_attribute("new_batch_id", new_batch_id.to_string()));
         }
+
+        let new_batch_id = create_new_batch(deps.branch(), &cfg)?;
+
+        let send_covered_withdrawal_manager_msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.withdrawal_manager_contract.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom,
+                amount: active_withdraw_batch.collected_amount,
+            }],
+        });
+
+        return Ok(Response::new()
+            .add_message(send_covered_withdrawal_manager_msg)
+            .add_attribute("action", "tick")
+            .add_attribute("stage", "idle")
+            .add_attribute("amount", active_withdraw_batch.btc_requested.to_string())
+            .add_attribute(
+                "covered_from_deposit",
+                active_withdraw_batch.collected_amount.to_string(),
+            )
+            .add_attribute("new_batch_id", new_batch_id.to_string()));
     } else if !deposit_balance.is_zero() {
         FSM.go_to(deps.storage, ContractState::DepositNeutron)?;
         return execute_flush_deposits(deps.branch(), env.clone(), info.clone());
@@ -435,11 +437,19 @@ fn execute_update_config(
         );
     }
 
-    if let Some(addr) = updates.withdrawal_notifier_contract {
+    if let Some(addr) = updates.waitsaur_holder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.waitosaur_holder_contract = validated_addr.clone();
         res = res.add_attribute(
             "waitosaur_holder_contract_updated",
+            validated_addr.to_string(),
+        );
+    }
+    if let Some(addr) = updates.withdrawal_manager_contract {
+        let validated_addr = deps.api.addr_validate(&addr)?;
+        cfg.withdrawal_manager_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "withdrawal_manager_contract_updated",
             validated_addr.to_string(),
         );
     }
@@ -607,82 +617,6 @@ pub(crate) fn execute_withdraw(
     Ok(resp)
 }
 
-/// User claims their BTC, providing redemption tokens as input
-pub(crate) fn execute_claim(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    recipient: String,
-) -> Result<Response, ContractError> {
-    let cfg = CONFIG.load(deps.storage)?;
-    if cfg.paused {
-        return Err(ContractError::ContractPaused {});
-    }
-    let mut msgs = vec![];
-
-    if info.funds.len() != 1 {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    let redemption_coin = &info
-        .funds
-        .first()
-        .cloned()
-        .ok_or(ContractError::WrongRedemptionTokenOrNoFunds {})?;
-
-    let batch_id = get_batch_id_from_redemption_coin(&cfg, redemption_coin.clone())?;
-
-    // Check the batch is in FINALIZED state
-    let finalized_batch = FINALIZED_BATCHES.may_load(deps.storage, batch_id)?;
-    let mut batch = finalized_batch.ok_or(ContractError::BatchNotFinalized {})?;
-
-    // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
-    let redemption_token_supply = deps.querier.query_supply(redemption_coin.denom.clone())?;
-    if redemption_token_supply.amount.is_zero() {
-        return Err(ContractError::RedemptionSupplyMismatch {});
-    }
-    let user_amount_dec = Decimal::from_atomics(redemption_coin.amount, cfg.deposit_decimals)?;
-    let redemption_token_supply_dec =
-        Decimal::from_atomics(redemption_token_supply.amount, cfg.deposit_decimals)?;
-    let fraction = user_amount_dec / redemption_token_supply_dec;
-
-    let available_dec = Decimal::from_atomics(
-        batch.collected_amount - batch.paid_amount,
-        cfg.deposit_decimals,
-    )?;
-    let user_btc = dec_to_amount(available_dec * fraction, cfg.deposit_decimals)?;
-
-    // Send the user’s BTC to `recipient` address
-    let send_msg = CosmosMsg::Bank(BankMsg::Send {
-        to_address: recipient.clone(),
-        amount: vec![Coin {
-            denom: cfg.deposit_denom.clone(),
-            amount: user_btc,
-        }],
-    });
-    msgs.push(send_msg);
-
-    // Burn the amount of redemption tokens that were redeemed
-    let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: cfg.token_contract.to_string(),
-        msg: to_json_binary(&TokenExecuteMsg::Burn {})?,
-        funds: vec![redemption_coin.clone()],
-    });
-
-    msgs.push(burn_msg);
-
-    // Update the paid out amount in the batch
-    batch.paid_amount += user_btc;
-    FINALIZED_BATCHES.save(deps.storage, batch.batch_id, &batch)?;
-
-    let resp = Response::new()
-        .add_messages(msgs)
-        .add_attribute("action", "claim")
-        .add_attribute("batch_id", batch_id.to_string())
-        .add_attribute("user_claim_btc", user_btc.to_string());
-
-    Ok(resp)
-}
-
 /// Flushes the contract's accumulated deposit balance to the deposit forwarder contract.
 ///
 /// This handler can be triggered by any account, but its execution is rate-limited
@@ -753,7 +687,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                 deposit_denom: cfg.deposit_denom,
                 deposit_cost: cfg.deposit_cost,
                 fee_collector_contract: cfg.fee_collector_contract.to_string(),
-                withdrawal_notifier_contract: cfg.waitosaur_holder_contract.to_string(),
+                waitsaur_holder_contract: cfg.waitosaur_holder_contract.to_string(),
+                withdrawal_manager_contract: cfg.withdrawal_manager_contract.to_string(),
+                waitosaur_observer_contract: cfg.waitosaur_observer_contract.to_string(),
             };
             Ok(to_json_binary(&resp)?)
         }
@@ -765,14 +701,20 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let withdrawing_batch = WITHDRAWING_BATCH.load(deps.storage)?;
             Ok(to_json_binary(&withdrawing_batch)?)
         }
-        QueryMsg::FinalizedBatches {} => {
-            let finalized_batches = FINALIZED_BATCHES
-                .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
-                .map(|item| {
-                    item.map(|(_, batch)| batch)
-                        .map_err(|e| StdError::generic_err(e.to_string()))
-                })
-                .collect::<StdResult<Vec<Batch>>>()?;
+        QueryMsg::FinalizedBatches { batch_id } => {
+            let finalized_batches = if let Some(batch_id) = batch_id {
+                FINALIZED_BATCHES
+                    .load(deps.storage, batch_id)
+                    .map(|batch| vec![batch])?
+            } else {
+                FINALIZED_BATCHES
+                    .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
+                    .map(|item| {
+                        item.map(|(_, batch)| batch)
+                            .map_err(|e| StdError::generic_err(e.to_string()))
+                    })
+                    .collect::<StdResult<Vec<Batch>>>()?
+            };
             Ok(to_json_binary(&finalized_batches)?)
         }
         QueryMsg::ExchangeRate {} => {
@@ -802,7 +744,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
 / -----------------------------------------------------------------------------------------------*/
 
 /// Creates new batch and returns batch_id
-fn create_new_batch(deps: DepsMut) -> Result<u64, ContractError> {
+fn create_new_batch(deps: DepsMut, cfg: &Config) -> Result<u64, ContractError> {
     let new_batch_id = BATCH_ID_COUNTER.load(deps.storage).unwrap_or(0u64) + 1;
 
     let new_batch = Batch {
@@ -810,7 +752,7 @@ fn create_new_batch(deps: DepsMut) -> Result<u64, ContractError> {
         btc_requested: Uint128::zero(),
         maxbtc_burned: Uint128::zero(),
         collected_amount: Uint128::zero(),
-        paid_amount: Uint128::zero(),
+        deposit_decimals: cfg.deposit_decimals,
         collector_historical_balance: Uint128::zero(),
     };
     ACTIVE_BATCH.save(deps.storage, &new_batch)?;
@@ -818,36 +760,6 @@ fn create_new_batch(deps: DepsMut) -> Result<u64, ContractError> {
 
     Ok(new_batch_id)
 }
-/// Extracts the `batch_id` encoded in the *redemption token*’s denom.
-///
-/// A valid redemption denom has the layout
-/// `factory/{token_contract}/redemption/batch/{batch_id}`
-fn get_batch_id_from_redemption_coin(
-    cfg: &Config,
-    redemption_coin: Coin,
-) -> Result<u64, ContractError> {
-    if !redemption_coin
-        .denom
-        .starts_with(format!("factory/{}/redemption/batch/", cfg.token_contract).as_str())
-    {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    if redemption_coin.amount.is_zero() {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-
-    // Extract the batch_id
-    let parts: Vec<&str> = redemption_coin.denom.split('/').collect();
-    if parts.len() != 5 {
-        return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
-    }
-    let batch_id: u64 = parts[4]
-        .parse()
-        .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;
-
-    Ok(batch_id)
-}
-
 /// Calculates the amount of maxBTC to be minted for a given deposit amount.
 /// This function encapsulates the core logic used in both deposits and simulations.
 fn calculate_mint_amount(

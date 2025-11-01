@@ -20,7 +20,8 @@
       "owner",
       "token_contract",
       "waitosaur_holder_contract",
-      "waitosaur_observer_contract"
+      "waitosaur_observer_contract",
+      "withdrawal_manager_contract"
     ],
     "properties": {
       "allowlist_contract": {
@@ -112,6 +113,10 @@
       "waitosaur_observer_contract": {
         "description": "Address of the waitosaur contract",
         "type": "string"
+      },
+      "withdrawal_manager_contract": {
+        "description": "Address of the withdrawal manager contract",
+        "type": "string"
       }
     },
     "additionalProperties": false,
@@ -185,28 +190,6 @@
         "properties": {
           "withdraw": {
             "type": "object",
-            "additionalProperties": false
-          }
-        },
-        "additionalProperties": false
-      },
-      {
-        "description": "Claim withdrawal using redemption token",
-        "type": "object",
-        "required": [
-          "claim"
-        ],
-        "properties": {
-          "claim": {
-            "type": "object",
-            "required": [
-              "recipient"
-            ],
-            "properties": {
-              "recipient": {
-                "type": "string"
-              }
-            },
             "additionalProperties": false
           }
         },
@@ -469,7 +452,13 @@
               "null"
             ]
           },
-          "withdrawal_notifier_contract": {
+          "waitsaur_holder_contract": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "withdrawal_manager_contract": {
             "type": [
               "string",
               "null"
@@ -532,6 +521,16 @@
         "properties": {
           "finalized_batches": {
             "type": "object",
+            "properties": {
+              "batch_id": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
             "additionalProperties": false
           }
         },
@@ -634,8 +633,8 @@
         "btc_requested",
         "collected_amount",
         "collector_historical_balance",
-        "maxbtc_burned",
-        "paid_amount"
+        "deposit_decimals",
+        "maxbtc_burned"
       ],
       "properties": {
         "batch_id": {
@@ -667,16 +666,14 @@
             }
           ]
         },
+        "deposit_decimals": {
+          "description": "Number of decimals carried by the `deposit_denom` asset",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
         "maxbtc_burned": {
           "description": "The amount of maxBTC burned for this batch",
-          "allOf": [
-            {
-              "$ref": "#/definitions/Uint128"
-            }
-          ]
-        },
-        "paid_amount": {
-          "description": "If in FINALIZED state, how much BTC was already paid to users?",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"
@@ -702,7 +699,9 @@
         "deposit_denom",
         "fee_collector_contract",
         "operator",
-        "withdrawal_notifier_contract"
+        "waitosaur_observer_contract",
+        "waitsaur_holder_contract",
+        "withdrawal_manager_contract"
       ],
       "properties": {
         "deposit_cost": {
@@ -717,7 +716,13 @@
         "operator": {
           "type": "string"
         },
-        "withdrawal_notifier_contract": {
+        "waitosaur_observer_contract": {
+          "type": "string"
+        },
+        "waitsaur_holder_contract": {
+          "type": "string"
+        },
+        "withdrawal_manager_contract": {
           "type": "string"
         }
       },
@@ -771,8 +776,8 @@
             "btc_requested",
             "collected_amount",
             "collector_historical_balance",
-            "maxbtc_burned",
-            "paid_amount"
+            "deposit_decimals",
+            "maxbtc_burned"
           ],
           "properties": {
             "batch_id": {
@@ -804,16 +809,14 @@
                 }
               ]
             },
+            "deposit_decimals": {
+              "description": "Number of decimals carried by the `deposit_denom` asset",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
             "maxbtc_burned": {
               "description": "The amount of maxBTC burned for this batch",
-              "allOf": [
-                {
-                  "$ref": "#/definitions/Uint128"
-                }
-              ]
-            },
-            "paid_amount": {
-              "description": "If in FINALIZED state, how much BTC was already paid to users?",
               "allOf": [
                 {
                   "$ref": "#/definitions/Uint128"
@@ -954,8 +957,8 @@
         "btc_requested",
         "collected_amount",
         "collector_historical_balance",
-        "maxbtc_burned",
-        "paid_amount"
+        "deposit_decimals",
+        "maxbtc_burned"
       ],
       "properties": {
         "batch_id": {
@@ -987,16 +990,14 @@
             }
           ]
         },
+        "deposit_decimals": {
+          "description": "Number of decimals carried by the `deposit_denom` asset",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
         "maxbtc_burned": {
           "description": "The amount of maxBTC burned for this batch",
-          "allOf": [
-            {
-              "$ref": "#/definitions/Uint128"
-            }
-          ]
-        },
-        "paid_amount": {
-          "description": "If in FINALIZED state, how much BTC was already paid to users?",
           "allOf": [
             {
               "$ref": "#/definitions/Uint128"

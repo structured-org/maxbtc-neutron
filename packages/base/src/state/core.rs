@@ -37,6 +37,8 @@ pub struct Config {
     pub waitosaur_observer_contract: Addr,
     /// Contract that holds amount of BTC received from CEFFU
     pub waitosaur_holder_contract: Addr,
+    /// Contract that handles withdrawals
+    pub withdrawal_manager_contract: Addr,
 }
 
 /// A single global config item
@@ -115,10 +117,10 @@ pub struct Batch {
     pub maxbtc_burned: Uint128,
     /// If in FINALIZED state, how much BTC was actually collected?
     pub collected_amount: Uint128,
-    /// If in FINALIZED state, how much BTC was already paid to users?
-    pub paid_amount: Uint128,
     /// Historical collector balance recorded at the time the batch transitions to WITHDRAWING
     pub collector_historical_balance: Uint128,
+    /// Number of decimals carried by the `deposit_denom` asset
+    pub deposit_decimals: u32,
 }
 
 /// The current active batch

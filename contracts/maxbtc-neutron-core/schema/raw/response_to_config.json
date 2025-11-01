@@ -8,7 +8,9 @@
     "deposit_denom",
     "fee_collector_contract",
     "operator",
-    "withdrawal_notifier_contract"
+    "waitosaur_observer_contract",
+    "waitsaur_holder_contract",
+    "withdrawal_manager_contract"
   ],
   "properties": {
     "deposit_cost": {
@@ -23,7 +25,13 @@
     "operator": {
       "type": "string"
     },
-    "withdrawal_notifier_contract": {
+    "waitosaur_observer_contract": {
+      "type": "string"
+    },
+    "waitsaur_holder_contract": {
+      "type": "string"
+    },
+    "withdrawal_manager_contract": {
       "type": "string"
     }
   },
