@@ -1,18 +1,54 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
 /**
+ * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u128` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
+ *
+ * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
+ *
+ * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
+ */
+export type Uint128 = string;
+/**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
-export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p";
+export type ContractState =
+  | "idle"
+  | "deposit_neutron"
+  | "deposit_pending"
+  | "deposit_j_l_p"
+  | "withdraw_j_l_p"
+  | "withdraw_pending"
+  | "withdraw_neutron";
+/**
+ * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u128` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
+ *
+ * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
+ *
+ * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
+ */
+export type Uint1281 = string;
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal1 = string;
+export type ArrayOfBatch = Batch1[];
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -51,20 +87,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
- *
- * # Examples
- *
- * Use `from` to create instances of this and `u128` to get the value out:
- *
- * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
- *
- * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
- *
- * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
- */
-export type Uint128 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs =
@@ -78,11 +100,46 @@ export type UpdateOwnershipArgs =
   | "renounce_ownership";
 
 export interface MaxbtcNeutronCoreSchema {
-  responses: ConfigResponse | ContractState | Decimal1 | OwnershipForString | SimulateDepositResponse;
+  responses:
+    | Batch
+    | ConfigResponse
+    | ContractState
+    | Uint1281
+    | Decimal1
+    | ArrayOfBatch
+    | OwnershipForString
+    | SimulateDepositResponse
+    | Batch2;
   query: SimulateDepositArgs;
-  execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+  execute: DepositArgs | ClaimArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch {
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was already paid to users?
+   */
+  paid_amount: Uint128;
 }
 /**
  * Response for querying config
@@ -90,9 +147,35 @@ export interface MaxbtcNeutronCoreSchema {
 export interface ConfigResponse {
   deposit_cost: Decimal;
   deposit_denom: string;
-  deposit_flush_period: number;
   fee_collector_contract: string;
   operator: string;
+  withdrawal_notifier_contract: string;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch1 {
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was already paid to users?
+   */
+  paid_amount: Uint128;
 }
 /**
  * The contract's ownership info
@@ -114,11 +197,40 @@ export interface OwnershipForString {
 export interface SimulateDepositResponse {
   minted_amount: Uint128;
 }
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch2 {
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was already paid to users?
+   */
+  paid_amount: Uint128;
+}
 export interface SimulateDepositArgs {
   amount: Uint128;
 }
 export interface DepositArgs {
   min_receive_amount?: Uint128 | null;
+  recipient: string;
+}
+export interface ClaimArgs {
   recipient: string;
 }
 /**
@@ -149,6 +261,10 @@ export interface InstantiateMsg {
    */
   allowlist_contract: string;
   /**
+   * Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
+   */
+  current_deposit_balance?: Uint128 | null;
+  /**
    * One-off cost (Decimal) charged when a user deposits to mint maxBTC
    */
   deposit_cost: Decimal;
@@ -160,10 +276,6 @@ export interface InstantiateMsg {
    * Denom for user deposits (e.g. IBC-transferred BTC)
    */
   deposit_denom: string;
-  /**
-   * Minimum number of seconds that must elapse between two deposit-flush operations
-   */
-  deposit_flush_period: number;
   /**
    * Contract that forwards freshly-received deposits to the custody chain.
    */
@@ -185,10 +297,6 @@ export interface InstantiateMsg {
    */
   fee_collector_contract: string;
   /**
-   * Sets the last time a deposit flush was done (used in migration)
-   */
-  last_deposit_flush_time?: number | null;
-  /**
    * Operator address
    */
   operator: string;
@@ -202,9 +310,13 @@ export interface InstantiateMsg {
    */
   total_deposited?: Uint128 | null;
   /**
+   * Address of the waitosaur holder contract
+   */
+  waitosaur_holder_contract: string;
+  /**
    * Address of the waitosaur contract
    */
-  waitosaur_contract: string;
+  waitosaur_observer_contract: string;
 }
 
 
@@ -258,11 +370,23 @@ export class Client {
   queryContractState = async(): Promise<ContractState> => {
     return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
   }
+  queryActiveBatch = async(): Promise<Batch> => {
+    return this.client.queryContractSmart(this.contractAddress, { active_batch: {} });
+  }
+  queryWithdrawingBatch = async(): Promise<Batch> => {
+    return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
+  }
+  queryFinalizedBatches = async(): Promise<ArrayOfBatch> => {
+    return this.client.queryContractSmart(this.contractAddress, { finalized_batches: {} });
+  }
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
   }
   queryExchangeRate = async(): Promise<Decimal> => {
     return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+  }
+  queryDepositBalance = async(): Promise<Uint128> => {
+    return this.client.queryContractSmart(this.contractAddress, { deposit_balance: {} });
   }
   querySimulateDeposit = async(args: SimulateDepositArgs): Promise<SimulateDepositResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
@@ -280,6 +404,16 @@ export class Client {
     return this.client.execute(sender, this.contractAddress, this.depositMsg(args), fee || "auto", memo, funds);
   }
   depositMsg = (args: DepositArgs): { deposit: DepositArgs } => { return { deposit: args }; }
+  withdraw = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.withdrawMsg(), fee || "auto", memo, funds);
+  }
+  withdrawMsg = (): { withdraw: {} } => { return { withdraw: {} } }
+  claim = async(sender:string, args: ClaimArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.claimMsg(args), fee || "auto", memo, funds);
+  }
+  claimMsg = (args: ClaimArgs): { claim: ClaimArgs } => { return { claim: args }; }
   updateConfig = async(sender:string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);

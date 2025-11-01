@@ -4,7 +4,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
-use crate::state::{CodeIds, WaitosaurConfig};
+use crate::state::{CodeIds, WaitosaurObserverConfig};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -13,12 +13,11 @@ pub struct InstantiateMsg {
     pub salt: String,
     pub owner: String,
     pub operator: String,
+    pub ceffu_backend: String,
     /// Denom for user deposits (e.g. IBC-transferred BTC)
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
-    /// Minimum number of seconds that must elapse between two deposit-flush operations
-    pub deposit_flush_period: u64,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap
@@ -32,13 +31,13 @@ pub struct InstantiateMsg {
     pub valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams,
     /// Address of the binance AUM contract
     pub binance_aum_contract: String,
-    /// Address of the waitosaur unlocker
-    pub waitosaur_unlocker: String,
+    /// Address of the waitosaur observer unlocker
+    pub waitosaur_observer_unlocker: String,
 }
 
 #[cw_serde]
-pub struct WaitosaurInstantiateMsg {
-    pub config: WaitosaurConfig,
+pub struct WaitosaurObserverInstantiateMsg {
+    pub config: WaitosaurObserverConfig,
     pub owner: String,
 }
 

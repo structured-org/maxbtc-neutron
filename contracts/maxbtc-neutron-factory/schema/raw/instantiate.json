@@ -5,22 +5,25 @@
   "type": "object",
   "required": [
     "binance_aum_contract",
+    "ceffu_backend",
     "code_ids",
     "deposit_cost",
     "deposit_decimals",
     "deposit_denom",
-    "deposit_flush_period",
     "fee_collector_params",
     "maxbtc_denom",
     "operator",
     "owner",
     "salt",
     "valence_ibc_transfer_params",
-    "waitosaur_unlocker"
+    "waitosaur_observer_unlocker"
   ],
   "properties": {
     "binance_aum_contract": {
       "description": "Address of the binance AUM contract",
+      "type": "string"
+    },
+    "ceffu_backend": {
       "type": "string"
     },
     "code_ids": {
@@ -43,12 +46,6 @@
     "deposit_denom": {
       "description": "Denom for user deposits (e.g. IBC-transferred BTC)",
       "type": "string"
-    },
-    "deposit_flush_period": {
-      "description": "Minimum number of seconds that must elapse between two deposit-flush operations",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     },
     "deposits_cap": {
       "description": "Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded",
@@ -90,8 +87,8 @@
         }
       ]
     },
-    "waitosaur_unlocker": {
-      "description": "Address of the waitosaur unlocker",
+    "waitosaur_observer_unlocker": {
+      "description": "Address of the waitosaur observer unlocker",
       "type": "string"
     }
   },
@@ -107,7 +104,8 @@
         "exchange_rate_provider_contract_code_id",
         "fee_collector_contract_code_id",
         "token_code_id",
-        "waitosaur_contract_code_id"
+        "waitosaur_holder_contract_code_id",
+        "waitosaur_observer_contract_code_id"
       ],
       "properties": {
         "allowlist_contract_code_id": {
@@ -145,7 +143,12 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "waitosaur_contract_code_id": {
+        "waitosaur_holder_contract_code_id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "waitosaur_observer_contract_code_id": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

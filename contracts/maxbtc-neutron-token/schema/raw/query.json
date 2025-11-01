@@ -18,6 +18,28 @@
       "additionalProperties": false
     },
     {
+      "description": "Returns the token factory denom",
+      "type": "object",
+      "required": [
+        "get_denom"
+      ],
+      "properties": {
+        "get_denom": {
+          "type": "object",
+          "properties": {
+            "subdenom": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Query the contract's ownership information",
       "type": "object",
       "required": [

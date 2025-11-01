@@ -49,6 +49,42 @@
       "additionalProperties": false
     },
     {
+      "description": "User withdraw flow",
+      "type": "object",
+      "required": [
+        "withdraw"
+      ],
+      "properties": {
+        "withdraw": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Claim withdrawal using redemption token",
+      "type": "object",
+      "required": [
+        "claim"
+      ],
+      "properties": {
+        "claim": {
+          "type": "object",
+          "required": [
+            "recipient"
+          ],
+          "properties": {
+            "recipient": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Owner-only message to update protocol configuration in-place",
       "type": "object",
       "required": [
@@ -252,14 +288,6 @@
             }
           ]
         },
-        "deposit_flush_period": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "deposit_forwarder_contract": {
           "type": [
             "string",
@@ -307,7 +335,13 @@
             "null"
           ]
         },
-        "waitosaur_contract": {
+        "waitosaur_observer_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withdrawal_notifier_contract": {
           "type": [
             "string",
             "null"

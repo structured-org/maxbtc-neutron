@@ -13,11 +13,6 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    // #[error("{0}")]
-    // DecimalRangeExceeded(#[from] DecimalRangeExceeded),
-
-    // #[error("{0}")]
-    // OverflowError(#[from] OverflowError),
     #[error("{0}")]
     PaymentError(#[from] PaymentError),
 
@@ -29,6 +24,9 @@ pub enum ContractError {
 
     #[error("Could not calculcate instantiate2 address: {0}")]
     Instantiate2AddressError(#[from] Instantiate2AddressError),
+
+    #[error("Wrong funds attached")]
+    WrongFundsAttached {},
 }
 
 impl From<semver::Error> for ContractError {

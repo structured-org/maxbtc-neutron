@@ -4,13 +4,16 @@ use cosmwasm_std::{
     ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
     SystemResult, Uint128, WasmQuery,
 };
-use maxbtc_base::msg::core::WaitosaurQueryMsg;
+use maxbtc_base::msg::core::WaitosaurObserverQueryMsg;
 use maxbtc_base::msg::{
     core::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse},
     token::QueryMsg as TokenConfigQueryMsg,
+    waitosaur_holder::QueryMsg as WaitosaurHolderQueryMsg,
 };
-use maxbtc_base::state::core::WaitosaurState;
-use maxbtc_base::state::token::Config as TokenConfigResponse;
+use maxbtc_base::state::core::WaitosaurObserverState;
+use maxbtc_base::state::{
+    token::Config as TokenConfigResponse, waitosaur_holder::State as WaitsaurHolderState,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -43,7 +46,9 @@ pub struct WasmMockQuerier {
 
     allowed_recipient: bool,
 
-    waitosaur_state: WaitosaurState,
+    waitosaur_observer_state: WaitosaurObserverState,
+    /// Amount of BTC to receive from CEFFU (for withdrawing batch)
+    waitosaur_holder_state: WaitsaurHolderState,
 
     denom: String,
 
@@ -75,11 +80,12 @@ impl WasmMockQuerier {
         WasmMockQuerier {
             base,
             balances: HashMap::new(),
-            supplies: Default::default(),
+            supplies: HashMap::new(),
             allowed_recipient: true,
+            waitosaur_holder_state: WaitsaurHolderState::Unlocked {},
             denom: "maxBTC".to_string(),
             exchange_rate: Decimal::one(),
-            waitosaur_state: WaitosaurState::Unlocked {},
+            waitosaur_observer_state: WaitosaurObserverState::Unlocked {},
         }
     }
 
@@ -88,12 +94,24 @@ impl WasmMockQuerier {
         self.balances.insert((address.into(), denom.into()), amount);
     }
 
+    pub fn set_supply(&mut self, denom: &str, amount: Uint128) {
+        self.supplies.insert(denom.into(), amount);
+    }
+
     pub fn set_allowed_recipient(&mut self, allowed: bool) {
         self.allowed_recipient = allowed;
     }
 
-    pub fn set_waitosaur_state(&mut self, state: WaitosaurState) {
-        self.waitosaur_state = state;
+    pub fn set_waitosaur_observer_state(&mut self, state: WaitosaurObserverState) {
+        self.waitosaur_observer_state = state;
+    }
+
+    pub fn set_waitsaur_holder_state(&mut self, state: WaitsaurHolderState) {
+        self.waitosaur_holder_state = state;
+    }
+
+    pub fn set_exchange_rate(&mut self, exchange_rate: Decimal) {
+        self.exchange_rate = exchange_rate;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -199,11 +217,11 @@ impl WasmMockQuerier {
 
         // Waitosaur contract
         if contract_addr == "cosmwasm1603h02gmafrs2ar32mcx83885aqt8yms86smppjstl223swgyjps0f242x" {
-            let parsed: Result<WaitosaurQueryMsg, _> = from_json(msg);
+            let parsed: Result<WaitosaurObserverQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
                 return match q {
-                    WaitosaurQueryMsg::GetState {} => {
-                        let val = self.waitosaur_state.clone();
+                    WaitosaurObserverQueryMsg::GetState {} => {
+                        let val = self.waitosaur_observer_state.clone();
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };
@@ -217,10 +235,38 @@ impl WasmMockQuerier {
                 }));
         }
 
-        if contract_addr == "cosmwasm1qugtqqz3w5yqdt7z56nx5aj0umrtz2q4r8escthjpgkvmhdjkypq9umkdq" {
+        // Waitosaur holder contract
+        if contract_addr == "cosmwasm1nylrq8x440yzqme262zy5875tt7vyn5yghjg5u807gms0359zl9svnrlrp" {
+            let parsed_query_msg: Result<WaitosaurHolderQueryMsg, _> = from_json(msg);
+            if let Ok(q) = parsed_query_msg {
+                return match q {
+                    WaitosaurHolderQueryMsg::GetState { .. } => SystemResult::Ok(
+                        ContractResult::Ok(to_json_binary(&self.waitosaur_holder_state).unwrap()),
+                    ),
+                    _ => {
+                        unimplemented!()
+                    }
+                };
+            }
+            // If parse failed or unsupported => fallback
+            return self
+                .base
+                .handle_query(&QueryRequest::Wasm(WasmQuery::Smart {
+                    contract_addr: contract_addr.into(),
+                    msg: msg.clone(),
+                }));
+        }
+
+        // Query token contract
+        if contract_addr == "cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw" {
             let parsed: Result<TokenConfigQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
                 return match q {
+                    TokenConfigQueryMsg::GetDenom { subdenom } => {
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&format!("factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/{}", subdenom.unwrap_or("maxbtc".to_string()))).unwrap(),
+                        ))
+                    }
                     TokenConfigQueryMsg::Config {} => SystemResult::Ok(ContractResult::Ok(
                         to_json_binary(&TokenConfigResponse {
                             factory_contract: Addr::unchecked("factory"),

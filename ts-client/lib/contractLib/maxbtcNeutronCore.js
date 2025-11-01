@@ -29,11 +29,23 @@ class Client {
     queryContractState = async () => {
         return this.client.queryContractSmart(this.contractAddress, { contract_state: {} });
     };
+    queryActiveBatch = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { active_batch: {} });
+    };
+    queryWithdrawingBatch = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { withdrawing_batch: {} });
+    };
+    queryFinalizedBatches = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { finalized_batches: {} });
+    };
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
     };
     queryExchangeRate = async () => {
         return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+    };
+    queryDepositBalance = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { deposit_balance: {} });
     };
     querySimulateDeposit = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
@@ -55,6 +67,20 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.depositMsg(args), fee || "auto", memo, funds);
     };
     depositMsg = (args) => { return { deposit: args }; };
+    withdraw = async (sender, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.withdrawMsg(), fee || "auto", memo, funds);
+    };
+    withdrawMsg = () => { return { withdraw: {} }; };
+    claim = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.claimMsg(args), fee || "auto", memo, funds);
+    };
+    claimMsg = (args) => { return { claim: args }; };
     updateConfig = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

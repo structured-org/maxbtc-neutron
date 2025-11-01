@@ -10,7 +10,8 @@
     "exchange_rate_provider_contract",
     "fee_collector_contract",
     "token_contract",
-    "waitosaur_contract"
+    "waitosaur_holder_contract",
+    "waitosaur_observer_contract"
   ],
   "properties": {
     "allowlist_contract": {
@@ -34,7 +35,10 @@
     "token_contract": {
       "$ref": "#/definitions/Addr"
     },
-    "waitosaur_contract": {
+    "waitosaur_holder_contract": {
+      "$ref": "#/definitions/Addr"
+    },
+    "waitosaur_observer_contract": {
       "$ref": "#/definitions/Addr"
     }
   },

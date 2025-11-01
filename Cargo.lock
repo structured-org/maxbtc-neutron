@@ -3829,6 +3829,7 @@ dependencies = [
  "cosmwasm-std",
  "cw-ownable",
  "cw-storage-plus",
+ "cw-utils",
  "cw2",
  "maxbtc-base",
  "neutron-std 5.0.0",
@@ -3901,6 +3902,31 @@ dependencies = [
  "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-neutron-waitosaur-holder"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw2",
+ "maxbtc-base",
+ "schemars",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-oracle-binance-aum-mock"
+version = "0.2.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "schemars",
+ "serde",
 ]
 
 [[package]]

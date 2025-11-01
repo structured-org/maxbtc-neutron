@@ -17,6 +17,45 @@
       "additionalProperties": false
     },
     {
+      "type": "object",
+      "required": [
+        "active_batch"
+      ],
+      "properties": {
+        "active_batch": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "withdrawing_batch"
+      ],
+      "properties": {
+        "withdrawing_batch": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "finalized_batches"
+      ],
+      "properties": {
+        "finalized_batches": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Returns the Config state",
       "type": "object",
       "required": [
@@ -37,6 +76,19 @@
       ],
       "properties": {
         "exchange_rate": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "deposit_balance"
+      ],
+      "properties": {
+        "deposit_balance": {
           "type": "object",
           "additionalProperties": false
         }

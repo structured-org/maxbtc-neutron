@@ -47,7 +47,7 @@
             ],
             "properties": {
               "amount": {
-                "$ref": "#/definitions/Uint128"
+                "$ref": "#/definitions/Coin"
               },
               "recipient": {
                 "type": "string"
@@ -87,6 +87,28 @@
             "properties": {
               "token_metadata": {
                 "$ref": "#/definitions/DenomMetadata"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "description": "Creates redemption token",
+        "type": "object",
+        "required": [
+          "create_redemption_token"
+        ],
+        "properties": {
+          "create_redemption_token": {
+            "type": "object",
+            "required": [
+              "redemption_subdenom"
+            ],
+            "properties": {
+              "redemption_subdenom": {
+                "type": "string"
               }
             },
             "additionalProperties": false
@@ -181,6 +203,22 @@
             ]
           }
         ]
+      },
+      "Coin": {
+        "type": "object",
+        "required": [
+          "amount",
+          "denom"
+        ],
+        "properties": {
+          "amount": {
+            "$ref": "#/definitions/Uint128"
+          },
+          "denom": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "DenomMetadata": {
         "type": "object",
@@ -316,6 +354,28 @@
         "additionalProperties": false
       },
       {
+        "description": "Returns the token factory denom",
+        "type": "object",
+        "required": [
+          "get_denom"
+        ],
+        "properties": {
+          "get_denom": {
+            "type": "object",
+            "properties": {
+              "subdenom": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
         "description": "Query the contract's ownership information",
         "type": "object",
         "required": [
@@ -363,6 +423,11 @@
           "type": "string"
         }
       }
+    },
+    "get_denom": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string"
     },
     "ownership": {
       "$schema": "http://json-schema.org/draft-07/schema#",

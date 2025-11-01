@@ -1,6 +1,5 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
-import { Coin } from "@cosmjs/amino";
 /**
  * A human readable address.
  *
@@ -11,6 +10,7 @@ import { Coin } from "@cosmjs/amino";
  * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
 export type Addr = string;
+export type String = string;
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -69,8 +69,9 @@ export type UpdateOwnershipArgs = {
     };
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronTokenSchema {
-    responses: Config | OwnershipForString;
-    execute: MintArgs | SetTokenMetadataArgs | UpdateConfigArgs | UpdateOwnershipArgs;
+    responses: Config | String | OwnershipForString;
+    query: GetDenomArgs;
+    execute: MintArgs | SetTokenMetadataArgs | CreateRedemptionTokenArgs | UpdateConfigArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -101,9 +102,16 @@ export interface OwnershipForString {
      */
     pending_owner?: string | null;
 }
+export interface GetDenomArgs {
+    subdenom?: string | null;
+}
 export interface MintArgs {
-    amount: Uint128;
+    amount: Coin;
     recipient: string;
+}
+export interface Coin {
+    amount: Uint128;
+    denom: string;
 }
 export interface SetTokenMetadataArgs {
     token_metadata: DenomMetadata;
@@ -138,6 +146,9 @@ export interface DenomMetadata {
      */
     uri_hash?: string | null;
 }
+export interface CreateRedemptionTokenArgs {
+    redemption_subdenom: string;
+}
 export interface UpdateConfigArgs {
     factory_contract?: string | null;
 }
@@ -163,6 +174,7 @@ export declare class Client {
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
     queryConfig: () => Promise<Config>;
+    queryGetDenom: (args: GetDenomArgs) => Promise<String>;
     queryOwnership: () => Promise<OwnershipForString>;
     mint: (sender: string, args: MintArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     mintMsg: (args: MintArgs) => {
@@ -175,6 +187,10 @@ export declare class Client {
     setTokenMetadata: (sender: string, args: SetTokenMetadataArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     setTokenMetadataMsg: (args: SetTokenMetadataArgs) => {
         set_token_metadata: SetTokenMetadataArgs;
+    };
+    createRedemptionToken: (sender: string, args: CreateRedemptionTokenArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    createRedemptionTokenMsg: (args: CreateRedemptionTokenArgs) => {
+        create_redemption_token: CreateRedemptionTokenArgs;
     };
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateConfigMsg: (args: UpdateConfigArgs) => {

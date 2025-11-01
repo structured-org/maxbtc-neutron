@@ -105,7 +105,8 @@ export interface State {
     exchange_rate_provider_contract: Addr;
     fee_collector_contract: Addr;
     token_contract: Addr;
-    waitosaur_contract: Addr;
+    waitosaur_holder_contract: Addr;
+    waitosaur_observer_contract: Addr;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
@@ -115,6 +116,7 @@ export interface InstantiateMsg {
      * Address of the binance AUM contract
      */
     binance_aum_contract: string;
+    ceffu_backend: string;
     code_ids: CodeIds;
     /**
      * One-off cost (Decimal) charged when a user deposits to mint maxBTC
@@ -128,10 +130,6 @@ export interface InstantiateMsg {
      * Denom for user deposits (e.g. IBC-transferred BTC)
      */
     deposit_denom: string;
-    /**
-     * Minimum number of seconds that must elapse between two deposit-flush operations
-     */
-    deposit_flush_period: number;
     /**
      * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
      */
@@ -152,9 +150,9 @@ export interface InstantiateMsg {
      */
     valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams;
     /**
-     * Address of the waitosaur unlocker
+     * Address of the waitosaur observer unlocker
      */
-    waitosaur_unlocker: string;
+    waitosaur_observer_unlocker: string;
 }
 export interface CodeIds {
     allowlist_contract_code_id: number;
@@ -164,7 +162,8 @@ export interface CodeIds {
     exchange_rate_provider_contract_code_id: number;
     fee_collector_contract_code_id: number;
     token_code_id: number;
-    waitosaur_contract_code_id: number;
+    waitosaur_holder_contract_code_id: number;
+    waitosaur_observer_contract_code_id: number;
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.

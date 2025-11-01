@@ -538,7 +538,7 @@ describe('Core', () => {
         10,
       );
     });
-    it('upload contracts', async () => {
+    it('upload contracts nad migrate', async () => {
       const { client, account, coreContractAddress } = context;
       let res = await client.upload(
         account.address,
@@ -551,6 +551,21 @@ describe('Core', () => {
       );
       expect(res.codeId).toBeGreaterThan(0);
       const coreCodeId = res.codeId;
+
+      res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(
+              __dirname,
+              '../../../artifacts/maxbtc_neutron_waitosaur_holder.wasm',
+            ),
+          ),
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+      const waitosaurHolderCodeId = res.codeId;
 
       res = await client.upload(
         account.address,
@@ -589,16 +604,19 @@ describe('Core', () => {
         coreContractAddress,
         tokenCodeId,
         {
-          core_code_id: coreCodeId,
-          waitosaur_code_id: waitosaurCodeId,
-          waitosaur_unlocker: account.address,
-          binance_aum_contract:
+          factory_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           operator:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
-          salt: 'salt',
-          factory_contract:
+          waitosaur_observer_unlocker: account.address,
+          core_code_id: coreCodeId,
+          waitosaur_observer_code_id: waitosaurCodeId,
+          binance_aum_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
+          ceffu_backend:
+            'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
+          waitosaur_holder_code_id: waitosaurHolderCodeId,
+          salt: 'salt',
         },
         fee,
       );
