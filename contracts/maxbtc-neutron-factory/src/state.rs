@@ -11,7 +11,7 @@ pub struct CodeIds {
     pub exchange_rate_provider_contract_code_id: u64,
     pub allowlist_contract_code_id: u64,
     pub fee_collector_contract_code_id: u64,
-    pub waitosaur_contract_code_id: u64,
+    pub waitosaur_observer_contract_code_id: u64,
     pub waitosaur_holder_contract_code_id: u64,
 }
 
@@ -24,12 +24,12 @@ pub struct State {
     pub deposit_forwarder_contract: Addr,
     pub deposit_forwarder_library_contract: Addr,
     pub core_contract: Addr,
-    pub waitosaur_contract: Addr,
+    pub waitosaur_observer_contract: Addr,
     pub waitosaur_holder_contract: Addr,
 }
 
 #[cw_serde]
-pub struct WaitosaurConfig {
+pub struct WaitosaurObserverConfig {
     pub locker: Addr,
     pub unlocker: Addr,
     pub contract: Addr,

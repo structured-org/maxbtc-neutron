@@ -2,9 +2,9 @@ use crate::error::ContractError;
 use crate::msg::{
     ExecuteMsg, InputAddr, InstantiateMsg, MigrateMsg, QueryMsg, ValenceBaseAccountInstantiateMsg,
     ValenceIbcTransferLibraryConfigParams, ValenceIbcTransferLibraryInstantiateMsg,
-    WaitosaurInstantiateMsg,
+    WaitosaurObserverInstantiateMsg,
 };
-use crate::state::{State, WaitosaurConfig, STATE};
+use crate::state::{State, WaitosaurObserverConfig, STATE};
 use cosmwasm_std::{
     entry_point, instantiate2_address, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo,
     Response, StdResult, WasmMsg,
@@ -127,17 +127,17 @@ pub fn instantiate(
     .map_err(ContractError::Instantiate2Error)?;
     let core_contract = deps.api.addr_humanize(&core_address)?;
 
-    let waitosaur_code_info = deps
+    let waitosaur_observer_code_info = deps
         .querier
-        .query_wasm_code_info(msg.code_ids.waitosaur_contract_code_id)?;
-    let waitosaur_checksum = waitosaur_code_info.checksum;
-    let waitosaur_address = instantiate2_address(
-        waitosaur_checksum.as_slice(),
+        .query_wasm_code_info(msg.code_ids.waitosaur_observer_contract_code_id)?;
+    let waitosaur_observer_checksum = waitosaur_observer_code_info.checksum;
+    let waitosaur_observer_address = instantiate2_address(
+        waitosaur_observer_checksum.as_slice(),
         &canonical_creator, // The creator is this core contract
         salt,
     )
     .map_err(ContractError::Instantiate2Error)?;
-    let waitosaur_contract = deps.api.addr_humanize(&waitosaur_address)?;
+    let waitosaur_observer_contract = deps.api.addr_humanize(&waitosaur_observer_address)?;
 
     let waitosaur_holder_code_info = deps
         .querier
@@ -154,15 +154,15 @@ pub fn instantiate(
 
     // Instantiate contracts messages
 
-    let instantiate_waitosaur_msg = WasmMsg::Instantiate2 {
+    let instantiate_waitosaur_observer_msg = WasmMsg::Instantiate2 {
         admin: Some(env.contract.address.to_string()), // The core contract owner is admin
-        code_id: msg.code_ids.waitosaur_contract_code_id,
+        code_id: msg.code_ids.waitosaur_observer_contract_code_id,
         label: "maxBTC Waitosaur Contract".to_string(),
-        msg: to_json_binary(&WaitosaurInstantiateMsg {
+        msg: to_json_binary(&WaitosaurObserverInstantiateMsg {
             owner: msg.owner.to_string(),
-            config: WaitosaurConfig {
+            config: WaitosaurObserverConfig {
                 locker: core_contract.clone(),
-                unlocker: deps.api.addr_validate(&msg.waitosaur_unlocker)?,
+                unlocker: deps.api.addr_validate(&msg.waitosaur_observer_unlocker)?,
                 contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
                 asset: msg.deposit_denom.clone(),
             },
@@ -286,7 +286,7 @@ pub fn instantiate(
             allowlist_contract: allowlist_contract.to_string(),
             exchange_rate_provider_contract: exchange_rate_provider_contract.to_string(),
             fee_collector_contract: fee_collector_contract.to_string(),
-            waitosaur_contract: waitosaur_contract.to_string(),
+            waitosaur_observer_contract: waitosaur_observer_contract.to_string(),
             waitosaur_holder_contract: waitosaur_holder_contract.to_string(),
             total_deposited: None,
             current_deposit_balance: None,
@@ -303,7 +303,7 @@ pub fn instantiate(
         deposit_forwarder_contract,
         deposit_forwarder_library_contract,
         core_contract,
-        waitosaur_contract,
+        waitosaur_observer_contract,
         waitosaur_holder_contract,
     };
 
@@ -311,7 +311,7 @@ pub fn instantiate(
 
     // 5. Build the final response with all necessary messages and attributes
     Ok(Response::new()
-        .add_message(instantiate_waitosaur_msg)
+        .add_message(instantiate_waitosaur_observer_msg)
         .add_message(instantiate_allowlist_msg)
         .add_message(instantiate_exchange_rate_provider_msg)
         .add_message(instantiate_token_factory_msg)

@@ -77,7 +77,7 @@ describe('Core', () => {
     coreCodeId?: number;
     tokenCodeId?: number;
     factoryCodeId?: number;
-    waitosaurCodeId?: number;
+    waitosaurObserverCodeId?: number;
 
     tokenContractClient?: InstanceType<typeof TokenContractClient>;
     tokenContractAddress?: string;
@@ -91,7 +91,7 @@ describe('Core', () => {
     factoryContractAddress?: string;
 
     treasuryAddress?: string;
-    waitosaurContractAddress?: string;
+    waitosaurObserverContractAddress?: string;
 
     factoryState?: FactoryState;
 
@@ -316,7 +316,7 @@ describe('Core', () => {
           1.5,
         );
         expect(res.codeId).toBeGreaterThan(0);
-        context.waitosaurCodeId = res.codeId;
+        context.waitosaurObserverCodeId = res.codeId;
       }
     });
 
@@ -358,7 +358,7 @@ describe('Core', () => {
         factoryCodeId,
         tokenCodeId,
         coreCodeId,
-        waitosaurCodeId,
+        waitosaurObserverCodeId,
         feeCollectorCodeId,
         depositForwarderContractCodeId,
         depositForwarderLibraryContractCodeId,
@@ -387,7 +387,7 @@ describe('Core', () => {
               exchangeRateProviderContractCodeId,
             allowlist_contract_code_id: allowlistContractCodeId,
             fee_collector_contract_code_id: feeCollectorCodeId,
-            waitosaur_contract_code_id: waitosaurCodeId,
+            waitosaur_observer_contract_code_id: waitosaurObserverCodeId,
             waitosaur_holder_contract_code_id: waitosaurHolderContractCodeId,
           },
           salt: 'salt',
@@ -396,7 +396,7 @@ describe('Core', () => {
           deposit_cost: '0.01',
           maxbtc_denom: 'maxbtc',
           binance_aum_contract: binanceAumOracleAddress,
-          waitosaur_unlocker: account.address,
+          waitosaur_observer_unlocker: account.address,
           fee_collector_params: {
             fee_apy_reduction_percentage: '0.1',
             collection_period_seconds: 10,
@@ -481,8 +481,8 @@ describe('Core', () => {
         context.factoryState.fee_collector_contract;
       context.tokenContractAddress = context.factoryState.token_contract;
 
-      context.waitosaurContractAddress =
-        context.factoryState.waitosaur_contract;
+      context.waitosaurObserverContractAddress =
+        context.factoryState.waitosaur_observer_contract;
       context.waitosaurHolderContractAddress =
         context.factoryState.waitosaur_holder_contract;
       context.waitosaurHolderContractClient = new WaitosaurHolderContractClient(
@@ -611,7 +611,11 @@ describe('Core', () => {
       });
 
       it('unlock waitosaur', async () => {
-        const { client, account, waitosaurContractAddress } = context;
+        const {
+          client,
+          account,
+          waitosaurObserverContractAddress: waitosaurContractAddress,
+        } = context;
 
         // Amount to unlock should be the same as the amount of the deposit and set in the maxbtc-oracle-binance-aum-mock contract
 

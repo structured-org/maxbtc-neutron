@@ -19,13 +19,22 @@ export interface GetDataResponse {
     last_published_data?: ConsensusOutcomeFor_BinanceData | null;
 }
 export interface ConsensusOutcomeFor_BinanceData {
-    /**
-     * The data submitted by the messengers
-     */
     data: BinanceData;
+    round: number;
+    timestamp: number;
 }
 export interface BinanceData {
+    pm_account_actual_equity: SignedDecimal256;
+    positions: Position[];
     spot_balances: SpotBalance[];
+    um_balance_usdt: SignedDecimal256;
+    unimmr: SignedDecimal256;
+    withdrawable_usdt: SignedDecimal256;
+}
+export interface Position {
+    amount: SignedDecimal256;
+    pnl: SignedDecimal256;
+    symbol: string;
 }
 export interface SpotBalance {
     amount: SignedDecimal256;

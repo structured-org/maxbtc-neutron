@@ -15,8 +15,8 @@
     "operator",
     "owner",
     "token_contract",
-    "waitosaur_contract",
-    "waitosaur_holder_contract"
+    "waitosaur_holder_contract",
+    "waitosaur_observer_contract"
   ],
   "properties": {
     "allowlist_contract": {
@@ -101,12 +101,12 @@
         }
       ]
     },
-    "waitosaur_contract": {
-      "description": "Address of the waitosaur contract",
-      "type": "string"
-    },
     "waitosaur_holder_contract": {
       "description": "Address of the waitosaur holder contract",
+      "type": "string"
+    },
+    "waitosaur_observer_contract": {
+      "description": "Address of the waitosaur contract",
       "type": "string"
     }
   },

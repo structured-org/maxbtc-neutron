@@ -112,8 +112,8 @@ export interface State {
   exchange_rate_provider_contract: Addr;
   fee_collector_contract: Addr;
   token_contract: Addr;
-  waitosaur_contract: Addr;
   waitosaur_holder_contract: Addr;
+  waitosaur_observer_contract: Addr;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
@@ -157,9 +157,9 @@ export interface InstantiateMsg {
    */
   valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams;
   /**
-   * Address of the waitosaur unlocker
+   * Address of the waitosaur observer unlocker
    */
-  waitosaur_unlocker: string;
+  waitosaur_observer_unlocker: string;
 }
 export interface CodeIds {
   allowlist_contract_code_id: number;
@@ -169,8 +169,8 @@ export interface CodeIds {
   exchange_rate_provider_contract_code_id: number;
   fee_collector_contract_code_id: number;
   token_code_id: number;
-  waitosaur_contract_code_id: number;
   waitosaur_holder_contract_code_id: number;
+  waitosaur_observer_contract_code_id: number;
 }
 /**
  * New struct to hold parameters for instantiating the fee collector contract.

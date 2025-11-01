@@ -287,13 +287,13 @@ export interface InstantiateMsg {
      */
     total_deposited?: Uint128 | null;
     /**
-     * Address of the waitosaur contract
-     */
-    waitosaur_contract: string;
-    /**
      * Address of the waitosaur holder contract
      */
     waitosaur_holder_contract: string;
+    /**
+     * Address of the waitosaur contract
+     */
+    waitosaur_observer_contract: string;
 }
 export declare class Client {
     private readonly client;

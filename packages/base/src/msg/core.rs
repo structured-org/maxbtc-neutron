@@ -32,7 +32,7 @@ pub struct InstantiateMsg {
     /// accrued protocol APR
     pub fee_collector_contract: String,
     /// Address of the waitosaur contract
-    pub waitosaur_contract: String,
+    pub waitosaur_observer_contract: String,
     /// Address of the waitosaur holder contract
     pub waitosaur_holder_contract: String,
     /// Total amount of BTC deposited by the contract (used in migration)
@@ -52,7 +52,7 @@ pub struct UpdateConfigMsg {
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
-    pub waitosaur_contract: Option<String>,
+    pub waitosaur_observer_contract: Option<String>,
     pub withdrawal_notifier_contract: Option<String>,
 }
 
@@ -144,13 +144,13 @@ pub struct GetTwaerResponse {
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum WaitosaurQueryMsg {
-    #[returns(crate::state::core::WaitosaurState)]
+pub enum WaitosaurObserverQueryMsg {
+    #[returns(crate::state::core::WaitosaurObserverState)]
     GetState {},
 }
 
 #[cw_serde]
-pub enum WaitosaurExecuteMsg {
+pub enum WaitosaurObserverExecuteMsg {
     Lock { amount: SignedDecimal256 },
 }
 

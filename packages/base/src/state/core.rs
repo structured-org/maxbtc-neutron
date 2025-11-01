@@ -25,8 +25,6 @@ pub struct Config {
     /// Optional upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
-    /// Contract that holds amount of BTC received from CEFFU
-    pub waitosaur_holder_contract: Addr,
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: Addr,
@@ -35,8 +33,10 @@ pub struct Config {
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,
-    /// Address of the waitosaur contract
-    pub waitosaur_contract: Addr,
+    /// Address of the waitosaur observer contract
+    pub waitosaur_observer_contract: Addr,
+    /// Contract that holds amount of BTC received from CEFFU
+    pub waitosaur_holder_contract: Addr,
 }
 
 /// A single global config item
@@ -60,7 +60,7 @@ pub enum ContractState {
 }
 
 #[cw_serde]
-pub enum WaitosaurState {
+pub enum WaitosaurObserverState {
     Locked {
         amount: SignedDecimal256,
         at_timestamp: u64,

@@ -4,13 +4,13 @@ use cosmwasm_std::{
     ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
     SystemResult, Uint128, WasmQuery,
 };
-use maxbtc_base::msg::core::WaitosaurQueryMsg;
+use maxbtc_base::msg::core::WaitosaurObserverQueryMsg;
 use maxbtc_base::msg::{
     core::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse},
     token::QueryMsg as TokenConfigQueryMsg,
     waitosaur_holder::QueryMsg as WaitosaurHolderQueryMsg,
 };
-use maxbtc_base::state::core::WaitosaurState;
+use maxbtc_base::state::core::WaitosaurObserverState;
 use maxbtc_base::state::{
     token::Config as TokenConfigResponse, waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -46,7 +46,7 @@ pub struct WasmMockQuerier {
 
     allowed_recipient: bool,
 
-    waitosaur_state: WaitosaurState,
+    waitosaur_observer_state: WaitosaurObserverState,
     /// Amount of BTC to receive from CEFFU (for withdrawing batch)
     waitosaur_holder_state: WaitsaurHolderState,
 
@@ -85,7 +85,7 @@ impl WasmMockQuerier {
             waitosaur_holder_state: WaitsaurHolderState::Unlocked {},
             denom: "maxBTC".to_string(),
             exchange_rate: Decimal::one(),
-            waitosaur_state: WaitosaurState::Unlocked {},
+            waitosaur_observer_state: WaitosaurObserverState::Unlocked {},
         }
     }
 
@@ -102,8 +102,8 @@ impl WasmMockQuerier {
         self.allowed_recipient = allowed;
     }
 
-    pub fn set_waitosaur_state(&mut self, state: WaitosaurState) {
-        self.waitosaur_state = state;
+    pub fn set_waitosaur_observer_state(&mut self, state: WaitosaurObserverState) {
+        self.waitosaur_observer_state = state;
     }
 
     pub fn set_waitsaur_holder_state(&mut self, state: WaitsaurHolderState) {
@@ -217,11 +217,11 @@ impl WasmMockQuerier {
 
         // Waitosaur contract
         if contract_addr == "cosmwasm1603h02gmafrs2ar32mcx83885aqt8yms86smppjstl223swgyjps0f242x" {
-            let parsed: Result<WaitosaurQueryMsg, _> = from_json(msg);
+            let parsed: Result<WaitosaurObserverQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
                 return match q {
-                    WaitosaurQueryMsg::GetState {} => {
-                        let val = self.waitosaur_state.clone();
+                    WaitosaurObserverQueryMsg::GetState {} => {
+                        let val = self.waitosaur_observer_state.clone();
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&val).unwrap()))
                     }
                 };

@@ -335,7 +335,7 @@
             "null"
           ]
         },
-        "waitosaur_contract": {
+        "waitosaur_observer_contract": {
           "type": [
             "string",
             "null"

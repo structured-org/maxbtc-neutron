@@ -16,7 +16,7 @@
     "owner",
     "salt",
     "valence_ibc_transfer_params",
-    "waitosaur_unlocker"
+    "waitosaur_observer_unlocker"
   ],
   "properties": {
     "binance_aum_contract": {
@@ -87,8 +87,8 @@
         }
       ]
     },
-    "waitosaur_unlocker": {
-      "description": "Address of the waitosaur unlocker",
+    "waitosaur_observer_unlocker": {
+      "description": "Address of the waitosaur observer unlocker",
       "type": "string"
     }
   },
@@ -104,8 +104,8 @@
         "exchange_rate_provider_contract_code_id",
         "fee_collector_contract_code_id",
         "token_code_id",
-        "waitosaur_contract_code_id",
-        "waitosaur_holder_contract_code_id"
+        "waitosaur_holder_contract_code_id",
+        "waitosaur_observer_contract_code_id"
       ],
       "properties": {
         "allowlist_contract_code_id": {
@@ -143,12 +143,12 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "waitosaur_contract_code_id": {
+        "waitosaur_holder_contract_code_id": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
-        "waitosaur_holder_contract_code_id": {
+        "waitosaur_observer_contract_code_id": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

@@ -9,14 +9,14 @@ use cosmwasm_std::{
     OwnedDeps, Response, SignedDecimal256, SubMsg, Uint128, WasmMsg,
 };
 use cw_utils::PaymentError;
-use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, WaitosaurExecuteMsg};
+use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, WaitosaurObserverExecuteMsg};
 use maxbtc_base::msg::{
     token::ExecuteMsg as TokenExecuteMsg, waitosaur_holder::ExecuteMsg as WaitosaurHolderExecuteMsg,
 };
 use maxbtc_base::state::{
     core::{
-        Batch, ContractState, WaitosaurState, ACTIVE_BATCH, CONFIG, CURRENT_DEPOSIT_BALANCE,
-        FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
+        Batch, ContractState, WaitosaurObserverState, ACTIVE_BATCH, CONFIG,
+        CURRENT_DEPOSIT_BALANCE, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -1076,10 +1076,11 @@ fn test_idle_tick_withdraw_and_stay_idle() {
 fn test_deposit_neutron_tick_locked() {
     let (mut deps, env, _) = setup_contract();
 
-    deps.querier.set_waitosaur_state(WaitosaurState::Locked {
-        amount: SignedDecimal256::from(Decimal::from_atomics(500_000u64, 0).unwrap()),
-        at_timestamp: env.block.time.seconds(),
-    });
+    deps.querier
+        .set_waitosaur_observer_state(WaitosaurObserverState::Locked {
+            amount: SignedDecimal256::from(Decimal::from_atomics(500_000u64, 0).unwrap()),
+            at_timestamp: env.block.time.seconds(),
+        });
 
     FSM.set_initial_state(&mut deps.storage, ContractState::DepositNeutron)
         .unwrap();
@@ -1283,8 +1284,8 @@ fn test_idle_tick_goes_to_deposit_neutron() {
                 }],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: cfg.waitosaur_contract.to_string(),
-                msg: to_json_binary(&WaitosaurExecuteMsg::Lock {
+                contract_addr: cfg.waitosaur_observer_contract.to_string(),
+                msg: to_json_binary(&WaitosaurObserverExecuteMsg::Lock {
                     amount: SignedDecimal256::from(Decimal::from_atomics(200_000u64, 0).unwrap()),
                 })
                 .unwrap(),
@@ -1336,8 +1337,8 @@ fn test_ticks_deposit_cycle() {
                 }],
             })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: cfg.waitosaur_contract.to_string(),
-                msg: to_json_binary(&WaitosaurExecuteMsg::Lock {
+                contract_addr: cfg.waitosaur_observer_contract.to_string(),
+                msg: to_json_binary(&WaitosaurObserverExecuteMsg::Lock {
                     amount: SignedDecimal256::from(
                         Decimal::from_atomics(Uint128::new(200_000u128), 0).unwrap()
                     ),
@@ -1413,7 +1414,7 @@ fn default_instantiate_msg(
         deposits_cap: None,
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_contract: deps.api.addr_make("fee_collector_addr").to_string(),
-        waitosaur_contract: deps.api.addr_make("waitosaur_addr").to_string(),
+        waitosaur_observer_contract: deps.api.addr_make("waitosaur_addr").to_string(),
         waitosaur_holder_contract: deps.api.addr_make("waitosaur_holder_contract").to_string(),
         total_deposited: None,
         current_deposit_balance: None,

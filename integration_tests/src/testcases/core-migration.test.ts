@@ -608,9 +608,9 @@ describe('Core', () => {
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           operator:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
-          waitosaur_unlocker: account.address,
+          waitosaur_observer_unlocker: account.address,
           core_code_id: coreCodeId,
-          waitosaur_code_id: waitosaurCodeId,
+          waitosaur_observer_code_id: waitosaurCodeId,
           binance_aum_contract:
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           ceffu_backend:

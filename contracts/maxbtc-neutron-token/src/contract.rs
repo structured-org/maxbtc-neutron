@@ -266,11 +266,16 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
         initialize_owner(deps.storage, deps.api, Some(core_contract.as_str()))?;
 
-        let waitosaur_code_info = deps.querier.query_wasm_code_info(msg.waitosaur_code_id)?;
-        let waitosaur_checksum = waitosaur_code_info.checksum;
-        let waitosaur_address =
-            instantiate2_address(waitosaur_checksum.as_slice(), &canonical_self_address, salt)?;
-        let waitosaur_contract = deps.api.addr_humanize(&waitosaur_address)?;
+        let waitosaur_observer_code_info = deps
+            .querier
+            .query_wasm_code_info(msg.waitosaur_observer_code_id)?;
+        let waitosaur_observer_checksum = waitosaur_observer_code_info.checksum;
+        let waitosaur_observer_address = instantiate2_address(
+            waitosaur_observer_checksum.as_slice(),
+            &canonical_self_address,
+            salt,
+        )?;
+        let waitosaur_observer_contract = deps.api.addr_humanize(&waitosaur_observer_address)?;
 
         #[cosmwasm_schema::cw_serde]
         pub struct OldConfig {
@@ -290,7 +295,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         let old_config = Item::<OldConfig>::new("config").load(deps.storage)?;
 
         #[cosmwasm_schema::cw_serde]
-        pub struct WaitosaurConfig {
+        pub struct WaitosaurObserverConfig {
             pub locker: Addr,
             pub unlocker: Addr,
             pub contract: Addr,
@@ -298,20 +303,20 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         }
 
         #[cosmwasm_schema::cw_serde]
-        pub struct WaitosaurInstantiateMsg {
-            pub config: WaitosaurConfig,
+        pub struct WaitosaurObserverInstantiateMsg {
+            pub config: WaitosaurObserverConfig,
             pub owner: String,
         }
 
         let instantiate_waitosaur_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
-            code_id: msg.waitosaur_code_id,
+            code_id: msg.waitosaur_observer_code_id,
             label: "maxBTC Waitosaur Contract".to_string(),
-            msg: to_json_binary(&WaitosaurInstantiateMsg {
+            msg: to_json_binary(&WaitosaurObserverInstantiateMsg {
                 owner: msg.factory_contract.to_string(),
-                config: WaitosaurConfig {
+                config: WaitosaurObserverConfig {
                     locker: core_contract.clone(),
-                    unlocker: deps.api.addr_validate(&msg.waitosaur_unlocker)?,
+                    unlocker: deps.api.addr_validate(&msg.waitosaur_observer_unlocker)?,
                     contract: deps.api.addr_validate(&msg.binance_aum_contract)?,
                     asset: old_config.deposit_denom.clone(),
                 },
@@ -363,7 +368,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                     .exchange_rate_provider_contract
                     .into_string(),
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
-                waitosaur_contract: waitosaur_contract.into_string(),
+                waitosaur_observer_contract: waitosaur_observer_contract.into_string(),
                 total_deposited: Some(total_deposited),
                 current_deposit_balance: Some(deposit_balance.amount),
             })?,

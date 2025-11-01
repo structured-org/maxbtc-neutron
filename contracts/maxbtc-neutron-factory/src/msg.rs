@@ -4,7 +4,7 @@ use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
-use crate::state::{CodeIds, WaitosaurConfig};
+use crate::state::{CodeIds, WaitosaurObserverConfig};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -31,13 +31,13 @@ pub struct InstantiateMsg {
     pub valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams,
     /// Address of the binance AUM contract
     pub binance_aum_contract: String,
-    /// Address of the waitosaur unlocker
-    pub waitosaur_unlocker: String,
+    /// Address of the waitosaur observer unlocker
+    pub waitosaur_observer_unlocker: String,
 }
 
 #[cw_serde]
-pub struct WaitosaurInstantiateMsg {
-    pub config: WaitosaurConfig,
+pub struct WaitosaurObserverInstantiateMsg {
+    pub config: WaitosaurObserverConfig,
     pub owner: String,
 }
 
