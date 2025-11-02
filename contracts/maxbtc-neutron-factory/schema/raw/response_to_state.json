@@ -5,8 +5,6 @@
   "required": [
     "allowlist_contract",
     "core_contract",
-    "deposit_forwarder_contract",
-    "deposit_forwarder_library_contract",
     "exchange_rate_provider_contract",
     "fee_collector_contract",
     "token_contract",
@@ -19,12 +17,6 @@
       "$ref": "#/definitions/Addr"
     },
     "core_contract": {
-      "$ref": "#/definitions/Addr"
-    },
-    "deposit_forwarder_contract": {
-      "$ref": "#/definitions/Addr"
-    },
-    "deposit_forwarder_library_contract": {
       "$ref": "#/definitions/Addr"
     },
     "exchange_rate_provider_contract": {

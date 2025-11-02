@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Decimal, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
@@ -27,12 +25,12 @@ pub struct InstantiateMsg {
     pub maxbtc_denom: String,
     /// Instantiation parameters for the fee collector.
     pub fee_collector_params: FeeMinterParams,
-    /// Valence IBC transfer
-    pub valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams,
     /// Address of the binance AUM contract
     pub binance_aum_contract: String,
     /// Address of the waitosaur observer unlocker
     pub waitosaur_observer_unlocker: String,
+    /// Address of the deposit forwarder contract
+    pub deposit_forwarder_contract: String,
 }
 
 #[cw_serde]
@@ -48,58 +46,6 @@ pub struct FeeMinterParams {
     pub fee_apy_reduction_percentage: Decimal,
     /// The duration in hours for each fee collection period.
     pub collection_period_seconds: u64,
-}
-
-#[cw_serde]
-pub struct ValenceIbcTransferLibraryInstantiateMsg {
-    pub owner: String,
-    pub processor: String,
-    pub config: ValenceIbcTransferLibraryConfigParams,
-}
-
-#[cw_serde]
-pub struct ValenceIbcTransferLibraryConfigParams {
-    pub input_addr: InputAddr,
-    pub output_addr: OutputAddr,
-    pub denom: Denom,
-    pub amount: String,
-    pub memo: String,
-    pub remote_chain_info: RemoteChainInfo,
-    pub denom_to_pfm_map: HashMap<String, String>,
-    pub eureka_config: EurekaConfig,
-}
-#[cw_serde]
-pub struct ValenceBaseAccountInstantiateMsg {
-    pub admin: String,
-    pub approved_libraries: Vec<String>,
-}
-
-#[cw_serde]
-pub struct InputAddr {
-    pub library_account_addr: String,
-}
-
-#[cw_serde]
-pub struct OutputAddr {
-    pub library_account_addr: String,
-}
-
-#[cw_serde]
-pub struct Denom {
-    pub native: String,
-}
-
-#[cw_serde]
-pub struct RemoteChainInfo {
-    pub channel_id: String,
-}
-
-#[cw_serde]
-pub struct EurekaConfig {
-    pub callback_contract: String,
-    pub action_contract: String,
-    pub recover_address: String,
-    pub source_channel: String,
 }
 
 /// Message for updating configuration parameters (owner-only).

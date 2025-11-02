@@ -107,8 +107,6 @@ export interface OwnershipForString {
 export interface State {
   allowlist_contract: Addr;
   core_contract: Addr;
-  deposit_forwarder_contract: Addr;
-  deposit_forwarder_library_contract: Addr;
   exchange_rate_provider_contract: Addr;
   fee_collector_contract: Addr;
   token_contract: Addr;
@@ -139,6 +137,10 @@ export interface InstantiateMsg {
    */
   deposit_denom: string;
   /**
+   * Address of the deposit forwarder contract
+   */
+  deposit_forwarder_contract: string;
+  /**
    * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
    */
   deposits_cap?: Uint128 | null;
@@ -154,10 +156,6 @@ export interface InstantiateMsg {
   owner: string;
   salt: string;
   /**
-   * Valence IBC transfer
-   */
-  valence_ibc_transfer_params: ValenceIbcTransferLibraryConfigParams;
-  /**
    * Address of the waitosaur observer unlocker
    */
   waitosaur_observer_unlocker: string;
@@ -165,8 +163,6 @@ export interface InstantiateMsg {
 export interface CodeIds {
   allowlist_contract_code_id: number;
   core_code_id: number;
-  deposit_forwarder_contract_code_id: number;
-  deposit_forwarder_library_contract_code_id: number;
   exchange_rate_provider_contract_code_id: number;
   fee_collector_contract_code_id: number;
   token_code_id: number;
@@ -186,34 +182,6 @@ export interface FeeMinterParams {
    * The percentage of APY to be taken as a fee.
    */
   fee_apy_reduction_percentage: Decimal;
-}
-export interface ValenceIbcTransferLibraryConfigParams {
-  amount: string;
-  denom: Denom;
-  denom_to_pfm_map: {};
-  eureka_config: EurekaConfig;
-  input_addr: InputAddr;
-  memo: string;
-  output_addr: OutputAddr;
-  remote_chain_info: RemoteChainInfo;
-}
-export interface Denom {
-  native: string;
-}
-export interface EurekaConfig {
-  action_contract: string;
-  callback_contract: string;
-  recover_address: string;
-  source_channel: string;
-}
-export interface InputAddr {
-  library_account_addr: string;
-}
-export interface OutputAddr {
-  library_account_addr: string;
-}
-export interface RemoteChainInfo {
-  channel_id: string;
 }
 
 

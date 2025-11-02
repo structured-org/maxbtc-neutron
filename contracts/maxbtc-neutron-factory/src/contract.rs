@@ -1,8 +1,6 @@
 use crate::error::ContractError;
 use crate::msg::{
-    ExecuteMsg, InputAddr, InstantiateMsg, MigrateMsg, QueryMsg, ValenceBaseAccountInstantiateMsg,
-    ValenceIbcTransferLibraryConfigParams, ValenceIbcTransferLibraryInstantiateMsg,
-    WaitosaurObserverInstantiateMsg,
+    ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, WaitosaurObserverInstantiateMsg,
 };
 use crate::state::{State, WaitosaurObserverConfig, STATE};
 use cosmwasm_std::{
@@ -65,31 +63,6 @@ pub fn instantiate(
     )
     .map_err(ContractError::Instantiate2Error)?;
     let token_contract = deps.api.addr_humanize(&token_address)?;
-
-    let deposit_forwarder_code_info = deps
-        .querier
-        .query_wasm_code_info(msg.code_ids.deposit_forwarder_contract_code_id)?;
-    let deposit_forwarder_checksum = deposit_forwarder_code_info.checksum;
-    let deposit_forwarder_address = instantiate2_address(
-        deposit_forwarder_checksum.as_slice(),
-        &canonical_creator, // The creator is this core contract
-        salt,
-    )
-    .map_err(ContractError::Instantiate2Error)?;
-    let deposit_forwarder_contract = deps.api.addr_humanize(&deposit_forwarder_address)?;
-
-    let deposit_forwarder_library_code_info = deps
-        .querier
-        .query_wasm_code_info(msg.code_ids.deposit_forwarder_library_contract_code_id)?;
-    let deposit_forwarder_library_checksum = deposit_forwarder_library_code_info.checksum;
-    let deposit_forwarder_library_address = instantiate2_address(
-        deposit_forwarder_library_checksum.as_slice(),
-        &canonical_creator, // The creator is this core contract
-        salt,
-    )
-    .map_err(ContractError::Instantiate2Error)?;
-    let deposit_forwarder_library_contract =
-        deps.api.addr_humanize(&deposit_forwarder_library_address)?;
 
     let exchange_rate_provider_code_info = deps
         .querier
@@ -249,36 +222,6 @@ pub fn instantiate(
         salt: Binary::from(salt),
     };
 
-    let instantiate_forwarder_msg = WasmMsg::Instantiate2 {
-        admin: Some(env.contract.address.to_string()), // The core contract owner is admin
-        code_id: msg.code_ids.deposit_forwarder_contract_code_id,
-        label: "maxBTC Valence IBC Transfer Contract".to_string(),
-        msg: to_json_binary(&ValenceBaseAccountInstantiateMsg {
-            admin: msg.owner.to_string(), // Same owner as the core contract
-            approved_libraries: vec![deposit_forwarder_library_contract.to_string()],
-        })?,
-        funds: vec![],
-        salt: Binary::from(salt),
-    };
-
-    let instantiate_forwarder_library_msg = WasmMsg::Instantiate2 {
-        admin: Some(env.contract.address.to_string()), // The core contract owner is admin
-        code_id: msg.code_ids.deposit_forwarder_library_contract_code_id,
-        label: "maxBTC Valence IBC Transfer Library Contract".to_string(),
-        msg: to_json_binary(&ValenceIbcTransferLibraryInstantiateMsg {
-            owner: msg.owner.to_string(),
-            processor: core_contract.to_string(),
-            config: ValenceIbcTransferLibraryConfigParams {
-                input_addr: InputAddr {
-                    library_account_addr: deposit_forwarder_contract.to_string(),
-                },
-                ..msg.valence_ibc_transfer_params
-            },
-        })?,
-        funds: vec![],
-        salt: Binary::from(salt),
-    };
-
     let instantiate_waitosaur_holder_msg = WasmMsg::Instantiate2 {
         admin: Some(env.contract.address.to_string()), // The core contract owner is admin
         code_id: msg.code_ids.waitosaur_holder_contract_code_id,
@@ -305,7 +248,7 @@ pub fn instantiate(
             operator: msg.operator.to_string(),
             token_contract: token_contract.to_string(),
             factory_contract: env.contract.address.to_string(),
-            deposit_forwarder_contract: deposit_forwarder_contract.to_string(),
+            deposit_forwarder_contract: msg.deposit_forwarder_contract.to_string(),
             deposit_denom: msg.deposit_denom.clone(),
             deposit_decimals: msg.deposit_decimals,
             deposit_cost: msg.deposit_cost,
@@ -328,8 +271,6 @@ pub fn instantiate(
         exchange_rate_provider_contract,
         fee_collector_contract,
         token_contract,
-        deposit_forwarder_contract,
-        deposit_forwarder_library_contract,
         core_contract,
         waitosaur_observer_contract,
         waitosaur_holder_contract,
@@ -345,8 +286,6 @@ pub fn instantiate(
         .add_message(instantiate_allowlist_msg)
         .add_message(instantiate_exchange_rate_provider_msg)
         .add_message(instantiate_token_factory_msg)
-        .add_message(instantiate_forwarder_msg)
-        .add_message(instantiate_forwarder_library_msg)
         .add_message(instantiate_waitosaur_holder_msg)
         .add_message(instantiate_core_msg)
         .add_message(instantiate_fee_collector_msg)

@@ -69,13 +69,9 @@ describe('Core', () => {
     neutronClient?: InstanceType<typeof NeutronClient>;
 
     coreContractAddress?: string;
-    forwarderContractAddress?: string;
-    forwarderLibraryContractAddress?: string;
     waitosaurHolderContractAddress?: string;
 
     feeCollectorCodeId?: number;
-    depositForwarderContractCodeId?: number;
-    depositForwarderLibraryContractCodeId?: number;
     exchangeRateProviderContractCodeId?: number;
     allowlistContractCodeId?: number;
     feeCollectorContractCodeId?: number;
@@ -103,6 +99,10 @@ describe('Core', () => {
     factoryState?: FactoryState;
 
     binanceAumOracleAddress?: string;
+
+    depositForwarderWallet?: DirectSecp256k1HdWallet;
+    depositForwarderAccount?: AccountData;
+    depositForwarderAddress?: string;
   } = {};
 
   beforeAll(async (t) => {
@@ -125,12 +125,23 @@ describe('Core', () => {
         prefix: 'neutron',
       },
     );
+    context.depositForwarderWallet = await DirectSecp256k1HdWallet.generate(
+      12,
+      {
+        prefix: 'neutron',
+      },
+    );
 
     context.account = (await context.wallet.getAccounts())[0];
     context.operatorAccount = (await context.operatorWallet.getAccounts())[0];
     context.ceffuBackendAccount = (
       await context.ceffuBackendWallet.getAccounts()
     )[0];
+
+    context.depositForwarderAccount = (
+      await context.depositForwarderWallet.getAccounts()
+    )[0];
+    context.depositForwarderAddress = context.depositForwarderAccount.address;
 
     context.neutronClient = new NeutronClient({
       apiURL: `http://127.0.0.1:${context.park.ports.neutron.rest}`,
@@ -255,35 +266,6 @@ describe('Core', () => {
           account.address,
           Uint8Array.from(
             fs.readFileSync(
-              join(__dirname, '../../../artifacts/valence_base_account.wasm'),
-            ),
-          ),
-          1.5,
-        );
-        expect(res.codeId).toBeGreaterThan(0);
-        context.depositForwarderContractCodeId = res.codeId;
-      }
-      {
-        const res = await client.upload(
-          account.address,
-          Uint8Array.from(
-            fs.readFileSync(
-              join(
-                __dirname,
-                '../../../artifacts/valence_neutron_ibc_transfer_library.wasm',
-              ),
-            ),
-          ),
-          1.5,
-        );
-        expect(res.codeId).toBeGreaterThan(0);
-        context.depositForwarderLibraryContractCodeId = res.codeId;
-      }
-      {
-        const res = await client.upload(
-          account.address,
-          Uint8Array.from(
-            fs.readFileSync(
               join(__dirname, '../../../artifacts/maxbtc_neutron_core.wasm'),
             ),
           ),
@@ -383,14 +365,13 @@ describe('Core', () => {
         coreCodeId,
         waitosaurObserverCodeId,
         feeCollectorCodeId,
-        depositForwarderContractCodeId,
-        depositForwarderLibraryContractCodeId,
         exchangeRateProviderContractCodeId,
         allowlistContractCodeId,
         waitosaurHolderContractCodeId,
         ceffuBackendAccount,
         binanceAumOracleAddress,
         withdrawalManagerCodeId,
+        depositForwarderAddress,
       } = context;
 
       const instantiateRes = await MaxbtcNeutronFactory.Client.instantiate(
@@ -404,9 +385,6 @@ describe('Core', () => {
           code_ids: {
             token_code_id: tokenCodeId,
             core_code_id: coreCodeId,
-            deposit_forwarder_contract_code_id: depositForwarderContractCodeId,
-            deposit_forwarder_library_contract_code_id:
-              depositForwarderLibraryContractCodeId,
             exchange_rate_provider_contract_code_id:
               exchangeRateProviderContractCodeId,
             allowlist_contract_code_id: allowlistContractCodeId,
@@ -426,33 +404,7 @@ describe('Core', () => {
             fee_apy_reduction_percentage: '0.1',
             collection_period_seconds: 10,
           },
-          valence_ibc_transfer_params: {
-            input_addr: {
-              library_account_addr: '',
-            },
-            output_addr: {
-              library_account_addr:
-                '0x1234567890123456789012345678901234567890',
-            },
-            denom: {
-              native:
-                'ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E',
-            },
-            amount: 'full_amount',
-            memo: '',
-            remote_chain_info: {
-              channel_id: 'channel-1',
-            },
-            denom_to_pfm_map: {},
-            eureka_config: {
-              callback_contract:
-                'cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22',
-              action_contract:
-                'cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5',
-              recover_address: 'cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26',
-              source_channel: '08-wasm-1369',
-            },
-          },
+          deposit_forwarder_contract: depositForwarderAddress,
         },
         'label',
         'auto',
@@ -498,10 +450,6 @@ describe('Core', () => {
         context.factoryState.core_contract,
       );
       context.coreContractAddress = context.factoryState.core_contract;
-      context.forwarderContractAddress =
-        context.factoryState.deposit_forwarder_contract;
-      context.forwarderLibraryContractAddress =
-        context.factoryState.deposit_forwarder_library_contract;
       context.feeCollectorContractAddress =
         context.factoryState.fee_collector_contract;
       context.tokenContractAddress = context.factoryState.token_contract;
@@ -573,7 +521,7 @@ describe('Core', () => {
         context.neutronClient,
         context.coreContractClient,
         context.exchangeRateProviderContractClient,
-        context.forwarderContractAddress,
+        context.depositForwarderAddress,
       );
     });
 
@@ -615,7 +563,7 @@ describe('Core', () => {
         const { coreContractOperatorClient, operatorAccount } = context;
         const forwarderBalanceBefore = (
           await context.client.getBalance(
-            context.forwarderContractAddress,
+            context.depositForwarderAddress,
             DEPOSIT_DENOM,
           )
         ).amount;
@@ -643,7 +591,7 @@ describe('Core', () => {
         await waitForTx(context.client, res.transactionHash);
         const forwarderBalanceAfter = (
           await context.client.getBalance(
-            context.forwarderContractAddress,
+            context.depositForwarderAddress,
             DEPOSIT_DENOM,
           )
         ).amount;
@@ -726,7 +674,7 @@ describe('Core', () => {
         context.neutronClient,
         context.coreContractClient,
         context.exchangeRateProviderContractClient,
-        context.forwarderContractAddress,
+        context.depositForwarderAddress,
       );
     });
     it('withdraw some amount', async () => {
