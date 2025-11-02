@@ -4,8 +4,10 @@ use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Resp
 use cw2::set_contract_version;
 
 use crate::error::{ContractError, ContractResult};
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use crate::state::ALLOW_LIST;
+use crate::msg::{
+    ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ZkMeHasApprovedResponse, ZkMeQueryMsg,
+};
+use crate::state::{ALLOW_LIST, ZK_ME_SETTINGS};
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-allow-list";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -47,6 +49,15 @@ pub fn execute(
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
+        ExecuteMsg::UpdateZkMeSettings { settings } => {
+            cw_ownable::assert_owner(deps.storage, &info.sender)?;
+            if let Some(settings) = settings {
+                ZK_ME_SETTINGS.save(deps.storage, &settings)?;
+            } else {
+                ZK_ME_SETTINGS.remove(deps.storage);
+            }
+            Ok(Response::new().add_attribute("action", "update_zk_me_settings"))
+        }
     }
 }
 
@@ -67,7 +78,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             let allow_list = ALLOW_LIST.load(deps.storage)?;
             let is_allowed_by_allow_list =
                 allow_list.iter().any(|addr| addr.to_string() == address);
-            to_json_binary(&is_allowed_by_allow_list)?
+            if is_allowed_by_allow_list {
+                return to_json_binary(&true).map_err(ContractError::Std);
+            }
+            let zk_me_settings = ZK_ME_SETTINGS.load(deps.storage);
+            if let Ok(zk_me_settings) = zk_me_settings {
+                let res: ZkMeHasApprovedResponse = deps.querier.query_wasm_smart(
+                    zk_me_settings.contract,
+                    &ZkMeQueryMsg::HasApproved {
+                        user: deps.api.addr_validate(&address)?,
+                        cooperator: zk_me_settings.cooperator,
+                    },
+                )?;
+                return to_json_binary(&res.has_approved).map_err(ContractError::Std);
+            } else {
+                to_json_binary(&false)?
+            }
         }
     })
 }
