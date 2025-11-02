@@ -5,10 +5,10 @@
     {
       "type": "object",
       "required": [
-        "owner"
+        "exchange_rate"
       ],
       "properties": {
-        "owner": {
+        "exchange_rate": {
           "type": "object",
           "additionalProperties": false
         }
@@ -16,12 +16,13 @@
       "additionalProperties": false
     },
     {
+      "description": "Query the contract's ownership information",
       "type": "object",
       "required": [
-        "exchange_rate"
+        "ownership"
       ],
       "properties": {
-        "exchange_rate": {
+        "ownership": {
           "type": "object",
           "additionalProperties": false
         }

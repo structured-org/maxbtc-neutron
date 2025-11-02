@@ -24,7 +24,6 @@ pub enum ExecuteMsg {
         core_contract: Option<String>,
         fee_apy_reduction_percentage: Option<Decimal>,
         collection_period_hours: Option<u64>,
-        maxbtc_decimals: Option<u32>,
     },
 }
 

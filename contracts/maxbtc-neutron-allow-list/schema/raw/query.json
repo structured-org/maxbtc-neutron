@@ -5,19 +5,6 @@
     {
       "type": "object",
       "required": [
-        "owner"
-      ],
-      "properties": {
-        "owner": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "required": [
         "allow_list"
       ],
       "properties": {
@@ -44,6 +31,20 @@
               "type": "string"
             }
           },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Query the contract's ownership information",
+      "type": "object",
+      "required": [
+        "ownership"
+      ],
+      "properties": {
+        "ownership": {
+          "type": "object",
           "additionalProperties": false
         }
       },

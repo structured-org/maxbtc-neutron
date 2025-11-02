@@ -3,16 +3,6 @@ import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 export type ArrayOfString = string[];
 export type Boolean = boolean;
-export type String = string;
-/**
- * Actions that can be taken to alter the contract's ownership
- */
-export type UpdateOwnershipArgs = {
-    transfer_ownership: {
-        expiry?: Expiration | null;
-        new_owner: string;
-    };
-} | "accept_ownership" | "renounce_ownership";
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -47,12 +37,38 @@ export type Timestamp = Uint64;
  * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
  */
 export type Uint64 = string;
+/**
+ * Actions that can be taken to alter the contract's ownership
+ */
+export type UpdateOwnershipArgs = {
+    transfer_ownership: {
+        expiry?: Expiration | null;
+        new_owner: string;
+    };
+} | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronAllowListSchema {
-    responses: ArrayOfString | Boolean | String;
+    responses: ArrayOfString | Boolean | OwnershipForString;
     query: IsAddressAllowedArgs;
     execute: UpdateAllowListArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+/**
+ * The contract's ownership info
+ */
+export interface OwnershipForString {
+    /**
+     * The contract's current owner. `None` if the ownership has been renounced.
+     */
+    owner?: string | null;
+    /**
+     * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
+     */
+    pending_expiry?: Expiration | null;
+    /**
+     * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
+     */
+    pending_owner?: string | null;
 }
 export interface IsAddressAllowedArgs {
     address: string;
@@ -70,9 +86,9 @@ export declare class Client {
     mustBeSigningClient(): Error;
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    queryOwner: () => Promise<String>;
     queryAllowList: () => Promise<ArrayOfString>;
     queryIsAddressAllowed: (args: IsAddressAllowedArgs) => Promise<Boolean>;
+    queryOwnership: () => Promise<OwnershipForString>;
     updateAllowList: (sender: string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

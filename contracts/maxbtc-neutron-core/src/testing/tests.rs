@@ -44,7 +44,7 @@ fn test_instantiate_success() {
 
     // Assert: check contract storage
     let cfg = CONFIG.load(&deps.storage).unwrap();
-    assert_eq!(cfg.owner, deps.api.addr_make("owner_addr"));
+
     assert!(!cfg.paused);
     // etc. check more fields
     assert_eq!(cfg.deposit_decimals, 6u32);
@@ -89,6 +89,7 @@ fn test_first_deposit_success() {
         env.clone(),
         info.clone(),
         recipient.to_string(),
+        None,
     )
     .unwrap();
 
@@ -104,6 +105,50 @@ fn test_first_deposit_success() {
         .find(|attr| attr.key == "minted_maxbtc")
         .expect("minted_maxbtc attribute must be present");
     assert_eq!(minted_attr.value, "990000");
+}
+
+#[test]
+fn test_deposit_less_than_expected() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier
+        .set_token_supply(&cfg.maxbtc_denom, Uint128::zero());
+
+    let deposit_amount: Uint128 = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("depositor"),
+        &[coin(deposit_amount.u128(), "wBTC")],
+    );
+
+    // Set the balance that the contract will see AFTER receiving the deposit.
+    // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    // Act
+    let recipient = deps.api.addr_make("recipient_addr");
+    let res = do_deposit(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        recipient.to_string(),
+        Some(Uint128::from(1_000_001u128)),
+    );
+    assert!(res.is_err());
+    let err = res.err().unwrap();
+    match err {
+        ContractError::SlippageLimitExceeded { requested, actual } => {
+            assert_eq!(requested, 1_000_001u128);
+            assert_eq!(actual, 990_000u128);
+        }
+        e => panic!("Unexpected error: {:?}", e),
+    }
 }
 
 #[test]
@@ -123,7 +168,7 @@ fn test_deposit_contract_paused() {
 
     // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("Should error if contract paused");
 
     // Assert
@@ -156,7 +201,7 @@ fn test_deposit_exceeds_cap() {
 
     // Act
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("Should exceed deposit cap");
 
     // Assert
@@ -182,6 +227,7 @@ fn test_deposit_not_allowlisted() {
         env.clone(),
         info.clone(),
         recipient.to_string(),
+        None,
     )
     .expect_err("Should error if depositor not in allowlist");
 
@@ -198,7 +244,7 @@ fn test_deposit_no_funds() {
     let info = message_info(&deps.api.addr_make("depositor"), &[]); // no funds
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("No funds means error");
 
     match err {
@@ -219,7 +265,7 @@ fn test_deposit_multiple_funds() {
     );
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("Must fail if multiple funds are attached");
 
     match err {
@@ -235,7 +281,7 @@ fn test_deposit_zero_amount() {
     let info = message_info(&deps.api.addr_make("depositor"), &[coin(0u128, "wBTC")]);
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("Zero deposit is invalid");
 
     match err {
@@ -254,7 +300,7 @@ fn test_deposit_wrong_denom() {
     );
 
     let recipient = deps.api.addr_make("recipient_addr").to_string();
-    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient)
+    let err = do_deposit(deps.as_mut(), env.clone(), info.clone(), recipient, None)
         .expect_err("Wrong denom should fail");
 
     match err {
@@ -357,6 +403,7 @@ fn do_deposit(
     env: Env,
     info: MessageInfo,
     recipient: String,
+    min_receive_amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     execute(
         deps,
@@ -364,6 +411,7 @@ fn do_deposit(
         info,
         ExecuteMsg::Deposit {
             recipient: recipient.to_string(),
+            min_receive_amount,
         },
     )
 }

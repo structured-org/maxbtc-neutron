@@ -76,14 +76,6 @@
                 }
               ]
             },
-            "maxbtc_decimals": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0.0
-            },
             "owner": {
               "type": [
                 "string",

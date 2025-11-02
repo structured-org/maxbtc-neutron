@@ -1,6 +1,6 @@
 use crate::{
     contract::{execute, instantiate, query},
-    msg::{ExecuteMsg, InstantiateMsg, QueryMsg},
+    msg::{ExecuteMsg, GetTwaerResponse, InstantiateMsg, QueryMsg},
 };
 use cosmwasm_std::{
     from_json,
@@ -75,8 +75,9 @@ fn test_update_exchange_rate() {
     assert_eq!(res.attributes[1].value, "0.99");
 
     // Query the exchange rate
-    let query_msg = QueryMsg::ExchangeRate {};
+    let query_msg = QueryMsg::GetTwaer {};
     let res = query(deps.as_ref(), env, query_msg).unwrap();
-    let rate: Decimal = from_json(&res).unwrap();
+    let res: GetTwaerResponse = from_json(&res).unwrap();
+    let rate = res.twaer;
     assert_eq!(rate, Decimal::percent(99));
 }

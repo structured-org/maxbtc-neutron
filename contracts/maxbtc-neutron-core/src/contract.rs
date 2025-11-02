@@ -1,7 +1,8 @@
 use crate::error::ContractError;
 use crate::msg::{
     AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-    FeeCollectorInstantiateMsg, InstantiateMsg, QueryMsg, SimulateDepositResponse, UpdateConfigMsg,
+    FeeCollectorInstantiateMsg, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg,
+    SimulateDepositResponse, UpdateConfigMsg,
 };
 use crate::state::{Config, CONFIG, LAST_DEPOSIT_FLUSH_TIME, TOTAL_DEPOSITED};
 pub(crate) use crate::utils::{dec_to_amount, get_deposit_coin};
@@ -10,6 +11,7 @@ use cosmwasm_std::{
     DepsMut, Env, MessageInfo, QueryRequest, Response, StdError, StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
+use cw_ownable::{assert_owner, initialize_owner};
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgCreateDenom, MsgMint};
 
@@ -40,10 +42,11 @@ pub fn instantiate(
     )
     .map_err(ContractError::Instantiate2Error)?;
 
+    initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
-        owner: deps.api.addr_validate(&msg.owner)?,
         deposit_forwarder_contract: deps.api.addr_validate(&msg.deposit_forwarder_contract)?,
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
@@ -65,11 +68,11 @@ pub fn instantiate(
 
     // Create the instantiate message for the fee collector contract
     let instantiate_fee_collector_msg = WasmMsg::Instantiate2 {
-        admin: Some(cfg.owner.to_string()), // The core contract owner is admin
+        admin: Some(msg.owner.to_string()), // The core contract owner is admin
         code_id: msg.fee_collector_params.code_id,
         label: "maxBTC Fee Collector Contract".to_string(),
         msg: to_json_binary(&FeeCollectorInstantiateMsg {
-            owner: msg.owner,                                // Same owner as the core contract
+            owner: msg.owner.to_string(), // Same owner as the core contract
             core_contract: env.contract.address.to_string(), // This contract's address
             fee_apy_reduction_percentage: msg.fee_collector_params.fee_apy_reduction_percentage,
             collection_period_seconds: msg.fee_collector_params.collection_period_seconds,
@@ -89,7 +92,7 @@ pub fn instantiate(
         .add_message(create_maxbtc_denom_msg)
         .add_message(instantiate_fee_collector_msg) // Add the message to instantiate the fee collector
         .add_attribute("action", "instantiate")
-        .add_attribute("owner", cfg.owner.to_string())
+        .add_attribute("owner", msg.owner)
         .add_attribute("allowlist_contract", cfg.allowlist_contract.to_string())
         .add_attribute("deposit_denom", cfg.deposit_denom.clone())
         .add_attribute("maxbtc_denom", cfg.maxbtc_denom.clone())
@@ -110,9 +113,16 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::UpdateConfig(updates) => execute_update_config(deps, info, updates),
-        ExecuteMsg::Deposit { recipient } => execute_deposit(deps, env, info, recipient),
+        ExecuteMsg::Deposit {
+            recipient,
+            min_receive_amount,
+        } => execute_deposit(deps, env, info, recipient, min_receive_amount),
         ExecuteMsg::FlushDeposits {} => execute_flush_deposits(deps, env, info),
         ExecuteMsg::MintFee { amount } => execute_mint_fee(deps, env, info, amount),
+        ExecuteMsg::UpdateOwnership(action) => {
+            cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
+            Ok(Response::new().add_attribute("action", "update_ownership"))
+        }
     }
 }
 
@@ -159,9 +169,7 @@ fn execute_update_config(
     let mut cfg = CONFIG.load(deps.storage)?;
 
     // Only the current owner may update the config.
-    if info.sender != cfg.owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    assert_owner(deps.storage, &info.sender)?;
 
     // Initialize the response with standard attributes.
     let mut res = Response::new()
@@ -172,11 +180,6 @@ fn execute_update_config(
     if let Some(paused) = updates.paused {
         cfg.paused = paused;
         res = res.add_attribute("paused_updated", paused.to_string());
-    }
-    if let Some(owner) = updates.owner {
-        let owner_addr = deps.api.addr_validate(&owner)?;
-        cfg.owner = owner_addr.clone();
-        res = res.add_attribute("owner_updated", owner_addr.to_string());
     }
     if let Some(addr) = updates.deposit_forwarder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
@@ -194,10 +197,22 @@ fn execute_update_config(
         cfg.deposits_cap = cap;
         res = res.add_attribute("deposits_cap_updated", cap.unwrap());
     }
+    if let Some(deposit_cost) = updates.deposit_cost {
+        cfg.deposit_cost = deposit_cost;
+        res = res.add_attribute("deposit_cost_updated", deposit_cost.to_string());
+    }
     if let Some(allowlist_contract) = updates.allowlist_contract {
         let validated_addr = deps.api.addr_validate(&allowlist_contract)?;
         cfg.allowlist_contract = validated_addr.clone();
         res = res.add_attribute("allowlist_contract_updated", validated_addr.to_string());
+    }
+    if let Some(exchange_rate_provider_contract) = updates.exchange_rate_provider_contract {
+        let validated_addr = deps.api.addr_validate(&exchange_rate_provider_contract)?;
+        cfg.exchange_rate_provider_contract = validated_addr.clone();
+        res = res.add_attribute(
+            "exchange_rate_provider_contract_updated",
+            validated_addr.to_string(),
+        );
     }
     if let Some(addr) = updates.fee_collector_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
@@ -216,6 +231,7 @@ pub(crate) fn execute_deposit(
     env: Env,
     info: MessageInfo,
     recipient: String,
+    min_receive_amount: Option<Uint128>,
 ) -> Result<Response, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if cfg.paused {
@@ -233,6 +249,16 @@ pub(crate) fn execute_deposit(
     // Calculate the amount of maxBTC to mint.
     let minted_amount = calculate_mint_amount(deps.as_ref(), deposit_coin.amount)?;
 
+    // If a minimum receive amount is specified, ensure we meet that condition
+    if let Some(min_amount) = min_receive_amount {
+        if minted_amount < min_amount {
+            return Err(ContractError::SlippageLimitExceeded {
+                requested: min_amount.u128(),
+                actual: minted_amount.u128(),
+            });
+        }
+    }
+
     // Can be equal to zero if rounding kicks in with a very high ER.
     if minted_amount.is_zero() {
         return Err(ContractError::InvalidDepositAmount {});
@@ -249,7 +275,7 @@ pub(crate) fn execute_deposit(
     )?;
 
     TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
-        Ok(total + minted_amount)
+        Ok(total + deposit_coin.amount)
     })?;
 
     // Return the response
@@ -320,7 +346,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
             let resp = ConfigResponse {
-                owner: cfg.owner.to_string(),
                 deposit_denom: cfg.deposit_denom,
                 maxbtc_denom: cfg.maxbtc_denom,
                 deposit_flush_period: cfg.deposit_flush_period,
@@ -344,6 +369,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let resp = SimulateDepositResponse { minted_amount };
             to_json_binary(&resp)
         }
+        QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
 }
 
@@ -405,13 +431,13 @@ fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<C
 
 /// Queries the exchange rate from the exchange rate provider contract.
 pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
-    let er: Decimal = deps
-        .querier
-        .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
-            contract_addr: cfg.exchange_rate_provider_contract.to_string(),
-            msg: to_json_binary(&ExchangeRateProviderQueryMsg::ExchangeRate {})?,
-        }))?;
-    Ok(er)
+    let res: GetTwaerResponse =
+        deps.querier
+            .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
+                contract_addr: cfg.exchange_rate_provider_contract.to_string(),
+                msg: to_json_binary(&ExchangeRateProviderQueryMsg::GetTwaer {})?,
+            }))?;
+    Ok(res.twaer)
 }
 
 /// Verifies that the current Deposits does **not** exceed the optional *deposit cap*.
@@ -450,4 +476,9 @@ fn check_deposits_allowlist(
     } else {
         Ok(())
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    Ok(Response::default())
 }

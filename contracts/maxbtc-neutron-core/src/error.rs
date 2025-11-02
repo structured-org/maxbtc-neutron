@@ -8,6 +8,9 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
+    #[error("{0}")]
+    OwnershipError(#[from] cw_ownable::OwnershipError),
+
     #[error("Unauthorized")]
     Unauthorized {},
 
@@ -55,6 +58,9 @@ pub enum ContractError {
 
     #[error("Deposit cap was exceeded")]
     DepositCapExceeded {},
+
+    #[error("Slippage limit exceeded. Requested at least {requested}, actual {actual}")]
+    SlippageLimitExceeded { requested: u128, actual: u128 },
 
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),

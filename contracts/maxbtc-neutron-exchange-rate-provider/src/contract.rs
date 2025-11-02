@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 use cw_ownable::assert_owner;
 
 use crate::error::{ContractError, ContractResult};
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, GetTwaerResponse, InstantiateMsg, QueryMsg};
 use crate::state::EXCHANGE_RATE;
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider";
@@ -50,14 +50,12 @@ pub fn execute(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
     Ok(match msg {
-        QueryMsg::Owner {} => to_json_binary(
-            &cw_ownable::get_ownership(deps.storage)?
-                .owner
-                .unwrap_or(cosmwasm_std::Addr::unchecked(""))
-                .to_string(),
-        )?,
-        QueryMsg::ExchangeRate {} => to_json_binary(&EXCHANGE_RATE.load(deps.storage)?)?,
+        QueryMsg::Ownership {} => to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?,
+        QueryMsg::GetTwaer {} => to_json_binary(&GetTwaerResponse {
+            twaer: EXCHANGE_RATE.load(deps.storage)?,
+            published_at: env.block.time.seconds(),
+        })?,
     })
 }

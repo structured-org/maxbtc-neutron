@@ -7,22 +7,6 @@ import { Coin } from "@cosmjs/amino";
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
-export type String = string;
-/**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal1 = string;
-/**
- * Actions that can be taken to alter the contract's ownership
- */
-export type UpdateOwnershipArgs = {
-    transfer_ownership: {
-        expiry?: Expiration | null;
-        new_owner: string;
-    };
-} | "accept_ownership" | "renounce_ownership";
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -57,11 +41,43 @@ export type Timestamp = Uint64;
  * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
  */
 export type Uint64 = string;
+/**
+ * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
+ *
+ * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
+ */
+export type Decimal1 = string;
+/**
+ * Actions that can be taken to alter the contract's ownership
+ */
+export type UpdateOwnershipArgs = {
+    transfer_ownership: {
+        expiry?: Expiration | null;
+        new_owner: string;
+    };
+} | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronExchangeRateProviderSchema {
-    responses: Decimal | String;
+    responses: Decimal | OwnershipForString;
     execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+/**
+ * The contract's ownership info
+ */
+export interface OwnershipForString {
+    /**
+     * The contract's current owner. `None` if the ownership has been renounced.
+     */
+    owner?: string | null;
+    /**
+     * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
+     */
+    pending_expiry?: Expiration | null;
+    /**
+     * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
+     */
+    pending_owner?: string | null;
 }
 export interface UpdateExchangeRateArgs {
     rate: Decimal1;
@@ -76,8 +92,8 @@ export declare class Client {
     mustBeSigningClient(): Error;
     static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
     static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    queryOwner: () => Promise<String>;
     queryExchangeRate: () => Promise<Decimal>;
+    queryOwnership: () => Promise<OwnershipForString>;
     updateExchangeRate: (sender: string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
 }

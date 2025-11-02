@@ -45,9 +45,7 @@ pub fn execute(
         }
         ExecuteMsg::UpdateOwnership(action) => {
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
-            Ok(Response::new()
-                .add_attribute("action", "update_ownership")
-                .add_attribute("new_owner", info.sender))
+            Ok(Response::new().add_attribute("action", "update_ownership"))
         }
     }
 }
@@ -55,12 +53,7 @@ pub fn execute(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
     Ok(match msg {
-        QueryMsg::Owner {} => to_json_binary(
-            &cw_ownable::get_ownership(deps.storage)?
-                .owner
-                .unwrap_or(cosmwasm_std::Addr::unchecked(""))
-                .to_string(),
-        )?,
+        QueryMsg::Ownership {} => to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?,
         QueryMsg::AllowList {} => {
             let allow_list = ALLOW_LIST.load(deps.storage)?;
             to_json_binary(

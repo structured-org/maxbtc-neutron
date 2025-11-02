@@ -40,14 +40,9 @@ fn test_update_ownership() {
     let execute_msg = ExecuteMsg::UpdateOwnership(action);
     let res = execute(deps.as_mut(), env, info, execute_msg).unwrap();
 
-    assert_eq!(res.attributes.len(), 2);
+    assert_eq!(res.attributes.len(), 1);
     assert_eq!(res.attributes[0].key, "action");
     assert_eq!(res.attributes[0].value, "update_ownership");
-    assert_eq!(res.attributes[1].key, "new_owner");
-    assert_eq!(
-        res.attributes[1].value,
-        "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
-    );
 }
 
 #[test]

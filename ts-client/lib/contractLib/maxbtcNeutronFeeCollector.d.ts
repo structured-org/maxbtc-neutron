@@ -108,7 +108,6 @@ export interface UpdateConfigArgs {
     collection_period_hours?: number | null;
     core_contract?: string | null;
     fee_apy_reduction_percentage?: Decimal | null;
-    maxbtc_decimals?: number | null;
     owner?: string | null;
 }
 export interface InstantiateMsg {

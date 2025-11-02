@@ -80,15 +80,14 @@ pub fn execute(
             core_contract,
             fee_apy_reduction_percentage,
             collection_period_hours,
-            maxbtc_decimals,
         } => execute_update_config(
             deps,
+            env,
             info,
             owner,
             core_contract,
             fee_apy_reduction_percentage,
             collection_period_hours,
-            maxbtc_decimals,
         ),
     }
 }
@@ -189,12 +188,12 @@ pub fn execute_claim(
 #[allow(clippy::too_many_arguments)]
 pub fn execute_update_config(
     deps: DepsMut,
+    env: Env,
     info: MessageInfo,
     owner: Option<String>,
     core_contract: Option<String>,
     fee_apy_reduction_percentage: Option<Decimal>,
     collection_period_hours: Option<u64>,
-    maxbtc_decimals: Option<u32>,
 ) -> Result<Response, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
     if info.sender != config.owner {
@@ -209,7 +208,15 @@ pub fn execute_update_config(
     }
     if let Some(new_core_contract) = core_contract {
         config.core_contract = deps.api.addr_validate(&new_core_contract)?;
-        response = response.add_attribute("core_contract_updated", new_core_contract);
+        response = response.add_attribute("core_contract_updated", new_core_contract.clone());
+        let initial_rate_response: Decimal = deps
+            .querier
+            .query_wasm_smart(new_core_contract, &ExchangeRate {})?;
+        let state = State {
+            last_collection_timestamp: env.block.time,
+            last_exchange_rate: initial_rate_response,
+        };
+        STATE.save(deps.storage, &state)?;
     }
     if let Some(new_percentage) = fee_apy_reduction_percentage {
         if new_percentage >= Decimal::one() || new_percentage <= Decimal::zero() {
@@ -225,10 +232,6 @@ pub fn execute_update_config(
         config.collection_period_seconds = new_period * 60 * 60;
         response =
             response.add_attribute("collection_period_hours_updated", new_period.to_string());
-    }
-    if let Some(new_decimals) = maxbtc_decimals {
-        config.maxbtc_decimals = new_decimals;
-        response = response.add_attribute("maxbtc_decimals_updated", new_decimals.to_string());
     }
 
     CONFIG.save(deps.storage, &config)?;

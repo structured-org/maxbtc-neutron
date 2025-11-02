@@ -8,8 +8,7 @@
     "deposit_denom",
     "deposit_flush_period",
     "fee_collector_contract",
-    "maxbtc_denom",
-    "owner"
+    "maxbtc_denom"
   ],
   "properties": {
     "deposit_cost": {
@@ -27,9 +26,6 @@
       "type": "string"
     },
     "maxbtc_denom": {
-      "type": "string"
-    },
-    "owner": {
       "type": "string"
     }
   },

@@ -35,6 +35,9 @@ class Client {
     querySimulateDeposit = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
     };
+    queryOwnership = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
+    };
     deposit = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();
@@ -58,6 +61,12 @@ class Client {
             throw this.mustBeSigningClient();
         }
         return this.client.execute(sender, this.contractAddress, { mint_fee: args }, fee || "auto", memo, funds);
+    };
+    updateOwnership = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, { update_ownership: args }, fee || "auto", memo, funds);
     };
 }
 exports.Client = Client;

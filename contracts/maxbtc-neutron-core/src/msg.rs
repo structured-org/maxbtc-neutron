@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Binary, Coin, Decimal, Uint128};
+use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -33,21 +34,25 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub struct UpdateConfigMsg {
     pub paused: Option<bool>,
-    pub owner: Option<String>,
     pub deposit_forwarder_contract: Option<String>,
     pub deposit_flush_period: Option<u64>,
     pub deposit_cost: Option<Decimal>,
+    pub exchange_rate_provider_contract: Option<String>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.
+#[cw_ownable_execute]
 #[cw_serde]
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
     /// User deposit flow
-    Deposit { recipient: String },
+    Deposit {
+        recipient: String,
+        min_receive_amount: Option<Uint128>,
+    },
     /// Permissionless handler to flush deposits after `deposit_flush_period`
     FlushDeposits {},
     /// Owner-only message to update protocol configuration in-place
@@ -58,6 +63,7 @@ pub enum ExecuteMsg {
 }
 
 /// QueryMsg for reading contract states.
+#[cw_ownable_query]
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
@@ -79,7 +85,6 @@ pub struct SimulateDepositResponse {
 /// Response for querying config
 #[cw_serde]
 pub struct ConfigResponse {
-    pub owner: String,
     pub deposit_denom: String,
     pub maxbtc_denom: String,
     pub deposit_flush_period: u64,
@@ -114,7 +119,7 @@ pub struct FeeMinterParams {
     pub salt: Binary,
     /// The percentage of APY to be taken as a fee.
     pub fee_apy_reduction_percentage: Decimal,
-    /// The duration in hours for each fee collection period.
+    /// The duration in seconds for each fee collection period.
     pub collection_period_seconds: u64,
 }
 
@@ -128,6 +133,15 @@ pub enum AllowlistQueryMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum ExchangeRateProviderQueryMsg {
-    #[returns(Decimal)]
-    ExchangeRate {},
+    #[returns(GetTwaerResponse)]
+    GetTwaer {},
 }
+
+#[cw_serde]
+pub struct GetTwaerResponse {
+    pub twaer: Decimal,
+    pub published_at: u64,
+}
+
+#[cw_serde]
+pub struct MigrateMsg {}
