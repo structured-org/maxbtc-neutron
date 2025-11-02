@@ -3817,6 +3817,7 @@ dependencies = [
  "cw2",
  "neutron-std 5.0.0",
  "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -3834,6 +3835,7 @@ dependencies = [
  "maxbtc-base",
  "neutron-std 5.0.0",
  "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -3849,6 +3851,7 @@ dependencies = [
  "cw2",
  "neutron-std 5.0.0",
  "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -3868,6 +3871,7 @@ dependencies = [
  "maxbtc-neutron-fee-collector",
  "neutron-std 5.0.0",
  "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -3882,8 +3886,9 @@ dependencies = [
  "cw-storage-plus",
  "cw2",
  "schemars",
+ "semver 1.0.25",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -3915,6 +3920,7 @@ dependencies = [
  "cw2",
  "maxbtc-base",
  "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 2.0.12",
 ]
@@ -3928,7 +3934,9 @@ dependencies = [
  "cw-ownable",
  "cw2",
  "maxbtc-base",
+ "schemars",
  "semver 1.0.25",
+ "serde",
  "thiserror 2.0.12",
 ]
 

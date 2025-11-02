@@ -44,9 +44,6 @@ class Client {
     queryExchangeRate = async () => {
         return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
     };
-    queryDepositBalance = async () => {
-        return this.client.queryContractSmart(this.contractAddress, { deposit_balance: {} });
-    };
     querySimulateDeposit = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { simulate_deposit: args });
     };

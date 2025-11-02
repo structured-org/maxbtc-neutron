@@ -40,6 +40,7 @@ schemars = { workspace = true }
 cw-ownable ={ workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+semver = { workspace = true }
 
 maxbtc-base = { workspace = true }
 

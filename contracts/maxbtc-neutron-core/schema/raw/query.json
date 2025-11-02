@@ -93,19 +93,6 @@
       "additionalProperties": false
     },
     {
-      "type": "object",
-      "required": [
-        "deposit_balance"
-      ],
-      "properties": {
-        "deposit_balance": {
-          "type": "object",
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
-    },
-    {
       "description": "Simulates a deposit and returns the amount of maxBTC that would be minted.",
       "type": "object",
       "required": [

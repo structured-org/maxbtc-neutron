@@ -121,6 +121,7 @@ pub(crate) fn execute_claim(
     if info.funds.len() != 1 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
+
     let redemption_coin = &info
         .funds
         .first()
@@ -262,6 +263,7 @@ fn get_batch_id_from_redemption_coin(
     {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
+
     if redemption_coin.amount.is_zero() {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
@@ -271,6 +273,7 @@ fn get_batch_id_from_redemption_coin(
     if parts.len() != 5 {
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
+
     let batch_id: u64 = parts[4]
         .parse()
         .map_err(|_| ContractError::WrongRedemptionTokenOrNoFunds {})?;

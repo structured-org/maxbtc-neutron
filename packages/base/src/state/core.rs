@@ -47,9 +47,6 @@ pub const CONFIG: Item<Config> = Item::new("config");
 /// Total amount of BTC deposited by the contract
 pub const TOTAL_DEPOSITED: Item<Uint128> = Item::new("total_deposited");
 
-/// Deposit balance holder
-pub const CURRENT_DEPOSIT_BALANCE: Item<Uint128> = Item::new("current_deposit_balance");
-
 #[cw_serde]
 pub enum ContractState {
     Idle,

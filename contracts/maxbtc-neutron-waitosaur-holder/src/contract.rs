@@ -157,14 +157,23 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<cosmwasm_std::Binar
     }
 }
 
-/* -----------------------------------------------------------------------------------------------
-/ HELPER FUNCTIONS BELOW
-/ -----------------------------------------------------------------------------------------------*/
-pub fn get_maxbtc_denom(contract_addr: String, subdenom: String) -> String {
-    format!("factory/{contract_addr}/{subdenom}")
-}
-
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
+    }
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    }
+
+    Ok(Response::new())
 }

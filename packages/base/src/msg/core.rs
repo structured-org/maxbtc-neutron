@@ -99,8 +99,6 @@ pub enum QueryMsg {
     Config {},
     #[returns(Decimal)]
     ExchangeRate {},
-    #[returns(Uint128)]
-    DepositBalance {},
     /// Simulates a deposit and returns the amount of maxBTC that would be minted.
     #[returns(SimulateDepositResponse)]
     SimulateDeposit { amount: Uint128 },

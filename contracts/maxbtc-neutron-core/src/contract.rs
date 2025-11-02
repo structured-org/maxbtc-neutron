@@ -22,8 +22,7 @@ use maxbtc_base::msg::{
 use maxbtc_base::state::{
     core::{
         Batch, Config, ContractState, WaitosaurObserverState, ACTIVE_BATCH, BATCH_ID_COUNTER,
-        CONFIG, CURRENT_DEPOSIT_BALANCE, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED,
-        WITHDRAWING_BATCH,
+        CONFIG, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitosaurHolderState,
 };
@@ -70,10 +69,6 @@ pub fn instantiate(
     TOTAL_DEPOSITED.save(
         deps.storage,
         &msg.total_deposited.unwrap_or(Uint128::zero()),
-    )?;
-    CURRENT_DEPOSIT_BALANCE.save(
-        deps.storage,
-        &msg.current_deposit_balance.unwrap_or(Uint128::zero()),
     )?;
 
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
@@ -219,7 +214,9 @@ fn execute_tick_idle(
     let cfg = CONFIG.load(deps.storage)?;
 
     let mut active_withdraw_batch = ACTIVE_BATCH.load(deps.storage)?;
-    let deposit_balance = CURRENT_DEPOSIT_BALANCE.load(deps.storage)?;
+    let deposit_balance = deps
+        .querier
+        .query_balance(env.clone().contract.address, cfg.deposit_denom.as_str())?;
 
     if !active_withdraw_batch.maxbtc_burned.is_zero() {
         let exchange_rate = get_exchange_rate(&deps.as_ref(), &cfg)?;
@@ -230,26 +227,18 @@ fn execute_tick_idle(
             )?)?
             .to_uint_floor();
 
-        active_withdraw_batch.collected_amount =
-            active_withdraw_batch.btc_requested.min(deposit_balance);
+        active_withdraw_batch.collected_amount = active_withdraw_batch
+            .btc_requested
+            .min(deposit_balance.amount);
 
-        if active_withdraw_batch.btc_requested <= deposit_balance {
+        if active_withdraw_batch.btc_requested <= deposit_balance.amount {
             FINALIZED_BATCHES.save(
                 deps.storage,
                 active_withdraw_batch.batch_id,
                 &active_withdraw_batch,
             )?;
-
-            CURRENT_DEPOSIT_BALANCE.update(
-                deps.storage,
-                |balance| -> Result<_, ContractError> {
-                    Ok(balance - active_withdraw_batch.btc_requested)
-                },
-            )?;
         } else {
             WITHDRAWING_BATCH.save(deps.storage, &Some(active_withdraw_batch.clone()))?;
-
-            CURRENT_DEPOSIT_BALANCE.save(deps.storage, &Uint128::zero())?;
 
             FSM.go_to(deps.storage, ContractState::WithdrawJLP)?;
         }
@@ -274,7 +263,7 @@ fn execute_tick_idle(
                 active_withdraw_batch.collected_amount.to_string(),
             )
             .add_attribute("new_batch_id", new_batch_id.to_string()));
-    } else if !deposit_balance.is_zero() {
+    } else if !deposit_balance.amount.is_zero() {
         FSM.go_to(deps.storage, ContractState::DepositNeutron)?;
         return execute_flush_deposits(deps.branch(), env.clone(), info.clone());
     }
@@ -520,10 +509,6 @@ pub(crate) fn execute_deposit(
         Ok(total + amount)
     })?;
 
-    CURRENT_DEPOSIT_BALANCE.update(deps.storage, |balance| -> Result<Uint128, ContractError> {
-        Ok(balance + amount)
-    })?;
-
     // Return the response
     Ok(Response::new()
         .add_message(mint_msg)
@@ -623,7 +608,7 @@ pub(crate) fn execute_withdraw(
 /// by the `deposit_flush_period` defined in the contract's configuration.
 fn execute_flush_deposits(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     // check if state is not in DepositNeutron
@@ -637,20 +622,20 @@ fn execute_flush_deposits(
         return Err(ContractError::ContractPaused {});
     }
 
-    let amount_to_flush = CURRENT_DEPOSIT_BALANCE.load(deps.storage)?;
+    let amount_to_flush = deps
+        .querier
+        .query_balance(env.contract.address, cfg.deposit_denom.as_str())?;
 
     let mut msgs = vec![];
 
     // Send what's left to the deposit forwarder contract, which will send it to Ethereum over IBC
     // Eureka though the valence library + base account combo
-    if !amount_to_flush.is_zero() {
-        CURRENT_DEPOSIT_BALANCE.save(deps.storage, &Uint128::zero())?;
-
+    if !amount_to_flush.amount.is_zero() {
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.deposit_forwarder_contract.to_string(),
             amount: vec![Coin {
                 denom: cfg.deposit_denom,
-                amount: amount_to_flush,
+                amount: amount_to_flush.amount,
             }],
         });
         msgs.push(msg);
@@ -660,7 +645,7 @@ fn execute_flush_deposits(
     let lock_msg = CosmosMsg::Wasm(WasmMsg::Execute {
         contract_addr: cfg.waitosaur_observer_contract.to_string(),
         msg: to_json_binary(&WaitosaurObserverExecuteMsg::Lock {
-            amount: SignedDecimal256::from(Decimal::from_atomics(amount_to_flush, 0)?),
+            amount: SignedDecimal256::from(Decimal::from_atomics(amount_to_flush.amount, 0)?),
         })?,
         funds: vec![],
     });
@@ -732,11 +717,28 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             to_json_binary(&resp)
         }
         QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
-        QueryMsg::DepositBalance {} => {
-            let deposit_balance = CURRENT_DEPOSIT_BALANCE.load(deps.storage)?;
-            Ok(to_json_binary(&deposit_balance)?)
-        }
     }
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
+    }
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    }
+
+    Ok(Response::new())
 }
 
 /* -----------------------------------------------------------------------------------------------
@@ -838,9 +840,4 @@ fn check_deposits_allowlist(
     } else {
         Ok(())
     }
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
-    Ok(Response::default())
 }

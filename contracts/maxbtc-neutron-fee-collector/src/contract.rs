@@ -8,6 +8,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
+use crate::msg::MigrateMsg;
 use crate::msg::{
     ConfigResponse, CoreExecuteMsg, CoreQueryMsg::ExchangeRate, ExecuteMsg, InstantiateMsg,
     QueryMsg, StateResponse,
@@ -350,6 +351,26 @@ fn query_exchange_rate(querier: &QuerierWrapper, core_contract: &Addr) -> StdRes
         msg: to_json_binary(&ExchangeRate {})?,
     }))?;
     Ok(res)
+}
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
+    }
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    }
+
+    Ok(Response::new())
 }
 
 #[cfg(test)]

@@ -66,3 +66,6 @@ pub enum CoreQueryMsg {
 pub enum CoreExecuteMsg {
     MintFee { amount: Coin },
 }
+
+#[cw_serde]
+pub struct MigrateMsg {}

@@ -583,13 +583,24 @@ describe('Core', () => {
         account.address,
         `factory/${tokenContractAddress}/maxbtc`,
       );
-      expect(balance.amount).toEqual('198000');
+      expect(balance).toEqual({
+        denom: `factory/${tokenContractAddress}/maxbtc`,
+        amount: '198000',
+      });
     });
 
     it('verify deposit balance state', async () => {
-      const { coreContractClient } = context;
-      const balance = await coreContractClient.queryDepositBalance();
-      expect(balance).toEqual('200000');
+      const { client } = context;
+
+      const balance = await client.getBalance(
+        context.coreContractAddress,
+        DEPOSIT_DENOM,
+      );
+
+      expect(balance).toEqual({
+        denom: DEPOSIT_DENOM,
+        amount: '200000',
+      });
     });
 
     describe('run deposit ticks', () => {
@@ -623,9 +634,10 @@ describe('Core', () => {
                 attr.key === 'action' && attr.value === 'flush_deposits',
             ),
         );
+
         expect(
           wasmEvent.attributes.find(
-            (a) => a.key === 'flushed' && Number(a.value) > 0,
+            (a) => a.key === 'flushed' && a.value == '200000untrn',
           ),
         ).toBeTruthy();
         await waitForTx(context.client, res.transactionHash);
@@ -764,7 +776,10 @@ describe('Core', () => {
         account.address,
         `factory/${tokenContractAddress}/redemption/batch/1`,
       );
-      expect(balance.amount).toEqual('100000');
+      expect(balance).toEqual({
+        denom: `factory/${tokenContractAddress}/redemption/batch/1`,
+        amount: '100000',
+      });
     });
 
     it('try to tick to re-credit withdrawal from deposit', async () => {
@@ -772,6 +787,7 @@ describe('Core', () => {
         coreContractOperatorClient,
         operatorAccount,
         coreContractClient,
+        client,
       } = context;
 
       const res = await coreContractOperatorClient.tick(
@@ -783,8 +799,15 @@ describe('Core', () => {
       const state = await coreContractOperatorClient.queryContractState();
       expect(state).toEqual('idle');
 
-      const depositBalance = await coreContractClient.queryDepositBalance();
-      expect(depositBalance).toEqual('98483');
+      const depositBalance = await client.getBalance(
+        context.coreContractAddress,
+        DEPOSIT_DENOM,
+      );
+
+      expect(depositBalance).toEqual({
+        denom: DEPOSIT_DENOM,
+        amount: '98483',
+      });
 
       const finalizedBatches = await coreContractClient.queryFinalizedBatches(
         {},
@@ -832,8 +855,14 @@ describe('Core', () => {
       const state = await coreContractOperatorClient.queryContractState();
       expect(state).toEqual('withdraw_j_l_p');
 
-      const depositBalance = await coreContractClient.queryDepositBalance();
-      expect(depositBalance).toEqual('0');
+      const depositBalance = await client.getBalance(
+        context.coreContractAddress,
+        DEPOSIT_DENOM,
+      );
+      expect(depositBalance).toEqual({
+        denom: DEPOSIT_DENOM,
+        amount: '0',
+      });
 
       const withdrawingBatch = await coreContractClient.queryWithdrawingBatch();
       expect(withdrawingBatch).toEqual({

@@ -15,8 +15,8 @@ use maxbtc_base::msg::{
 };
 use maxbtc_base::state::{
     core::{
-        Batch, ContractState, WaitosaurObserverState, ACTIVE_BATCH, CONFIG,
-        CURRENT_DEPOSIT_BALANCE, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
+        Batch, ContractState, WaitosaurObserverState, ACTIVE_BATCH, CONFIG, FINALIZED_BATCHES, FSM,
+        TOTAL_DEPOSITED, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -519,398 +519,6 @@ fn test_deposit_wrong_denom() {
     }
 }
 
-// #[test]
-// fn test_claim_success() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let cfg = CONFIG.load(&deps.storage).unwrap();
-
-//     let claim_amount: Uint128 = Uint128::from(100_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//         )],
-//     );
-
-//     let finalized_batch = Batch {
-//         batch_id: 1u64,
-//         btc_requested: Uint128::new(95_000u128),
-//         maxbtc_burned: Uint128::new(100_000u128),
-//         collected_amount: Uint128::new(95_000u128),
-//         deposit_decimals: 6u32,
-//         collector_historical_balance: Uint128::zero(),
-//     };
-//     FINALIZED_BATCHES
-//         .save(&mut deps.storage, 1u64, &finalized_batch)
-//         .unwrap();
-
-//     // Set the total supply that the contract will check to create tokenfactory redemption denom.
-//     deps.querier.set_supply(
-//         "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//         claim_amount,
-//     );
-
-//     // Set the balance that the contract will see AFTER receiving the deposit.
-//     // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
-//     deps.querier.set_balance(
-//         env.contract.address.as_ref(),
-//         &cfg.deposit_denom,
-//         claim_amount,
-//     );
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let res = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap();
-
-//     // Assert
-//     assert_eq!(
-//         res.messages,
-//         vec![
-//             SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
-//                 to_address: recipient.to_string(),
-//                 amount: vec![Coin {
-//                     denom: cfg.deposit_denom.clone(),
-//                     amount: Uint128::new(95_000u128),
-//                 }],
-//             })),
-//             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-//                 contract_addr: cfg.token_contract.to_string(),
-//                 msg: to_json_binary(&TokenExecuteMsg::Burn {}).unwrap(),
-//                 funds: vec![coin(
-//                     claim_amount.u128(),
-//                     "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//                 )],
-//             })),
-//         ]
-//     );
-
-//     assert_eq!(
-//         res.attributes,
-//         vec![
-//             Attribute::new("action".to_string(), "claim".to_string()),
-//             Attribute::new("batch_id".to_string(), "1".to_string()),
-//             Attribute::new("user_claim_btc".to_string(), "95000".to_string()),
-//         ]
-//     );
-
-//     let finalized_batch = FINALIZED_BATCHES.load(&deps.storage, 1u64).unwrap();
-//     assert_eq!(
-//         finalized_batch,
-//         Batch {
-//             batch_id: 1u64,
-//             btc_requested: Uint128::new(95_000u128),
-//             maxbtc_burned: Uint128::new(100_000u128),
-//             collected_amount: Uint128::new(95_000u128),
-//             deposit_decimals: 6u32,
-//             collector_historical_balance: Uint128::zero(),
-//         }
-//     );
-// }
-
-// #[test]
-// fn test_claim_part_of_the_batch_success() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let cfg = CONFIG.load(&deps.storage).unwrap();
-
-//     let claim_amount: Uint128 = Uint128::from(50_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//         )],
-//     );
-
-//     let finalized_batch = Batch {
-//         batch_id: 1u64,
-//         btc_requested: Uint128::new(100_000u128),
-//         maxbtc_burned: Uint128::new(100_000u128),
-//         collected_amount: Uint128::new(100_000u128),
-//         deposit_decimals: 6u32,
-//         collector_historical_balance: Uint128::zero(),
-//     };
-//     FINALIZED_BATCHES
-//         .save(&mut deps.storage, 1u64, &finalized_batch)
-//         .unwrap();
-
-//     // Set the total supply that the contract will check to create tokenfactory redemption denom.
-//     deps.querier.set_supply(
-//         "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//         claim_amount * Uint128::new(2u128),
-//     );
-
-//     // Set the balance that the contract will see AFTER receiving the deposit.
-//     // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
-//     deps.querier.set_balance(
-//         env.contract.address.as_ref(),
-//         &cfg.deposit_denom,
-//         claim_amount,
-//     );
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let res = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap();
-
-//     // Assert
-//     assert_eq!(
-//         res.messages,
-//         vec![
-//             SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
-//                 to_address: recipient.to_string(),
-//                 amount: vec![Coin {
-//                     denom: cfg.deposit_denom.clone(),
-//                     amount: Uint128::new(50_000u128),
-//                 }],
-//             })),
-//             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-//                 contract_addr: cfg.token_contract.to_string(),
-//                 msg: to_json_binary(&TokenExecuteMsg::Burn {}).unwrap(),
-//                 funds: vec![coin(
-//                     claim_amount.u128(),
-//                     "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//                 )],
-//             })),
-//         ]
-//     );
-
-//     assert_eq!(
-//         res.attributes,
-//         vec![
-//             Attribute::new("action".to_string(), "claim".to_string()),
-//             Attribute::new("batch_id".to_string(), "1".to_string()),
-//             Attribute::new("user_claim_btc".to_string(), "50000".to_string()),
-//         ]
-//     );
-
-//     let finalized_batch = FINALIZED_BATCHES.load(&deps.storage, 1u64).unwrap();
-//     assert_eq!(
-//         finalized_batch,
-//         Batch {
-//             batch_id: 1u64,
-//             btc_requested: Uint128::new(100_000u128),
-//             maxbtc_burned: Uint128::new(100_000u128),
-//             collected_amount: Uint128::new(100_000u128),
-//             paid_amount: Uint128::new(50_000u128),
-//             collector_historical_balance: Uint128::zero(),
-//         }
-//     );
-// }
-
-// #[test]
-// fn test_claim_paused() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let mut cfg = CONFIG.load(&deps.storage).unwrap();
-//     cfg.paused = true;
-//     CONFIG.save(&mut deps.storage, &cfg).unwrap();
-
-//     let info = message_info(&deps.api.addr_make("depositor"), &[]);
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::ContractPaused {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
-// #[test]
-// fn test_claim_no_token_funds() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let info = message_info(&deps.api.addr_make("depositor"), &[]);
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::WrongRedemptionTokenOrNoFunds {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
-// #[test]
-// fn test_claim_wrong_redemption_token() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let claim_amount: Uint128 = Uint128::from(100_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc",
-//         )],
-//     );
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::WrongRedemptionTokenOrNoFunds {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
-// #[test]
-// fn test_claim_wrong_tokens_amount() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let claim_amount: Uint128 = Uint128::from(100_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[
-//             coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//             ),
-//             coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc",
-//             )
-//         ],
-//     );
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::WrongRedemptionTokenOrNoFunds {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
-// #[test]
-// fn test_claim_batch_not_found() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let claim_amount: Uint128 = Uint128::from(100_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[
-//             coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//             ),
-//         ],
-//     );
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::BatchNotFinalized {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
-// #[test]
-// fn test_claim_supply_mismatch() {
-//     // Arrange
-//     let (mut deps, env, _) = setup_contract();
-
-//     let claim_amount: Uint128 = Uint128::from(100_000u128);
-//     let info = message_info(
-//         &deps.api.addr_make("depositor"),
-//         &[
-//             coin(
-//             claim_amount.u128(),
-//             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/redemption/batch/1",
-//             ),
-//         ],
-//     );
-
-//     let finalized_batch = Batch {
-//         batch_id: 1u64,
-//         btc_requested: Uint128::new(95_000u128),
-//         maxbtc_burned: Uint128::new(100_000u128),
-//         collected_amount: Uint128::new(95_000u128),
-//         deposit_decimals: 6u32,
-//         collector_historical_balance: Uint128::zero(),
-//     };
-//     FINALIZED_BATCHES
-//         .save(&mut deps.storage, 1u64, &finalized_batch)
-//         .unwrap();
-
-//     // Act
-//     let recipient = deps.api.addr_make("recipient_addr");
-//     let error = do_claim(
-//         deps.as_mut(),
-//         env.clone(),
-//         info.clone(),
-//         recipient.to_string(),
-//     )
-//     .unwrap_err();
-
-//     // Assert
-//     match error {
-//         ContractError::RedemptionSupplyMismatch {} => (),
-//         e => panic!("Unexpected error: {e:?}"),
-//     }
-// }
-
 #[test]
 fn test_withdraw_pending_tick_collect_ceffu_amount() {
     let (mut deps, env, _) = setup_contract();
@@ -1002,10 +610,13 @@ fn test_idle_tick_withdraw_and_stay_idle() {
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // Set CURRENT_DEPOSIT_BALANCE so that *more or equal* than `deposit_flush_min_amount`
-    CURRENT_DEPOSIT_BALANCE
-        .save(&mut deps.storage, &Uint128::new(200_000u128))
-        .unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(200_000u128),
+    );
 
     let batch_id = 1u64;
     let burned_amount = Uint128::new(100_000u128);
@@ -1028,8 +639,6 @@ fn test_idle_tick_withdraw_and_stay_idle() {
     let info = message_info(&operator, &[]);
 
     let resp = execute_tick(deps.as_mut(), env.clone(), info).unwrap();
-
-    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     assert_eq!(
         resp,
@@ -1074,9 +683,6 @@ fn test_idle_tick_withdraw_and_stay_idle() {
         }
     );
 
-    let current_deposit_balance = CURRENT_DEPOSIT_BALANCE.load(&deps.storage).unwrap();
-    assert_eq!(current_deposit_balance, Uint128::new(105_000u128));
-
     let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::Idle);
 }
@@ -1113,10 +719,13 @@ fn test_ticks_cycle() {
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // Set CURRENT_DEPOSIT_BALANCE so that *more or equal* than `deposit_flush_min_amount`
-    CURRENT_DEPOSIT_BALANCE
-        .save(&mut deps.storage, &Uint128::new(180_000u128))
-        .unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(180_000u128),
+    );
 
     let batch_id = 1u64;
     let burned_amount = Uint128::new(200_000u128);
@@ -1139,8 +748,6 @@ fn test_ticks_cycle() {
     let info = message_info(&operator, &[]);
 
     let resp = execute_tick(deps.as_mut(), env.clone(), info).unwrap();
-
-    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     assert_eq!(
         resp,
@@ -1185,9 +792,6 @@ fn test_ticks_cycle() {
         })
     );
 
-    let current_deposit_balance = CURRENT_DEPOSIT_BALANCE.load(&deps.storage).unwrap();
-    assert_eq!(current_deposit_balance, Uint128::zero());
-
     let current_state = FSM.get_current_state(&deps.storage).unwrap();
     assert_eq!(current_state, ContractState::WithdrawJLP);
 }
@@ -1199,10 +803,13 @@ fn test_withdraw_ticks_cycle() {
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // Set CURRENT_DEPOSIT_BALANCE so that *more or equal* than `deposit_flush_min_amount`
-    CURRENT_DEPOSIT_BALANCE
-        .save(&mut deps.storage, &Uint128::new(150_000u128))
-        .unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(150_000u128),
+    );
 
     let batch_id = 1u64;
     let burned_amount = Uint128::new(200_000u128);
@@ -1225,8 +832,6 @@ fn test_withdraw_ticks_cycle() {
     let info = message_info(&operator, &[]);
 
     let resp = execute_tick(deps.as_mut(), env.clone(), info.clone()).unwrap();
-
-    let cfg = CONFIG.load(&deps.storage).unwrap();
 
     assert_eq!(
         resp,
@@ -1286,15 +891,16 @@ fn test_withdraw_ticks_cycle() {
 fn test_idle_tick_goes_to_deposit_neutron() {
     let (mut deps, env, _) = setup_contract();
 
-    let cfg = CONFIG.load(&deps.storage).unwrap();
-
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // Set CURRENT_DEPOSIT_BALANCE so that *more or equal* than `deposit_flush_min_amount`
-    CURRENT_DEPOSIT_BALANCE
-        .save(&mut deps.storage, &Uint128::new(200_000u128))
-        .unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(200_000u128),
+    );
 
     let operator = deps.api.addr_make("operator_addr");
 
@@ -1328,7 +934,7 @@ fn test_idle_tick_goes_to_deposit_neutron() {
         vec![
             Attribute::new("action".to_string(), "flush_deposits".to_string()),
             Attribute::new("sender".to_string(), operator.to_string()),
-            Attribute::new("flushed".to_string(), "200000".to_string()),
+            Attribute::new("flushed".to_string(), "200000wBTC".to_string()),
         ]
     );
 
@@ -1340,14 +946,16 @@ fn test_idle_tick_goes_to_deposit_neutron() {
 fn test_ticks_deposit_cycle() {
     let (mut deps, env, _) = setup_contract();
 
-    let cfg = CONFIG.load(&deps.storage).unwrap();
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
 
-    // Set CURRENT_DEPOSIT_BALANCE so that *more* than `deposit_flush_min_amount`
-    CURRENT_DEPOSIT_BALANCE
-        .save(&mut deps.storage, &Uint128::new(200_000u128))
-        .unwrap();
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(200_000u128),
+    );
 
     let operator = deps.api.addr_make("operator_addr");
 
@@ -1383,7 +991,7 @@ fn test_ticks_deposit_cycle() {
         vec![
             Attribute::new("action".to_string(), "flush_deposits".to_string()),
             Attribute::new("sender".to_string(), operator.to_string()),
-            Attribute::new("flushed".to_string(), "200000".to_string()),
+            Attribute::new("flushed".to_string(), "200000wBTC".to_string()),
         ]
     );
 
@@ -1474,13 +1082,3 @@ fn do_deposit(
 fn do_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     execute(deps, env, info, ExecuteMsg::Withdraw {})
 }
-
-// /// A convenience helper for calling the `execute_claim` entry point.
-// fn do_claim(
-//     deps: DepsMut,
-//     env: Env,
-//     info: MessageInfo,
-//     recipient: String,
-// ) -> Result<Response, ContractError> {
-//     execute(deps, env, info, ExecuteMsg::Claim { recipient })
-// }

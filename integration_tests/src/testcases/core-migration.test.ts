@@ -638,12 +638,6 @@ describe('Core', () => {
         fee,
       );
 
-      const newCoreContractAddress = result.events
-        .find((e) => e.type === 'wasm')
-        .attributes.find((a) => a.key === 'core_contract').value;
-
-      console.log(newCoreContractAddress);
-
       const totalDepositedStr = await client.queryContractRaw(
         coreContractAddress,
         toAscii('total_deposited'),

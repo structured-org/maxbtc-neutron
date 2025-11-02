@@ -39,6 +39,7 @@ cw2 = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+semver = { workspace = true }
 neutron-std = { workspace = true }
 cw-ownable = { workspace = true }
 
