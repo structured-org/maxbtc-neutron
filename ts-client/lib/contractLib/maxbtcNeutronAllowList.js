@@ -42,6 +42,13 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.updateAllowListMsg(args), fee || "auto", memo, funds);
     };
     updateAllowListMsg = (args) => { return { update_allow_list: args }; };
+    updateZkMeSettings = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.updateZkMeSettingsMsg(args), fee || "auto", memo, funds);
+    };
+    updateZkMeSettingsMsg = (args) => { return { update_zk_me_settings: args }; };
     updateOwnership = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

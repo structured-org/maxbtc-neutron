@@ -44,6 +44,3 @@ pub enum QueryMsg {
     #[returns(bool)]
     IsAddressAllowed { address: String },
 }
-
-#[cw_serde]
-pub struct MigrateMsg {}
