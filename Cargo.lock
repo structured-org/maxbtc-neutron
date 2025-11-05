@@ -3808,7 +3808,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-allow-list"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3824,7 +3824,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3842,7 +3842,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-exchange-rate-provider"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3858,7 +3858,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-factory"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3878,7 +3878,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-fee-collector"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3911,7 +3911,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-waitosaur-holder"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -3927,7 +3927,7 @@ dependencies = [
 
 [[package]]
 name = "maxbtc-neutron-withdrawal-manager"
-version = "1.0.0"
+version = "0.2.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
