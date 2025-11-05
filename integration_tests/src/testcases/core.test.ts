@@ -406,6 +406,7 @@ describe('Core', () => {
           },
           deposit_forwarder_contract: depositForwarderAddress,
           exchange_rate_stale_period: '60',
+          withdrawal_cost: '0.01',
         },
         'label',
         'auto',
@@ -755,7 +756,7 @@ describe('Core', () => {
 
       expect(depositBalance).toEqual({
         denom: DEPOSIT_DENOM,
-        amount: '98483',
+        amount: '97457',
       });
 
       const finalizedBatches = await coreContractClient.queryFinalizedBatches(
@@ -766,7 +767,7 @@ describe('Core', () => {
           batch_id: 1,
           btc_requested: '101517',
           maxbtc_burned: '100000',
-          collected_amount: '101517',
+          collected_amount: '100502',
           deposit_decimals: 6,
           collector_historical_balance: '0',
         },
@@ -818,7 +819,7 @@ describe('Core', () => {
         batch_id: 2,
         btc_requested: '121821',
         maxbtc_burned: '120000',
-        collected_amount: '98483',
+        collected_amount: '95517',
         deposit_decimals: 6,
         collector_historical_balance: '0',
       });
@@ -900,7 +901,7 @@ describe('Core', () => {
         batch_id: 2,
         btc_requested: '121821',
         maxbtc_burned: '120000',
-        collected_amount: '198483',
+        collected_amount: '195517',
         deposit_decimals: 6,
         collector_historical_balance: '0',
       });
@@ -959,7 +960,7 @@ describe('Core', () => {
       expect(
         BigInt(operatorAccountBTCBalanceAfter) -
           BigInt(operatorAccountBTCBalanceBefore),
-      ).toEqual(BigInt('50758'));
+      ).toEqual(BigInt('50251'));
 
       claimRes = await withdrawalManagerContractClient.claim(
         account.address,
@@ -986,7 +987,7 @@ describe('Core', () => {
       expect(
         BigInt(operatorAccountBTCBalanceAfter2) -
           BigInt(operatorAccountBTCBalanceAfter),
-      ).toEqual(BigInt('82701'));
+      ).toEqual(BigInt('81465'));
     });
 
     it('try to withdraw from not finalized batch', async () => {

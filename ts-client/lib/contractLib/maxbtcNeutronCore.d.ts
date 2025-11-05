@@ -1,5 +1,10 @@
-import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
-import { StdFee } from "@cosmjs/amino";
+import {
+  CosmWasmClient,
+  SigningCosmWasmClient,
+  ExecuteResult,
+  InstantiateResult,
+} from '@cosmjs/cosmwasm-stargate';
+import { StdFee } from '@cosmjs/amino';
 /**
  * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
  *
@@ -42,7 +47,14 @@ export type Decimal = string;
  * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
  */
 export type Uint64 = string;
-export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p" | "withdraw_j_l_p" | "withdraw_pending" | "withdraw_neutron";
+export type ContractState =
+  | 'idle'
+  | 'deposit_neutron'
+  | 'deposit_pending'
+  | 'deposit_j_l_p'
+  | 'withdraw_j_l_p'
+  | 'withdraw_pending'
+  | 'withdraw_neutron';
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
@@ -53,13 +65,16 @@ export type ArrayOfBatch = Batch2[];
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
-export type Expiration = {
-    at_height: number;
-} | {
-    at_time: Timestamp;
-} | {
-    never: {};
-};
+export type Expiration =
+  | {
+      at_height: number;
+    }
+  | {
+      at_time: Timestamp;
+    }
+  | {
+      never: {};
+    };
 /**
  * A point in time in nanosecond precision.
  *
@@ -75,354 +90,439 @@ export type Timestamp = Uint64;
 /**
  * Actions that can be taken to alter the contract's ownership
  */
-export type UpdateOwnershipArgs = {
-    transfer_ownership: {
+export type UpdateOwnershipArgs =
+  | {
+      transfer_ownership: {
         expiry?: Expiration | null;
         new_owner: string;
-    };
-} | "accept_ownership" | "renounce_ownership";
+      };
+    }
+  | 'accept_ownership'
+  | 'renounce_ownership';
 export interface MaxbtcNeutronCoreSchema {
-    responses: Batch | Config | ContractState | Decimal1 | Batch1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch3;
-    query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
-    execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | MintByOwnerArgs | UpdateOwnershipArgs;
-    instantiate?: InstantiateMsg;
-    [k: string]: unknown;
+  responses:
+    | Batch
+    | Config
+    | ContractState
+    | Decimal1
+    | Batch1
+    | ArrayOfBatch
+    | OwnershipForString
+    | SimulateDepositResponse
+    | Batch3;
+  query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
+  execute:
+    | DepositArgs
+    | UpdateConfigArgs
+    | MintFeeArgs
+    | MintByOwnerArgs
+    | UpdateOwnershipArgs;
+  instantiate?: InstantiateMsg;
+  [k: string]: unknown;
 }
 /**
  * Each batch has a batch_id, which increments.
  */
 export interface Batch {
-    batch_id: number;
-    /**
-     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
-     */
-    btc_requested: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was actually collected?
-     */
-    collected_amount: Uint128;
-    /**
-     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
-     */
-    collector_historical_balance: Uint128;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * The amount of maxBTC burned for this batch
-     */
-    maxbtc_burned: Uint128;
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
 }
 export interface Config {
-    /**
-     * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
-     */
-    allowlist_contract: Addr;
-    /**
-     * One-off cost (Decimal) charged when a user deposits to mint maxBTC
-     */
-    deposit_cost: Decimal;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * Denom for user deposits (e.g. IBC-transferred BTC)
-     */
-    deposit_denom: string;
-    /**
-     * Contract that forwards freshly-received deposits to the custody chain.
-     */
-    deposit_forwarder_contract: Addr;
-    /**
-     * Optional upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
-     */
-    deposits_cap?: Uint128 | null;
-    /**
-     * This contract provides the exchange rate for maxBTC
-     */
-    exchange_rate_provider_contract: Addr;
-    /**
-     * Exchange rate timeout in seconds
-     */
-    exchange_rate_stale_period: Uint64;
-    /**
-     * Admin contract with high privileges
-     */
-    factory_contract: Addr;
-    /**
-     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
-     */
-    fee_collector_contract: Addr;
-    /**
-     * Operator address
-     */
-    operator: Addr;
-    /**
-     * When `true`, user-initiated actions are rejected; can be set automatically on emergencies or manually by the owner.
-     */
-    paused: boolean;
-    /**
-     * Contract that owns and creates token factory tokens.
-     */
-    token_contract: Addr;
-    /**
-     * Contract that holds amount of BTC received from CEFFU
-     */
-    waitosaur_holder_contract: Addr;
-    /**
-     * Address of the waitosaur observer contract
-     */
-    waitosaur_observer_contract: Addr;
-    /**
-     * Contract that handles withdrawals
-     */
-    withdrawal_manager_contract: Addr;
+  /**
+   * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
+   */
+  allowlist_contract: Addr;
+  /**
+   * One-off cost (Decimal) charged when a user deposits to mint maxBTC
+   */
+  deposit_cost: Decimal;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * Denom for user deposits (e.g. IBC-transferred BTC)
+   */
+  deposit_denom: string;
+  /**
+   * Contract that forwards freshly-received deposits to the custody chain.
+   */
+  deposit_forwarder_contract: Addr;
+  /**
+   * Optional upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
+   */
+  deposits_cap?: Uint128 | null;
+  /**
+   * This contract provides the exchange rate for maxBTC
+   */
+  exchange_rate_provider_contract: Addr;
+  /**
+   * Admin contract with high privileges
+   */
+  factory_contract: Addr;
+  /**
+   * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
+   */
+  fee_collector_contract: Addr;
+  /**
+   * Operator address
+   */
+  operator: Addr;
+  /**
+   * When `true`, user-initiated actions are rejected; can be set automatically on emergencies or manually by the owner.
+   */
+  paused: boolean;
+  /**
+   * Contract that owns and creates token factory tokens.
+   */
+  token_contract: Addr;
+  /**
+   * Contract that holds amount of BTC received from CEFFU
+   */
+  waitosaur_holder_contract: Addr;
+  /**
+   * Address of the waitosaur observer contract
+   */
+  waitosaur_observer_contract: Addr;
+  /**
+   * One-off cost (Decimal) charged when a user withdraws from maxBTC
+   */
+  withdrawal_cost: Decimal;
+  /**
+   * Contract that handles withdrawals
+   */
+  withdrawal_manager_contract: Addr;
 }
 /**
  * Each batch has a batch_id, which increments.
  */
 export interface Batch1 {
-    batch_id: number;
-    /**
-     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
-     */
-    btc_requested: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was actually collected?
-     */
-    collected_amount: Uint128;
-    /**
-     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
-     */
-    collector_historical_balance: Uint128;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * The amount of maxBTC burned for this batch
-     */
-    maxbtc_burned: Uint128;
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
 }
 /**
  * Each batch has a batch_id, which increments.
  */
 export interface Batch2 {
-    batch_id: number;
-    /**
-     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
-     */
-    btc_requested: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was actually collected?
-     */
-    collected_amount: Uint128;
-    /**
-     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
-     */
-    collector_historical_balance: Uint128;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * The amount of maxBTC burned for this batch
-     */
-    maxbtc_burned: Uint128;
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
 }
 /**
  * The contract's ownership info
  */
 export interface OwnershipForString {
-    /**
-     * The contract's current owner. `None` if the ownership has been renounced.
-     */
-    owner?: string | null;
-    /**
-     * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
-     */
-    pending_expiry?: Expiration | null;
-    /**
-     * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
-     */
-    pending_owner?: string | null;
+  /**
+   * The contract's current owner. `None` if the ownership has been renounced.
+   */
+  owner?: string | null;
+  /**
+   * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
+   */
+  pending_expiry?: Expiration | null;
+  /**
+   * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
+   */
+  pending_owner?: string | null;
 }
 export interface SimulateDepositResponse {
-    minted_amount: Uint128;
+  minted_amount: Uint128;
 }
 /**
  * Each batch has a batch_id, which increments.
  */
 export interface Batch3 {
-    batch_id: number;
-    /**
-     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
-     */
-    btc_requested: Uint128;
-    /**
-     * If in FINALIZED state, how much BTC was actually collected?
-     */
-    collected_amount: Uint128;
-    /**
-     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
-     */
-    collector_historical_balance: Uint128;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * The amount of maxBTC burned for this batch
-     */
-    maxbtc_burned: Uint128;
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
 }
 export interface FinalizedBatchesArgs {
-    limit?: number | null;
-    start_after?: Uint64 | null;
+  limit?: number | null;
+  start_after?: Uint64 | null;
 }
 export interface FinalizedBatchArgs {
-    batch_id: number;
+  batch_id: number;
 }
 export interface SimulateDepositArgs {
-    amount: Uint128;
+  amount: Uint128;
 }
 export interface DepositArgs {
-    min_receive_amount?: Uint128 | null;
-    recipient: string;
+  min_receive_amount?: Uint128 | null;
+  recipient: string;
 }
 /**
  * Message for updating configuration parameters (owner-only).
  */
 export interface UpdateConfigArgs {
-    description?: "Message for updating configuration parameters (owner-only).";
-    type?: "object";
-    properties?: {
-        [k: string]: unknown;
-    };
-    additionalProperties?: never;
-    required?: [];
+  description?: 'Message for updating configuration parameters (owner-only).';
+  type?: 'object';
+  properties?: {
+    [k: string]: unknown;
+  };
+  additionalProperties?: never;
+  required?: [];
 }
 export interface MintFeeArgs {
-    amount: Coin;
+  amount: Coin;
 }
 export interface Coin {
-    amount: Uint128;
-    denom: string;
+  amount: Uint128;
+  denom: string;
 }
 export interface MintByOwnerArgs {
-    amount: Uint128;
-    recipient: string;
+  amount: Uint128;
+  recipient: string;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
  */
 export interface InstantiateMsg {
-    /**
-     * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
-     */
-    allowlist_contract: string;
-    /**
-     * One-off cost (Decimal) charged when a user deposits to mint maxBTC
-     */
-    deposit_cost: Decimal;
-    /**
-     * Number of decimals carried by the `deposit_denom` asset
-     */
-    deposit_decimals: number;
-    /**
-     * Denom for user deposits (e.g. IBC-transferred BTC)
-     */
-    deposit_denom: string;
-    /**
-     * Contract that forwards freshly-received deposits to the custody chain.
-     */
-    deposit_forwarder_contract: string;
-    /**
-     * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
-     */
-    deposits_cap?: Uint128 | null;
-    /**
-     * This contract provides the exchange rate for maxBTC
-     */
-    exchange_rate_provider_contract: string;
-    /**
-     * Exchange rate timeout in seconds
-     */
-    exchange_rate_stale_period: Uint64;
-    /**
-     * Admin contract with high privileges
-     */
-    factory_contract: string;
-    /**
-     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
-     */
-    fee_collector_contract: string;
-    /**
-     * Operator address
-     */
-    operator: string;
-    owner: string;
-    /**
-     * Contract that owns and creates token factory tokens.
-     */
-    token_contract: string;
-    /**
-     * Address of the waitosaur holder contract
-     */
-    waitosaur_holder_contract: string;
-    /**
-     * Address of the waitosaur contract
-     */
-    waitosaur_observer_contract: string;
-    /**
-     * Address of the withdrawal manager contract
-     */
-    withdrawal_manager_contract: string;
+  /**
+   * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
+   */
+  allowlist_contract: string;
+  /**
+   * One-off cost (Decimal) charged when a user deposits to mint maxBTC
+   */
+  deposit_cost: Decimal;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * Denom for user deposits (e.g. IBC-transferred BTC)
+   */
+  deposit_denom: string;
+  /**
+   * Contract that forwards freshly-received deposits to the custody chain.
+   */
+  deposit_forwarder_contract: string;
+  /**
+   * Upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
+   */
+  deposits_cap?: Uint128 | null;
+  /**
+   * This contract provides the exchange rate for maxBTC
+   */
+  exchange_rate_provider_contract: string;
+  /**
+   * Exchange rate timeout in seconds
+   */
+  exchange_rate_stale_period: Uint64;
+  /**
+   * Admin contract with high privileges
+   */
+  factory_contract: string;
+  /**
+   * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
+   */
+  fee_collector_contract: string;
+  /**
+   * Operator address
+   */
+  operator: string;
+  owner: string;
+  /**
+   * Contract that owns and creates token factory tokens.
+   */
+  token_contract: string;
+  /**
+   * Address of the waitosaur holder contract
+   */
+  waitosaur_holder_contract: string;
+  /**
+   * Address of the waitosaur contract
+   */
+  waitosaur_observer_contract: string;
+  /**
+   * One-off cost (Decimal) charged when a user withdraws from maxBTC
+   */
+  withdrawal_cost: Decimal;
+  /**
+   * Address of the withdrawal manager contract
+   */
+  withdrawal_manager_contract: string;
 }
 export declare class Client {
-    private readonly client;
-    contractAddress: string;
-    constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
-    mustBeSigningClient(): Error;
-    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
-    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
-    queryContractState: () => Promise<ContractState>;
-    queryActiveBatch: () => Promise<Batch>;
-    queryWithdrawingBatch: () => Promise<Batch>;
-    queryFinalizedBatches: (args: FinalizedBatchesArgs) => Promise<ArrayOfBatch>;
-    queryFinalizedBatch: (args: FinalizedBatchArgs) => Promise<Batch>;
-    queryConfig: () => Promise<Config>;
-    queryExchangeRate: () => Promise<Decimal>;
-    querySimulateDeposit: (args: SimulateDepositArgs) => Promise<SimulateDepositResponse>;
-    queryOwnership: () => Promise<OwnershipForString>;
-    tick: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    tickMsg: () => {
-        tick: {};
-    };
-    deposit: (sender: string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    depositMsg: (args: DepositArgs) => {
-        deposit: DepositArgs;
-    };
-    withdraw: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    withdrawMsg: () => {
-        withdraw: {};
-    };
-    updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    updateConfigMsg: (args: UpdateConfigArgs) => {
-        update_config: UpdateConfigArgs;
-    };
-    mintFee: (sender: string, args: MintFeeArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    mintFeeMsg: (args: MintFeeArgs) => {
-        mint_fee: MintFeeArgs;
-    };
-    mintByOwner: (sender: string, args: MintByOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    mintByOwnerMsg: (args: MintByOwnerArgs) => {
-        mint_by_owner: MintByOwnerArgs;
-    };
-    updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    updateOwnershipMsg: (args: UpdateOwnershipArgs) => {
-        update_ownership: UpdateOwnershipArgs;
-    };
+  private readonly client;
+  contractAddress: string;
+  constructor(
+    client: CosmWasmClient | SigningCosmWasmClient,
+    contractAddress: string,
+  );
+  mustBeSigningClient(): Error;
+  static instantiate(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+    admin?: string,
+  ): Promise<InstantiateResult>;
+  static instantiate2(
+    client: SigningCosmWasmClient,
+    sender: string,
+    codeId: number,
+    salt: Uint8Array,
+    initMsg: InstantiateMsg,
+    label: string,
+    fees: StdFee | 'auto' | number,
+    initCoins?: readonly Coin[],
+    admin?: string,
+  ): Promise<InstantiateResult>;
+  queryContractState: () => Promise<ContractState>;
+  queryActiveBatch: () => Promise<Batch>;
+  queryWithdrawingBatch: () => Promise<Batch>;
+  queryFinalizedBatches: (args: FinalizedBatchesArgs) => Promise<ArrayOfBatch>;
+  queryFinalizedBatch: (args: FinalizedBatchArgs) => Promise<Batch>;
+  queryConfig: () => Promise<Config>;
+  queryExchangeRate: () => Promise<Decimal>;
+  querySimulateDeposit: (
+    args: SimulateDepositArgs,
+  ) => Promise<SimulateDepositResponse>;
+  queryOwnership: () => Promise<OwnershipForString>;
+  tick: (
+    sender: string,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  tickMsg: () => {
+    tick: {};
+  };
+  deposit: (
+    sender: string,
+    args: DepositArgs,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  depositMsg: (args: DepositArgs) => {
+    deposit: DepositArgs;
+  };
+  withdraw: (
+    sender: string,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  withdrawMsg: () => {
+    withdraw: {};
+  };
+  updateConfig: (
+    sender: string,
+    args: UpdateConfigArgs,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  updateConfigMsg: (args: UpdateConfigArgs) => {
+    update_config: UpdateConfigArgs;
+  };
+  mintFee: (
+    sender: string,
+    args: MintFeeArgs,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  mintFeeMsg: (args: MintFeeArgs) => {
+    mint_fee: MintFeeArgs;
+  };
+  mintByOwner: (
+    sender: string,
+    args: MintByOwnerArgs,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  mintByOwnerMsg: (args: MintByOwnerArgs) => {
+    mint_by_owner: MintByOwnerArgs;
+  };
+  updateOwnership: (
+    sender: string,
+    args: UpdateOwnershipArgs,
+    fee?: number | StdFee | 'auto',
+    memo?: string,
+    funds?: Coin[],
+  ) => Promise<ExecuteResult>;
+  updateOwnershipMsg: (args: UpdateOwnershipArgs) => {
+    update_ownership: UpdateOwnershipArgs;
+  };
 }

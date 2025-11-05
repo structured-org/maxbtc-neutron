@@ -18,6 +18,8 @@ pub struct InstantiateMsg {
     pub deposit_decimals: u32,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
+    /// One-off cost (Decimal) charged when a user withdraws from maxBTC
+    pub withdrawal_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,

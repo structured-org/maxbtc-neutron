@@ -20,6 +20,8 @@ pub struct Config {
     pub deposit_denom: String,
     /// Number of decimals carried by the `deposit_denom` asset
     pub deposit_decimals: u32,
+    /// One-off cost (Decimal) charged when a user withdraws from maxBTC
+    pub withdrawal_cost: Decimal,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
     /// Optional upper limit on total AUM; deposits are rejected once the cap

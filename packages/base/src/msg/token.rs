@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin, CosmosMsg, Uint64};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Decimal, Uint64};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
 use neutron_std::types::osmosis::tokenfactory::v1beta1::MsgSetDenomMetadata;
@@ -81,6 +81,7 @@ pub struct MigrateMsg {
     pub ceffu_backend: Addr,
     pub exchange_rate_stale_period: Uint64,
     pub salt: String,
+    pub withdrawal_cost: Decimal,
 }
 
 pub fn get_tokenfactory_denom(contract_addr: &str, subdenom: &str) -> String {

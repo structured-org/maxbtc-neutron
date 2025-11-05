@@ -251,6 +251,7 @@ pub fn instantiate(
             deposit_denom: msg.deposit_denom.clone(),
             deposit_decimals: msg.deposit_decimals,
             deposit_cost: msg.deposit_cost,
+            withdrawal_cost: msg.withdrawal_cost,
             deposits_cap: msg.deposits_cap,
             allowlist_contract: allowlist_contract.to_string(),
             exchange_rate_provider_contract: exchange_rate_provider_contract.to_string(),

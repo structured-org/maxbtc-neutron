@@ -547,6 +547,7 @@ describe('Core', () => {
             'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj',
           salt: 'salt',
           exchange_rate_stale_period: '60',
+          withdrawal_cost: '0.01',
         },
         fee,
       );

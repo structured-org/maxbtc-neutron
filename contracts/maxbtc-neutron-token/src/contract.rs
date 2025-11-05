@@ -396,6 +396,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
                 waitosaur_observer_contract: waitosaur_observer_contract.into_string(),
                 withdrawal_manager_contract: withdrawal_manager_contract.into_string(),
+                withdrawal_cost: msg.withdrawal_cost,
             })?,
             funds: vec![],
             salt: Binary::from(salt),
