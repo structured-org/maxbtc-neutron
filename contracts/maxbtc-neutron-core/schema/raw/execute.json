@@ -284,6 +284,12 @@
             }
           ]
         },
+        "exchange_rate_provider_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fee_collector_contract": {
           "type": [
             "string",

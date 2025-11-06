@@ -1949,6 +1949,15 @@ dependencies = [
 
 [[package]]
 name = "cw-address-like"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "451a4691083a88a3c0630a8a88799e9d4cd6679b7ce8ff22b8da2873ff31d380"
+dependencies = [
+ "cosmwasm-std 1.5.11",
+]
+
+[[package]]
+name = "cw-address-like"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73553ee4dad5b1678977ff603e72c3fdd41518ca2b0bd9b245b21e4c72eafa9e"
@@ -1966,8 +1975,8 @@ dependencies = [
  "bech32 0.11.0",
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-storage-plus",
- "cw-utils",
+ "cw-storage-plus 2.0.0",
+ "cw-utils 2.0.0",
  "itertools 0.14.0",
  "prost 0.13.5",
  "schemars",
@@ -1978,17 +1987,43 @@ dependencies = [
 
 [[package]]
 name = "cw-ownable"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093dfb4520c48b5848274dd88ea99e280a04bc08729603341c7fb0d758c74321"
+dependencies = [
+ "cosmwasm-schema 1.5.11",
+ "cosmwasm-std 1.5.11",
+ "cw-address-like 1.0.4",
+ "cw-ownable-derive 0.5.1",
+ "cw-storage-plus 1.2.0",
+ "cw-utils 1.0.3",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "cw-ownable"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2f8ee96ac5342c795a0610410998fc075a95af8c796b6d16479cdffd2471f1"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-address-like",
- "cw-ownable-derive",
- "cw-storage-plus",
- "cw-utils",
+ "cw-address-like 2.0.0",
+ "cw-ownable-derive 0.6.0",
+ "cw-storage-plus 2.0.0",
+ "cw-utils 2.0.0",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "cw-ownable-derive"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1d3bf2e0f341bb6cc100d7d441d31cf713fbd3ce0c511f91e79f14b40a889af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2004,6 +2039,17 @@ dependencies = [
 
 [[package]]
 name = "cw-storage-plus"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5ff29294ee99373e2cd5fd21786a3c0ced99a52fec2ca347d565489c61b723c"
+dependencies = [
+ "cosmwasm-std 1.5.11",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw-storage-plus"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f13360e9007f51998d42b1bc6b7fa0141f74feae61ed5fd1e5b0a89eec7b5de1"
@@ -2011,6 +2057,21 @@ dependencies = [
  "cosmwasm-std 2.2.1",
  "schemars",
  "serde",
+]
+
+[[package]]
+name = "cw-utils"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c4a657e5caacc3a0d00ee96ca8618745d050b8f757c709babafb81208d4239c"
+dependencies = [
+ "cosmwasm-schema 1.5.11",
+ "cosmwasm-std 1.5.11",
+ "cw2 1.1.2",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2028,13 +2089,28 @@ dependencies = [
 
 [[package]]
 name = "cw2"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6c120b24fbbf5c3bedebb97f2cc85fbfa1c3287e09223428e7e597b5293c1fa"
+dependencies = [
+ "cosmwasm-schema 1.5.11",
+ "cosmwasm-std 1.5.11",
+ "cw-storage-plus 1.2.0",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "cw2"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b04852cd38f044c0751259d5f78255d07590d136b8a86d4e09efdd7666bd6d27"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-storage-plus",
+ "cw-storage-plus 2.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -3932,9 +4008,9 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-ownable",
- "cw-storage-plus",
- "cw2",
+ "cw-ownable 2.1.0",
+ "cw-storage-plus 2.0.0",
+ "cw2 2.0.0",
  "neutron-std 5.0.0",
  "schemars",
  "serde",
@@ -3947,9 +4023,9 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-ownable",
- "cw-storage-plus",
- "cw2",
+ "cw-ownable 2.1.0",
+ "cw-storage-plus 2.0.0",
+ "cw2 2.0.0",
  "neutron-std 5.0.0",
  "schemars",
  "serde",
@@ -3962,9 +4038,9 @@ version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
- "cw-ownable",
- "cw-storage-plus",
- "cw2",
+ "cw-ownable 2.1.0",
+ "cw-storage-plus 2.0.0",
+ "cw2 2.0.0",
  "neutron-std 5.0.0",
  "schemars",
  "serde",
@@ -3978,9 +4054,26 @@ dependencies = [
  "cosmwasm-schema 2.2.1",
  "cosmwasm-std 2.2.1",
  "cw-multi-test",
- "cw-storage-plus",
- "cw2",
+ "cw-storage-plus 2.0.0",
+ "cw2 2.0.0",
  "schemars",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "maxbtc-neutron-redemption-rate-adapter"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema 2.2.1",
+ "cosmwasm-std 1.5.11",
+ "cw-ownable 0.5.1",
+ "cw-storage-plus 1.2.0",
+ "cw2 1.1.2",
+ "maxbtc-neutron-core",
+ "neutron-sdk",
+ "schemars",
+ "semver 1.0.25",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -4051,6 +4144,27 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "tempfile",
+]
+
+[[package]]
+name = "neutron-sdk"
+version = "0.10.0"
+source = "git+https://github.com/neutron-org/neutron-sdk?branch=feat%2Fproposal-votes#2dfca1734dfc4cfba478b3067417648733d66cd9"
+dependencies = [
+ "bech32 0.9.1",
+ "cosmos-sdk-proto 0.20.0",
+ "cosmwasm-schema 1.5.11",
+ "cosmwasm-std 1.5.11",
+ "prost 0.12.6",
+ "prost-types",
+ "protobuf",
+ "schemars",
+ "serde",
+ "serde-json-wasm 1.0.1",
+ "serde_json",
+ "speedate",
+ "tendermint-proto 0.34.1",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
