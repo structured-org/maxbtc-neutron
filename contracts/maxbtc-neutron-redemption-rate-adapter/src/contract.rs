@@ -1,25 +1,23 @@
-use std::str::FromStr;
-use cosmwasm_std::{attr, to_json_binary, Decimal, Deps};
-use cosmwasm_std::{Binary, DepsMut, Env, MessageInfo, Response};
-use cw_ownable::{get_ownership, update_ownership};
 use crate::error::{ContractError, ContractResult};
 use crate::msg::{
     ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, RedemptionRateResponse, UpdateConfig,
 };
 use crate::state::{Config, CONFIG};
-use neutron_sdk::bindings::msg::NeutronMsg;
-use neutron_sdk::bindings::query::NeutronQuery;
+use cosmwasm_std::{attr, to_json_binary, Decimal, Deps};
+use cosmwasm_std::{Binary, DepsMut, Env, MessageInfo, Response};
+use cw_ownable::{get_ownership, update_ownership};
+use std::str::FromStr;
 
 const CONTRACT_NAME: &str = concat!("crates.io:maxbtc-neutron__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
 pub fn instantiate(
-    deps: DepsMut<NeutronQuery>,
+    deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
     msg: InstantiateMsg,
-) -> ContractResult<Response<NeutronMsg>> {
+) -> ContractResult<Response> {
     cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     cw_ownable::initialize_owner(deps.storage, deps.api, Some(msg.owner.as_ref()))?;
     assert!(msg.fee_bps <= 10_000);
@@ -35,7 +33,7 @@ pub fn instantiate(
 }
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
-pub fn query(deps: Deps<NeutronQuery>, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
     match msg {
         QueryMsg::Ownership {} => Ok(to_json_binary(&get_ownership(deps.storage)?)?),
         QueryMsg::Config {} => query_config(deps, env),
@@ -43,16 +41,12 @@ pub fn query(deps: Deps<NeutronQuery>, env: Env, msg: QueryMsg) -> ContractResul
     }
 }
 
-fn query_config(deps: Deps<NeutronQuery>, _env: Env) -> ContractResult<Binary> {
+fn query_config(deps: Deps, _env: Env) -> ContractResult<Binary> {
     let config = CONFIG.load(deps.storage)?;
     Ok(to_json_binary(&config)?)
 }
 
-fn query_redemption_rate(
-    deps: Deps<NeutronQuery>,
-    env: Env,
-    denom: String,
-) -> ContractResult<Binary> {
+fn query_redemption_rate(deps: Deps, env: Env, denom: String) -> ContractResult<Binary> {
     let config = CONFIG.load(deps.storage)?;
     if denom != config.denom {
         return Err(ContractError::InvalidDenom {});
@@ -71,11 +65,11 @@ fn query_redemption_rate(
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
 pub fn execute(
-    deps: DepsMut<NeutronQuery>,
+    deps: DepsMut,
     env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
-) -> ContractResult<Response<NeutronMsg>> {
+) -> ContractResult<Response> {
     match msg {
         ExecuteMsg::UpdateOwnership(action) => {
             update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
@@ -86,10 +80,10 @@ pub fn execute(
 }
 
 fn execute_update_config(
-    deps: DepsMut<NeutronQuery>,
+    deps: DepsMut,
     info: MessageInfo,
     new_config: UpdateConfig,
-) -> ContractResult<Response<NeutronMsg>> {
+) -> ContractResult<Response> {
     cw_ownable::assert_owner(deps.storage, &info.sender)?;
     let new_core_contract = deps.api.addr_validate(&new_config.core_contract)?;
     assert!(new_config.fee_bps <= 10_000);
@@ -108,15 +102,12 @@ fn execute_update_config(
         attr("fee_bps", new_config.fee_bps.to_string()),
     ];
     Ok(Response::new()
-        .add_attribute("update_config", CONTRACT_NAME).add_attributes(attrs))
+        .add_attribute("update_config", CONTRACT_NAME)
+        .add_attributes(attrs))
 }
 
 #[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
-pub fn migrate(
-    deps: DepsMut<NeutronQuery>,
-    _env: Env,
-    _msg: MigrateMsg,
-) -> ContractResult<Response<NeutronMsg>> {
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> ContractResult<Response> {
     let version: semver::Version = CONTRACT_VERSION.parse()?;
     let storage_version: semver::Version =
         cw2::get_contract_version(deps.storage)?.version.parse()?;
