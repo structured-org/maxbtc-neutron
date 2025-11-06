@@ -352,7 +352,7 @@ fn test_flush_guard_not_enough_time_elapsed() {
 /// -----------------------------------------------------------------------------------------------
 /// HELPER FUNCTIONS BELOW
 /// -----------------------------------------------------------------------------------------------
-
+///
 /// Initializes the contract and sets up a "happy path" config in storage.
 /// Returns a mutable Deps and an Env, Info you can reuse in tests.
 fn setup_contract() -> (
