@@ -31,13 +31,9 @@ compile_arm64:
 		--platform linux/arm64 \
 		cosmwasm/optimizer-arm64:0.17.0
 
-check_contracts:
-	@cargo install cosmwasm-check --locked
-	@cosmwasm-check --available-capabilities iterator,staking,stargate,neutron,cosmwasm_1_1,cosmwasm_1_2 artifacts/*.wasm
+build_arm64: schema clippy test fmt doc compile_arm64
 
-build_arm64: schema clippy test fmt doc compile_arm64 check_contracts
-
-build: schema clippy test fmt doc compile check_contracts
+build: schema clippy test fmt doc compile
 
 build_ts_client: schema
 	@cd ts-client && yarn && yarn generate

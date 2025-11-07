@@ -56,7 +56,8 @@ fn query_redemption_rate(deps: Deps, env: Env, denom: String) -> ContractResult<
         config.core_contract.clone(),
         &maxbtc_neutron_core::msg::QueryMsg::ExchangeRate {},
     )?;
-    let redemption_rate = fee_bps / (Decimal::from_str("10_000")?) * exchange_rate;
+    let ten_thousand = Decimal::from_str("10000")?;
+    let redemption_rate = (ten_thousand - fee_bps) / ten_thousand * exchange_rate;
     Ok(to_json_binary(&RedemptionRateResponse {
         redemption_rate,
         update_time: env.block.time.seconds(),
