@@ -88,6 +88,13 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.mintFeeMsg(args), fee || "auto", memo, funds);
     };
     mintFeeMsg = (args) => { return { mint_fee: args }; };
+    mintByOwner = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.mintByOwnerMsg(args), fee || "auto", memo, funds);
+    };
+    mintByOwnerMsg = (args) => { return { mint_by_owner: args }; };
     updateOwnership = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

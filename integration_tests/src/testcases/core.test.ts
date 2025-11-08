@@ -1156,13 +1156,13 @@ describe('Core', () => {
 
       it('should allow owner to update the configuration', async () => {
         const { feeCollectorContractClient, account, client } = context;
-        const newPeriodHours = 2;
+        const newPeriodSeconds = 60;
         const newPercentage = '0.25';
 
         const updateRes = await feeCollectorContractClient.updateConfig(
           account.address,
           {
-            collection_period_seconds: newPeriodHours,
+            collection_period_seconds: newPeriodSeconds,
             fee_apy_reduction_percentage: newPercentage,
           },
           'auto',
@@ -1170,7 +1170,7 @@ describe('Core', () => {
         await waitForTx(client, updateRes.transactionHash);
 
         const newConfig = await feeCollectorContractClient.queryConfig();
-        expect(newConfig.collection_period_seconds).toEqual(newPeriodHours);
+        expect(newConfig.collection_period_seconds).toEqual(newPeriodSeconds);
         expect(newConfig.fee_apy_reduction_percentage).toEqual(newPercentage);
       });
     });

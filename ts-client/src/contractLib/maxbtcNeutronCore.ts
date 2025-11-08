@@ -107,7 +107,7 @@ export interface MaxbtcNeutronCoreSchema {
     | SimulateDepositResponse
     | Batch3;
   query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
-  execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+  execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | MintByOwnerArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -334,6 +334,10 @@ export interface Coin {
   amount: Uint128;
   denom: string;
 }
+export interface MintByOwnerArgs {
+  amount: Uint128;
+  recipient: string;
+}
 /**
  * InstantiateMsg configures the contract on initialization.
  */
@@ -501,6 +505,11 @@ export class Client {
     return this.client.execute(sender, this.contractAddress, this.mintFeeMsg(args), fee || "auto", memo, funds);
   }
   mintFeeMsg = (args: MintFeeArgs): { mint_fee: MintFeeArgs } => { return { mint_fee: args }; }
+  mintByOwner = async(sender:string, args: MintByOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.mintByOwnerMsg(args), fee || "auto", memo, funds);
+  }
+  mintByOwnerMsg = (args: MintByOwnerArgs): { mint_by_owner: MintByOwnerArgs } => { return { mint_by_owner: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);

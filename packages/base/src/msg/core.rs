@@ -78,6 +78,12 @@ pub enum ExecuteMsg {
     MintFee {
         amount: Coin,
     },
+    /// Mints the requested amount of maxBtc to the recevier address. Can only be
+    /// executed by the owner.
+    MintByOwner {
+        amount: Uint128,
+        recipient: String,
+    },
 }
 
 /// QueryMsg for reading contract states.
