@@ -56,9 +56,9 @@ pub struct WasmMockQuerier {
 
     denom_metadata: QueryDenomAuthorityMetadataResponse,
 
-    exchange_rate: Decimal,
-
     aum_in_wbtc: Int256,
+
+    exchange_rate: (Decimal, u64),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -88,8 +88,8 @@ impl WasmMockQuerier {
             allowed_recipient: true,
             waitosaur_holder_state: WaitsaurHolderState::Unlocked {},
             denom: "maxBTC".to_string(),
-            exchange_rate: Decimal::one(),
             aum_in_wbtc: Int256::zero(),
+            exchange_rate: (Decimal::one(), 0),
             waitosaur_observer_state: WaitosaurObserverState::Unlocked {},
             denom_metadata: QueryDenomAuthorityMetadataResponse::default(),
         }
@@ -116,7 +116,7 @@ impl WasmMockQuerier {
         self.waitosaur_holder_state = state;
     }
 
-    pub fn set_exchange_rate(&mut self, exchange_rate: Decimal) {
+    pub fn set_exchange_rate(&mut self, exchange_rate: (Decimal, u64)) {
         self.exchange_rate = exchange_rate;
     }
 
@@ -184,6 +184,7 @@ impl WasmMockQuerier {
     fn handle_wasm_smart_query(&self, contract_addr: &str, msg: &Binary) -> QuerierResult {
         println!("Handling wasm query for contract: {contract_addr}");
 
+        // Exchange rate provider contract
         if contract_addr == "cosmwasm1qugtqqz3w5yqdt7z56nx5aj0umrtz2q4r8escthjpgkvmhdjkypq9umkdq" {
             let parsed: Result<ExchangeRateProviderQueryMsg, _> = from_json(msg);
             if let Ok(q) = parsed {
@@ -192,8 +193,8 @@ impl WasmMockQuerier {
                         let val = self.exchange_rate;
                         SystemResult::Ok(ContractResult::Ok(
                             to_json_binary(&GetTwaerResponse {
-                                twaer: val,
-                                published_at: 1234567890,
+                                twaer: val.0,
+                                published_at: val.1,
                             })
                             .unwrap(),
                         ))

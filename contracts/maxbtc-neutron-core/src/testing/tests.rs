@@ -6,7 +6,7 @@ use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
 use cosmwasm_std::{
     coin, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, Int256,
-    MessageInfo, OwnedDeps, Response, SignedDecimal256, SubMsg, Uint128, WasmMsg,
+    MessageInfo, OwnedDeps, Response, SignedDecimal256, SubMsg, Uint128, Uint64, WasmMsg,
 };
 use cw_utils::PaymentError;
 use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, WaitosaurObserverExecuteMsg};
@@ -309,6 +309,9 @@ fn test_first_deposit_success() {
     // Arrange
     let (mut deps, env, _) = setup_contract();
 
+    deps.querier
+        .set_exchange_rate((Decimal::one(), env.block.time.seconds()));
+
     let cfg = CONFIG.load(&deps.storage).unwrap();
 
     // deposit_amount = 1 wBTC => deposit_coin.amount = 1 * 10^6 = 1_000_000
@@ -358,6 +361,9 @@ fn test_deposit_less_than_expected() {
     // Arrange
     let (mut deps, env, _) = setup_contract();
 
+    deps.querier
+        .set_exchange_rate((Decimal::one(), env.block.time.seconds()));
+
     let cfg = CONFIG.load(&deps.storage).unwrap();
 
     let deposit_amount: Uint128 = Uint128::from(1_000_000u128);
@@ -390,6 +396,46 @@ fn test_deposit_less_than_expected() {
             assert_eq!(requested, 1_000_001u128);
             assert_eq!(actual, 990_000u128);
         }
+        e => panic!("Unexpected error: {e:?}"),
+    }
+}
+
+#[test]
+fn test_deposit_exchange_rate_stale() {
+    // Arrange
+    let (mut deps, env, _) = setup_contract();
+
+    deps.querier.set_exchange_rate((Decimal::one(), 0));
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let deposit_amount: Uint128 = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("depositor"),
+        &[coin(deposit_amount.u128(), "wBTC")],
+    );
+
+    // Set the balance that the contract will see AFTER receiving the deposit.
+    // This is crucial to avoid underflow when the contract subtracts the incoming deposit.
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        deposit_amount,
+    );
+
+    // Act
+    let recipient = deps.api.addr_make("recipient_addr");
+    let res = do_deposit(
+        deps.as_mut(),
+        env.clone(),
+        info.clone(),
+        recipient.to_string(),
+        None,
+    );
+    assert!(res.is_err());
+    let err = res.err().unwrap();
+    match err {
+        ContractError::ERDataStale {} => {}
         e => panic!("Unexpected error: {e:?}"),
     }
 }
@@ -637,7 +683,7 @@ fn test_idle_tick_withdraw_and_stay_idle() {
     let (mut deps, env, _) = setup_contract();
 
     deps.querier
-        .set_exchange_rate(Decimal::from_str("0.95").unwrap());
+        .set_exchange_rate((Decimal::from_str("0.95").unwrap(), env.block.time.seconds()));
 
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
@@ -746,7 +792,7 @@ fn test_ticks_cycle() {
     let (mut deps, env, _) = setup_contract();
 
     deps.querier
-        .set_exchange_rate(Decimal::from_str("0.95").unwrap());
+        .set_exchange_rate((Decimal::from_str("0.95").unwrap(), env.block.time.seconds()));
 
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
@@ -831,6 +877,9 @@ fn test_ticks_cycle() {
 #[test]
 fn test_withdraw_ticks_cycle() {
     let (mut deps, env, _) = setup_contract();
+
+    deps.querier
+        .set_exchange_rate((Decimal::one(), env.block.time.seconds()));
 
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
@@ -1077,6 +1126,7 @@ fn default_instantiate_msg(
             .api
             .addr_make("exchange_rate_provider_addr")
             .to_string(),
+        exchange_rate_stale_period: Uint64::new(60),
         deposit_denom: "wBTC".to_string(),
         deposit_decimals: 6u32,
         deposit_cost: Decimal::percent(1),

@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Decimal, Uint128};
+use cosmwasm_std::{Decimal, Uint128, Uint64};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 use crate::state::{CodeIds, WaitosaurObserverConfig};
@@ -31,6 +31,8 @@ pub struct InstantiateMsg {
     pub waitosaur_observer_unlocker: String,
     /// Address of the deposit forwarder contract
     pub deposit_forwarder_contract: String,
+    /// Exchange rate timeout in seconds
+    pub exchange_rate_stale_period: Uint64,
 }
 
 #[cw_serde]

@@ -92,6 +92,12 @@ pub enum ContractError {
 
     #[error("Semver parsing error: {0}")]
     SemVer(String),
+
+    #[error("Stale period must be positive")]
+    StalePeriodMustBePositive {},
+
+    #[error("Exchange rate data is stale")]
+    ERDataStale {},
 }
 
 impl From<semver::Error> for ContractError {

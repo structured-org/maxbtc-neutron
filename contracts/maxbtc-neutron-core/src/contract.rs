@@ -3,7 +3,7 @@ pub(crate) use crate::utils::dec_to_amount;
 use cosmwasm_std::{
     entry_point, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
     Int256, MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult, Uint128,
-    WasmMsg,
+    Uint64, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
@@ -14,9 +14,8 @@ use maxbtc_base::msg::core::{
 use maxbtc_base::msg::token::ExecuteMsg as TokenExecuteMsg;
 use maxbtc_base::msg::{
     core::{
-        AllowlistQueryMsg, ConfigResponse, ExchangeRateProviderQueryMsg, ExecuteMsg,
-        GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg, SimulateDepositResponse,
-        UpdateConfigMsg,
+        AllowlistQueryMsg, ExchangeRateProviderQueryMsg, ExecuteMsg, GetTwaerResponse,
+        InstantiateMsg, MigrateMsg, QueryMsg, SimulateDepositResponse, UpdateConfigMsg,
     },
     token::QueryMsg as TokenQueryMsg,
     waitosaur_holder::{
@@ -67,6 +66,7 @@ pub fn instantiate(
         exchange_rate_provider_contract: deps
             .api
             .addr_validate(&msg.exchange_rate_provider_contract)?,
+        exchange_rate_stale_period: msg.exchange_rate_stale_period,
         // Store the predicted address in the config
         fee_collector_contract: deps.api.addr_validate(&msg.fee_collector_contract)?,
         waitosaur_observer_contract: deps.api.addr_validate(&msg.waitosaur_observer_contract)?,
@@ -223,7 +223,7 @@ fn execute_tick_idle(
         .query_balance(env.clone().contract.address, cfg.deposit_denom.as_str())?;
 
     if !active_withdraw_batch.maxbtc_burned.is_zero() {
-        let exchange_rate = get_exchange_rate(&deps.as_ref(), &cfg)?;
+        let exchange_rate = get_exchange_rate(&deps.as_ref(), &env, &cfg)?;
         active_withdraw_batch.btc_requested = exchange_rate
             .checked_mul(Decimal::from_atomics(
                 active_withdraw_batch.maxbtc_burned,
@@ -450,6 +450,15 @@ fn execute_update_config(
         );
     }
 
+    if let Some(value) = updates.exchange_rate_stale_period {
+        if value < Uint64::one() {
+            return Err(ContractError::StalePeriodMustBePositive {});
+        }
+
+        cfg.exchange_rate_stale_period = value;
+        res = res.add_attribute("exchange_rate_stale_period_updated", value.to_string());
+    }
+
     // Save the updated configuration.
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -458,7 +467,7 @@ fn execute_update_config(
 
 pub(crate) fn execute_deposit(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     recipient: String,
     min_receive_amount: Option<Uint128>,
@@ -477,7 +486,7 @@ pub(crate) fn execute_deposit(
     check_allowlist(&deps.as_ref(), &cfg, recipient.clone())?;
 
     // Calculate the amount of maxBTC to mint.
-    let minted_amount = calculate_mint_amount(deps.as_ref(), amount)?;
+    let minted_amount = calculate_mint_amount(deps.as_ref(), env, amount)?;
 
     // If a minimum receive amount is specified, ensure we meet that condition
     if let Some(min_amount) = min_receive_amount {
@@ -677,21 +686,12 @@ fn execute_flush_deposits(
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
         QueryMsg::ContractState {} => Ok(to_json_binary(&FSM.get_current_state(deps.storage)?)?),
         QueryMsg::Config {} => {
             let cfg = CONFIG.load(deps.storage)?;
-            let resp = ConfigResponse {
-                operator: cfg.operator.to_string(),
-                deposit_denom: cfg.deposit_denom,
-                deposit_cost: cfg.deposit_cost,
-                fee_collector_contract: cfg.fee_collector_contract.to_string(),
-                waitsaur_holder_contract: cfg.waitosaur_holder_contract.to_string(),
-                withdrawal_manager_contract: cfg.withdrawal_manager_contract.to_string(),
-                waitosaur_observer_contract: cfg.waitosaur_observer_contract.to_string(),
-            };
-            Ok(to_json_binary(&resp)?)
+            Ok(to_json_binary(&cfg)?)
         }
         QueryMsg::ActiveBatch {} => {
             let active_batch = ACTIVE_BATCH.load(deps.storage)?;
@@ -720,13 +720,13 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
         }
         QueryMsg::ExchangeRate {} => {
             let cfg = CONFIG.load(deps.storage)?;
-            let er = get_exchange_rate(&deps, &cfg)
+            let er = get_exchange_rate(&deps, &env, &cfg)
                 .map_err(|e| StdError::generic_err(format!("failed to get_exchange_rate: {e}")))?;
             Ok(to_json_binary(&er)?)
         }
         QueryMsg::SimulateDeposit { amount } => {
             // Call the dedicated calculation function and map its error type to StdError
-            let minted_amount = calculate_mint_amount(deps, amount)
+            let minted_amount = calculate_mint_amount(deps, env, amount)
                 .map_err(|e| StdError::generic_err(format!("Calculation failed: {e}")))?;
 
             let resp = SimulateDepositResponse { minted_amount };
@@ -782,12 +782,13 @@ fn create_new_batch(deps: DepsMut, cfg: &Config) -> Result<u64, ContractError> {
 /// This function encapsulates the core logic used in both deposits and simulations.
 fn calculate_mint_amount(
     deps: Deps,
+    env: Env,
     deposit_amount_raw: Uint128,
 ) -> Result<Uint128, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
 
     // Get the current exchange rate
-    let er = get_exchange_rate(&deps, &cfg)?;
+    let er = get_exchange_rate(&deps, &env, &cfg)?;
 
     // A zero exchange rate is an invalid state and would cause a division by zero error.
     if er.is_zero() {
@@ -810,13 +811,22 @@ fn calculate_mint_amount(
 }
 
 /// Queries the exchange rate from the exchange rate provider contract.
-pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, ContractError> {
+pub(crate) fn get_exchange_rate(
+    deps: &Deps,
+    env: &Env,
+    cfg: &Config,
+) -> Result<Decimal, ContractError> {
     let res: GetTwaerResponse =
         deps.querier
             .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
                 contract_addr: cfg.exchange_rate_provider_contract.to_string(),
                 msg: to_json_binary(&ExchangeRateProviderQueryMsg::GetTwaer {})?,
             }))?;
+
+    if Uint64::from(env.block.time.seconds() - res.published_at) > cfg.exchange_rate_stale_period {
+        return Err(ContractError::ERDataStale {});
+    }
+
     Ok(res.twaer)
 }
 
@@ -848,15 +858,15 @@ fn check_deposit_cap(
     Ok(())
 }
 
-/// Ensures that `recipient` is present in the *allow-list* by querying
+/// Ensures that `user` is present in the *allow-list* by querying
 /// the allow-list contract.
-fn check_allowlist(deps: &Deps, cfg: &Config, recipient: String) -> Result<(), ContractError> {
-    deps.api.addr_validate(&recipient)?;
+fn check_allowlist(deps: &Deps, cfg: &Config, user: String) -> Result<(), ContractError> {
+    deps.api.addr_validate(&user)?;
     let is_allowed: bool =
         deps.querier
             .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
                 contract_addr: cfg.allowlist_contract.to_string(),
-                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: recipient })?,
+                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: user })?,
             }))?;
     if !is_allowed {
         Err(ContractError::AddressNotAllowed {})

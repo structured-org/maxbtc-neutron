@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Decimal, SignedDecimal256, Uint128};
+use cosmwasm_std::{Addr, Decimal, SignedDecimal256, Uint128, Uint64};
 use cw_storage_plus::{Item, Map};
 use maxbtc_helpers::fsm::{Fsm, Transition};
 
@@ -30,6 +30,8 @@ pub struct Config {
     pub allowlist_contract: Addr,
     /// This contract provides the exchange rate for maxBTC
     pub exchange_rate_provider_contract: Addr,
+    /// Exchange rate timeout in seconds
+    pub exchange_rate_stale_period: Uint64,
     /// This contract is allowed to mint maxBTC to take a fee on the
     /// accrued protocol APR
     pub fee_collector_contract: Addr,

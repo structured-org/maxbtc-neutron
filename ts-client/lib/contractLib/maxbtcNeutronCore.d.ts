@@ -15,11 +15,33 @@ import { StdFee } from "@cosmjs/amino";
  */
 export type Uint128 = string;
 /**
+ * A human readable address.
+ *
+ * In Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.
+ *
+ * This type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.
+ *
+ * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
+ */
+export type Addr = string;
+/**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+/**
+ * A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u64` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);
+ *
+ * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
+ */
+export type Uint64 = string;
 export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p" | "withdraw_j_l_p" | "withdraw_pending" | "withdraw_neutron";
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
@@ -51,18 +73,6 @@ export type Expiration = {
  */
 export type Timestamp = Uint64;
 /**
- * A thin wrapper around u64 that is using strings for JSON encoding/decoding, such that the full u64 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
- *
- * # Examples
- *
- * Use `from` to create instances of this and `u64` to get the value out:
- *
- * ``` # use cosmwasm_std::Uint64; let a = Uint64::from(42u64); assert_eq!(a.u64(), 42);
- *
- * let b = Uint64::from(70u32); assert_eq!(b.u64(), 70); ```
- */
-export type Uint64 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs = {
@@ -72,7 +82,7 @@ export type UpdateOwnershipArgs = {
     };
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronCoreSchema {
-    responses: Batch | ConfigResponse | ContractState | Decimal1 | Batch1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch3;
+    responses: Batch | Config | ContractState | Decimal1 | Batch1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch3;
     query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
     execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
@@ -104,17 +114,71 @@ export interface Batch {
      */
     maxbtc_burned: Uint128;
 }
-/**
- * Response for querying config
- */
-export interface ConfigResponse {
+export interface Config {
+    /**
+     * Contract address of the allow-list contract that manages the list of addresses allowed or passed KYC to mint maxBTC
+     */
+    allowlist_contract: Addr;
+    /**
+     * One-off cost (Decimal) charged when a user deposits to mint maxBTC
+     */
     deposit_cost: Decimal;
+    /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
+     * Denom for user deposits (e.g. IBC-transferred BTC)
+     */
     deposit_denom: string;
-    fee_collector_contract: string;
-    operator: string;
-    waitosaur_observer_contract: string;
-    waitsaur_holder_contract: string;
-    withdrawal_manager_contract: string;
+    /**
+     * Contract that forwards freshly-received deposits to the custody chain.
+     */
+    deposit_forwarder_contract: Addr;
+    /**
+     * Optional upper limit on total AUM; deposits are rejected once the cap (if present) is exceeded
+     */
+    deposits_cap?: Uint128 | null;
+    /**
+     * This contract provides the exchange rate for maxBTC
+     */
+    exchange_rate_provider_contract: Addr;
+    /**
+     * Exchange rate timeout in seconds
+     */
+    exchange_rate_stale_period: Uint64;
+    /**
+     * Admin contract with high privileges
+     */
+    factory_contract: Addr;
+    /**
+     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
+     */
+    fee_collector_contract: Addr;
+    /**
+     * Operator address
+     */
+    operator: Addr;
+    /**
+     * When `true`, user-initiated actions are rejected; can be set automatically on emergencies or manually by the owner.
+     */
+    paused: boolean;
+    /**
+     * Contract that owns and creates token factory tokens.
+     */
+    token_contract: Addr;
+    /**
+     * Contract that holds amount of BTC received from CEFFU
+     */
+    waitosaur_holder_contract: Addr;
+    /**
+     * Address of the waitosaur observer contract
+     */
+    waitosaur_observer_contract: Addr;
+    /**
+     * Contract that handles withdrawals
+     */
+    withdrawal_manager_contract: Addr;
 }
 /**
  * Each batch has a batch_id, which increments.
@@ -280,6 +344,10 @@ export interface InstantiateMsg {
      */
     exchange_rate_provider_contract: string;
     /**
+     * Exchange rate timeout in seconds
+     */
+    exchange_rate_stale_period: Uint64;
+    /**
      * Admin contract with high privileges
      */
     factory_contract: string;
@@ -321,7 +389,7 @@ export declare class Client {
     queryWithdrawingBatch: () => Promise<Batch>;
     queryFinalizedBatches: (args: FinalizedBatchesArgs) => Promise<ArrayOfBatch>;
     queryFinalizedBatch: (args: FinalizedBatchArgs) => Promise<Batch>;
-    queryConfig: () => Promise<ConfigResponse>;
+    queryConfig: () => Promise<Config>;
     queryExchangeRate: () => Promise<Decimal>;
     querySimulateDeposit: (args: SimulateDepositArgs) => Promise<SimulateDepositResponse>;
     queryOwnership: () => Promise<OwnershipForString>;
