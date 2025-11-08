@@ -3953,6 +3953,7 @@ dependencies = [
  "cosmwasm-std 2.2.1",
  "cw-ownable",
  "cw-storage-plus",
+ "cw-utils",
  "cw2",
  "maxbtc-base",
  "neutron-sdk",

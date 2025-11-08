@@ -12,7 +12,9 @@ pub struct InstantiateMsg {
 
 #[cw_ownable_execute]
 #[cw_serde]
-pub enum ExecuteMsg {}
+pub enum ExecuteMsg {
+    Wrap {},
+}
 
 #[cw_ownable_query]
 #[cw_serde]
@@ -20,4 +22,6 @@ pub enum ExecuteMsg {}
 pub enum QueryMsg {
     #[returns(crate::state::Config)]
     Config {},
+    #[returns(String)]
+    Denom {},
 }

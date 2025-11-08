@@ -8,7 +8,8 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
 use maxbtc_base::msg::token::{create_set_denom_metadata_msg, get_full_denom};
-use neutron_std::types::osmosis::tokenfactory::v1beta1::MsgCreateDenom;
+use neutron_std::types::cosmos::base::v1beta1::Coin;
+use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgCreateDenom, MsgMint};
 
 const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -53,6 +54,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let cfg = CONFIG.load(deps.storage)?;
             Ok(to_json_binary(&cfg)?)
         }
+        QueryMsg::Denom {} => Ok(to_json_binary(&DENOM.load(deps.storage)?)?),
         QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
 }
@@ -69,7 +71,26 @@ pub fn execute(
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
+        ExecuteMsg::Wrap {} => execute_wrap(deps, env, info),
     }
+}
+
+fn execute_wrap(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    let coin = cw_utils::one_coin(&info)?;
+    let denom = DENOM.load(deps.storage)?;
+    let config = CONFIG.load(deps.storage)?;
+    assert!(!config.allowed_denom.is_empty());
+    assert_eq!(config.allowed_denom, coin.denom);
+
+    let mint_msg = Into::<CosmosMsg>::into(MsgMint {
+        sender: env.contract.address.to_string(),
+        amount: Some(Coin {
+            denom,
+            amount: coin.amount.to_string(),
+        }),
+        mint_to_address: info.sender.to_string(),
+    });
+    Ok(Response::new().add_message(mint_msg))
 }
 
 #[entry_point]

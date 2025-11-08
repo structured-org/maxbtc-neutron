@@ -17,6 +17,9 @@ pub enum ContractError {
 
     #[error("Unknown reply id: {id}")]
     UnknownReplyId { id: u64 },
+
+    #[error("{0}")]
+    PaymentError(#[from] cw_utils::PaymentError),
 }
 
 impl From<semver::Error> for ContractError {
