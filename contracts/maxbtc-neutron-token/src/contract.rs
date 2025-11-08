@@ -7,9 +7,13 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
 use cw_storage_plus::Item;
+use maxbtc_base::msg::token::get_full_denom;
 use maxbtc_base::msg::{
     core::InstantiateMsg as CoreInstantiateMsg,
-    token::{DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg},
+    token::{
+        create_set_denom_metadata_msg, DenomMetadata, ExecuteMsg, InstantiateMsg, MigrateMsg,
+        QueryMsg,
+    },
     waitosaur_holder::InstantiateMsg as WaitosaurHolderInstantiateMsg,
     withdrawal_manager,
 };
@@ -17,11 +21,8 @@ use maxbtc_base::state::{
     token::{Config, CONFIG},
     waitosaur_holder::Config as WaitosaurHolderConfig,
 };
-use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
 use neutron_std::types::cosmos::base::v1beta1::Coin as BaseCoin;
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{
-    MsgBurn, MsgCreateDenom, MsgMint, MsgSetDenomMetadata,
-};
+use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
 
 const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,7 +41,7 @@ pub fn instantiate(
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
-        denom: get_maxbtc_denom(env.contract.address.to_string(), msg.subdenom.clone()),
+        denom: get_full_denom(env.contract.address.to_string(), msg.subdenom.clone()),
     };
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -223,7 +224,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> Result<cosmwasm_std::Binary
 pub fn get_denom(deps: Deps, env: Env, subdenom: Option<String>) -> Result<String, ContractError> {
     let cfg = CONFIG.load(deps.storage)?;
     if let Some(subdenom) = subdenom {
-        Ok(get_maxbtc_denom(env.contract.address.to_string(), subdenom))
+        Ok(get_full_denom(env.contract.address.to_string(), subdenom))
     } else {
         Ok(cfg.denom)
     }
@@ -406,7 +407,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
         let new_config = Config {
             factory_contract: msg.factory_contract,
-            denom: get_maxbtc_denom(env.contract.address.to_string(), old_config.maxbtc_denom),
+            denom: get_full_denom(env.contract.address.to_string(), old_config.maxbtc_denom),
         };
         CONFIG.save(deps.storage, &new_config)?;
 
@@ -423,11 +424,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 /* -----------------------------------------------------------------------------------------------
 / HELPER FUNCTIONS BELOW
 / -----------------------------------------------------------------------------------------------*/
-/// Formats the maxBTC denom for a given contract address
-pub fn get_maxbtc_denom(contract_addr: String, subdenom: String) -> String {
-    format!("factory/{contract_addr}/{subdenom}")
-}
-
 /// Creates a message to mint tokenfactory tokens of `denom` and credit them to `recipient`.
 fn create_tokenfactory_mint_msg(
     env: &Env,
@@ -455,37 +451,6 @@ fn create_tokenfactory_create_denom_msg(env: &Env, denom: String) -> StdResult<C
     Ok(Into::<CosmosMsg>::into(MsgCreateDenom {
         sender: env.contract.address.to_string(),
         subdenom: denom,
-    }))
-}
-
-fn create_set_denom_metadata_msg(
-    contract_address: String,
-    denom: String,
-    token_metadata: DenomMetadata,
-) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgSetDenomMetadata {
-        sender: contract_address.to_string(),
-        metadata: Some(Metadata {
-            denom_units: vec![
-                DenomUnit {
-                    denom: denom.clone(),
-                    exponent: 0,
-                    aliases: vec![],
-                },
-                DenomUnit {
-                    denom: token_metadata.display.clone(),
-                    exponent: token_metadata.exponent,
-                    aliases: vec![],
-                },
-            ],
-            base: denom,
-            display: token_metadata.display,
-            name: token_metadata.name,
-            description: token_metadata.description,
-            symbol: token_metadata.symbol,
-            uri: token_metadata.uri.unwrap_or_default(),
-            uri_hash: token_metadata.uri_hash.unwrap_or_default(),
-        }),
     }))
 }
 

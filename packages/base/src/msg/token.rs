@@ -1,6 +1,8 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, StdResult};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
+use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
+use neutron_std::types::osmosis::tokenfactory::v1beta1::MsgSetDenomMetadata;
 
 /// InstantiateMsg configures the contract on initialization.
 #[cw_serde]
@@ -78,4 +80,43 @@ pub struct MigrateMsg {
     pub binance_aum_contract: String,
     pub ceffu_backend: Addr,
     pub salt: String,
+}
+
+pub fn get_full_denom(contract_addr: String, subdenom: String) -> String {
+    format!("factory/{contract_addr}/{subdenom}")
+}
+
+pub fn get_coinfactory_denom(contract_addr: String, subdenom: String) -> String {
+    format!("factory.{contract_addr}.{subdenom}")
+}
+
+pub fn create_set_denom_metadata_msg(
+    contract_address: String,
+    denom: String,
+    token_metadata: DenomMetadata,
+) -> StdResult<CosmosMsg> {
+    Ok(Into::<CosmosMsg>::into(MsgSetDenomMetadata {
+        sender: contract_address.to_string(),
+        metadata: Some(Metadata {
+            denom_units: vec![
+                DenomUnit {
+                    denom: denom.clone(),
+                    exponent: 0,
+                    aliases: vec![],
+                },
+                DenomUnit {
+                    denom: token_metadata.display.clone(),
+                    exponent: token_metadata.exponent,
+                    aliases: vec![],
+                },
+            ],
+            base: denom,
+            display: token_metadata.display,
+            name: token_metadata.name,
+            description: token_metadata.description,
+            symbol: token_metadata.symbol,
+            uri: token_metadata.uri.unwrap_or_default(),
+            uri_hash: token_metadata.uri_hash.unwrap_or_default(),
+        }),
+    }))
 }

@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-  "contracts/*",
-  "forwarder_executor"
+    "contracts/*",
+    "forwarder_executor"
 ]
 
 [workspace.dependencies]
 cosmwasm-schema = "2.2.0"
 cosmwasm-std = { version = "2.2.1", features = [
-  "cosmwasm_1_4",
-  # Enable this if you only deploy to chains that have CosmWasm 2.0 or higher
-  "cosmwasm_2_0",
-  # Or this if you only deploy to chains that have CosmWasm 2.1 or higher
-  # "cosmwasm_2_1",
+    "cosmwasm_1_4",
+    # Enable this if you only deploy to chains that have CosmWasm 2.0 or higher
+    "cosmwasm_2_0",
+    # Or this if you only deploy to chains that have CosmWasm 2.1 or higher
+    # "cosmwasm_2_1",
 ] }
 cw-storage-plus = "2.0.0"
 cw2 = "2.0.0"
@@ -22,8 +22,8 @@ schemars = "0.8.16"
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.12" }
 neutron-std = { git = "https://github.com/neutron-org/neutron-std", branch = "feat/respect-gogoproto-nullable" }
+neutron-sdk = { git = "https://github.com/neutron-org/neutron-sdk", branch = "feat/proposal-votes" }
 semver = { version = "1.0.22", default-features = false }
-
 maxbtc-base = { path = "./packages/base" }
 maxbtc-helpers = { path = "./packages/helpers" }
 
