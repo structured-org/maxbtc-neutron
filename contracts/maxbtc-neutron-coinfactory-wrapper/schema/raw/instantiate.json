@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "allowed_denom",
+    "owner",
+    "subdenom",
+    "token_metadata"
+  ],
+  "properties": {
+    "allowed_denom": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "subdenom": {
+      "type": "string"
+    },
+    "token_metadata": {
+      "$ref": "#/definitions/DenomMetadata"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "DenomMetadata": {
+      "type": "object",
+      "required": [
+        "description",
+        "display",
+        "exponent",
+        "name",
+        "symbol"
+      ],
+      "properties": {
+        "description": {
+          "description": "Even longer description, example: \"The native staking token of the Cosmos Hub\"",
+          "type": "string"
+        },
+        "display": {
+          "description": "Lowercase moniker to be displayed in clients, example: \"atom\"",
+          "type": "string"
+        },
+        "exponent": {
+          "description": "Number of decimals",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "name": {
+          "description": "Descriptive token name, example: \"Cosmos Hub Atom\"",
+          "type": "string"
+        },
+        "symbol": {
+          "description": "Symbol to be displayed on exchanges, example: \"ATOM\"",
+          "type": "string"
+        },
+        "uri": {
+          "description": "URI to a document that contains additional information",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uri_hash": {
+          "description": "SHA256 hash of a document pointed by URI",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

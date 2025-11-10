@@ -43,5 +43,4 @@ thiserror = { workspace = true }
 semver = { workspace = true }
 maxbtc-base = { workspace = true }
 neutron-std = { workspace = true }
-neutron-sdk = { workspace = true }
 cw-utils = { workspace = true }
