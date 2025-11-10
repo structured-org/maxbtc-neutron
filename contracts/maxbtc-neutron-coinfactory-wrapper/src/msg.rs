@@ -5,7 +5,7 @@ use maxbtc_base::msg::token::DenomMetadata;
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: String,
-    pub allowed_denom: String,
+    pub in_denom: String,
     pub subdenom: String,
     pub token_metadata: DenomMetadata,
 }

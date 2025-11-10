@@ -7,13 +7,13 @@
     "title": "InstantiateMsg",
     "type": "object",
     "required": [
-      "allowed_denom",
+      "in_denom",
       "owner",
       "subdenom",
       "token_metadata"
     ],
     "properties": {
-      "allowed_denom": {
+      "in_denom": {
         "type": "string"
       },
       "owner": {

@@ -27,7 +27,7 @@ pub fn instantiate(
 
     let full_denom = get_full_denom(env.contract.address.to_string(), msg.subdenom.clone());
     let cfg = Config {
-        in_denom: msg.allowed_denom.clone(),
+        in_denom: msg.in_denom.clone(),
         out_denom: full_denom.clone(),
     };
     CONFIG.save(deps.storage, &cfg)?;
@@ -46,7 +46,7 @@ pub fn instantiate(
         .add_message(set_denom_metadata_submsg)
         .add_attribute("action", "instantiate")
         .add_attribute("owner", msg.owner)
-        .add_attribute("allowed_denom", msg.allowed_denom)
+        .add_attribute("in_denom", msg.in_denom)
         .add_attribute("subdenom", msg.subdenom))
 }
 
