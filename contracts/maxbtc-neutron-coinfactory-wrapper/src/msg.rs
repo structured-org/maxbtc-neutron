@@ -14,6 +14,7 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     Wrap {},
+    Unwrap {},
 }
 
 #[cw_ownable_query]

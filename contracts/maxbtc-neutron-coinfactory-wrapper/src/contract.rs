@@ -1,19 +1,19 @@
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, CONFIG, DENOM, TOKEN_METADATA};
+use crate::state::{Config, CONFIG};
 use cosmwasm_std::{
-    entry_point, to_json_binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, Response,
-    StdResult, SubMsg,
+    entry_point, to_json_binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
+use maxbtc_base::msg::core::MigrateMsg;
 use maxbtc_base::msg::token::{create_set_denom_metadata_msg, get_full_denom};
+use neutron_std::types::cosmos::bank::v1beta1::MsgSend;
 use neutron_std::types::cosmos::base::v1beta1::Coin;
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgCreateDenom, MsgMint};
+use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
 
 const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-const CREATE_DENOM_REPLY_ID: u64 = 1;
 
 #[entry_point]
 pub fn instantiate(
@@ -25,22 +25,25 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
 
+    let full_denom = get_full_denom(env.contract.address.to_string(), msg.subdenom.clone());
     let cfg = Config {
-        allowed_denom: msg.allowed_denom.clone(),
+        in_denom: msg.allowed_denom.clone(),
+        out_denom: full_denom.clone(),
     };
     CONFIG.save(deps.storage, &cfg)?;
-    DENOM.save(deps.storage, &msg.subdenom)?;
-    TOKEN_METADATA.save(deps.storage, &msg.token_metadata)?;
 
-    let create_denom_submsg = SubMsg::reply_on_success(
-        Into::<CosmosMsg>::into(MsgCreateDenom {
-            sender: env.contract.address.to_string(),
-            subdenom: msg.subdenom.clone(),
-        }),
-        CREATE_DENOM_REPLY_ID,
-    );
+    let create_denom_submsg = Into::<CosmosMsg>::into(MsgCreateDenom {
+        sender: env.contract.address.to_string(),
+        subdenom: msg.subdenom.clone(),
+    });
+    let set_denom_metadata_submsg = create_set_denom_metadata_msg(
+        env.contract.address.into_string(),
+        full_denom.clone(),
+        msg.token_metadata.clone(),
+    )?;
     Ok(Response::new()
-        .add_submessage(create_denom_submsg)
+        .add_message(create_denom_submsg)
+        .add_message(set_denom_metadata_submsg)
         .add_attribute("action", "instantiate")
         .add_attribute("owner", msg.owner)
         .add_attribute("allowed_denom", msg.allowed_denom)
@@ -54,7 +57,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let cfg = CONFIG.load(deps.storage)?;
             Ok(to_json_binary(&cfg)?)
         }
-        QueryMsg::Denom {} => Ok(to_json_binary(&DENOM.load(deps.storage)?)?),
+        QueryMsg::Denom {} => Ok(to_json_binary(&CONFIG.load(deps.storage)?.out_denom)?),
         QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
 }
@@ -72,56 +75,64 @@ pub fn execute(
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
         ExecuteMsg::Wrap {} => execute_wrap(deps, env, info),
+        ExecuteMsg::Unwrap {} => execute_unwrap(deps, env, info),
     }
 }
 
-fn execute_wrap(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let coin = cw_utils::one_coin(&info)?;
-    let denom = DENOM.load(deps.storage)?;
+fn execute_unwrap(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     let config = CONFIG.load(deps.storage)?;
-    assert!(!config.allowed_denom.is_empty());
-    assert_eq!(config.allowed_denom, coin.denom);
+    assert!(!config.out_denom.is_empty());
 
+    let amount = cw_utils::must_pay(&info, config.out_denom.as_str())?;
+    let burn_msg = Into::<CosmosMsg>::into(MsgBurn {
+        sender: env.contract.address.to_string(),
+        amount: Some(Coin {
+            denom: config.out_denom,
+            amount: amount.to_string(),
+        }),
+        burn_from_address: env.contract.address.to_string(),
+    });
+    let send_msg = Into::<CosmosMsg>::into(MsgSend {
+        from_address: env.contract.address.to_string(),
+        amount: vec![Coin {
+            denom: config.in_denom,
+            amount: amount.to_string(),
+        }],
+        to_address: info.sender.to_string(),
+    });
+    Ok(Response::new().add_messages(vec![burn_msg, send_msg]))
+}
+
+fn execute_wrap(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+    assert!(!config.in_denom.is_empty());
+
+    let amount = cw_utils::must_pay(&info, config.in_denom.as_str())?;
     let mint_msg = Into::<CosmosMsg>::into(MsgMint {
         sender: env.contract.address.to_string(),
         amount: Some(Coin {
-            denom,
-            amount: coin.amount.to_string(),
+            denom: config.out_denom,
+            amount: amount.to_string(),
         }),
         mint_to_address: info.sender.to_string(),
     });
     Ok(Response::new().add_message(mint_msg))
 }
 
-#[entry_point]
-pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    match msg.id {
-        CREATE_DENOM_REPLY_ID => {
-            let subdenom = DENOM.load(deps.storage)?;
-            let full_denom = get_full_denom(env.contract.address.to_string(), subdenom);
-            DENOM.save(deps.storage, &full_denom)?;
-
-            let token_metadata = TOKEN_METADATA.load(deps.storage)?;
-            TOKEN_METADATA.remove(deps.storage);
-
-            let msg = create_set_denom_metadata_msg(
-                env.contract.address.into_string(),
-                full_denom.clone(),
-                token_metadata.clone(),
-            )?;
-
-            Ok(Response::new()
-                .add_message(msg)
-                .add_attribute("action", "reply-set-token-metadata")
-                .add_attribute("denom", full_denom)
-                .add_attribute("exponent", token_metadata.exponent.to_string())
-                .add_attribute("display", token_metadata.display)
-                .add_attribute("name", token_metadata.name)
-                .add_attribute("description", token_metadata.description)
-                .add_attribute("symbol", token_metadata.symbol)
-                .add_attribute("uri", token_metadata.uri.unwrap_or_default())
-                .add_attribute("uri_hash", token_metadata.uri_hash.unwrap_or_default()))
-        }
-        id => Err(ContractError::UnknownReplyId { id }),
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
     }
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+    if storage_version < version {
+        set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    }
+    Ok(Response::new())
 }

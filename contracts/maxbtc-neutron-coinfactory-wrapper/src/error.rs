@@ -20,6 +20,12 @@ pub enum ContractError {
 
     #[error("{0}")]
     PaymentError(#[from] cw_utils::PaymentError),
+
+    #[error("Can't migrate from {storage_contract_name} to {contract_name}")]
+    MigrationError {
+        storage_contract_name: String,
+        contract_name: String,
+    },
 }
 
 impl From<semver::Error> for ContractError {
