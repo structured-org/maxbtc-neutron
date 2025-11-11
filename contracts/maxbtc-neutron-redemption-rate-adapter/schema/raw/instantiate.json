@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "core_contract",
+    "denom",
+    "fee_bps",
+    "owner"
+  ],
+  "properties": {
+    "core_contract": {
+      "type": "string"
+    },
+    "denom": {
+      "type": "string"
+    },
+    "fee_bps": {
+      "type": "integer",
+      "format": "uint16",
+      "minimum": 0.0
+    },
+    "owner": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

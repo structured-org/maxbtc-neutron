@@ -3911,6 +3911,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxbtc-neutron-redemption-rate-adapter"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw2",
+ "maxbtc-base",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "maxbtc-neutron-token"
 version = "0.2.0"
 dependencies = [
