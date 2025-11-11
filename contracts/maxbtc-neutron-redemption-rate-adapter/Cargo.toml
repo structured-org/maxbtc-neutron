@@ -32,15 +32,13 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 """
 
 [dependencies]
-cosmwasm-schema = "2.2.0"
-cosmwasm-std = { version = "2.2.0", default-features = false, features = [
-    "cosmwasm_1_4",
-] }
+cosmwasm-schema = { workspace = true }
+cosmwasm-std = { workspace = true }
 maxbtc-base = { workspace = true }
-cw-storage-plus = { version = "2.0.0", default-features = false }
-cw2 = { version = "2.0.0", default-features = false }
-schemars = "0.8.16"
-serde = { version = "1.0.197", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.58" }
-cw-ownable = { version = "2.1.0" }
-semver = "1.0.25"
+cw-storage-plus = { workspace = true }
+cw2 = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+cw-ownable = { workspace = true }
+semver = { workspace = true }

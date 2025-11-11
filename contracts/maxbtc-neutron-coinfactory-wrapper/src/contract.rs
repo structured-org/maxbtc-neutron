@@ -7,7 +7,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
 use maxbtc_base::msg::core::MigrateMsg;
-use maxbtc_base::msg::token::{create_set_denom_metadata_msg, get_full_denom};
+use maxbtc_base::msg::token::{create_set_denom_metadata_msg, get_tokenfactory_denom};
 use neutron_std::types::cosmos::bank::v1beta1::MsgSend;
 use neutron_std::types::cosmos::base::v1beta1::Coin;
 use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
@@ -27,7 +27,7 @@ pub fn instantiate(
     assert!(!msg.in_denom.is_empty());
     assert!(!msg.subdenom.is_empty());
 
-    let full_denom = get_full_denom(env.contract.address.to_string(), msg.subdenom.clone());
+    let full_denom = get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone());
     let cfg = Config {
         in_denom: msg.in_denom.clone(),
         out_denom: full_denom.clone(),

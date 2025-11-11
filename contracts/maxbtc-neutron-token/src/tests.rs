@@ -6,7 +6,7 @@ use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockQuerier, MockSt
 use cosmwasm_std::{
     coin, Api, Attribute, Coin, DepsMut, Empty, Env, MessageInfo, OwnedDeps, Response, Uint128,
 };
-use maxbtc_base::msg::token::{get_full_denom, DenomMetadata, ExecuteMsg, InstantiateMsg};
+use maxbtc_base::msg::token::{get_tokenfactory_denom, DenomMetadata, ExecuteMsg, InstantiateMsg};
 use maxbtc_base::state::token::CONFIG;
 
 pub fn mock_dependencies() -> OwnedDeps<MockStorage, MockApi, MockQuerier, Empty> {
@@ -39,7 +39,7 @@ fn test_instantiate_success() {
         Attribute::new("factory_contract", msg.factory_contract.clone()),
         Attribute::new(
             "denom",
-            get_full_denom(env.contract.address.to_string(), msg.subdenom.clone()),
+            get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone()),
         ),
     ];
     for attr in expected_attributes {
@@ -63,7 +63,7 @@ fn test_instantiate_success() {
     );
     assert_eq!(
         cfg.denom,
-        get_full_denom(env.contract.address.to_string(), msg.subdenom.clone())
+        get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone())
     );
 }
 

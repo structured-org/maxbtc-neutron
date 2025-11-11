@@ -3923,7 +3923,7 @@ dependencies = [
  "schemars",
  "semver 1.0.25",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

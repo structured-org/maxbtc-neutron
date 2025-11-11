@@ -82,7 +82,7 @@ pub struct MigrateMsg {
     pub salt: String,
 }
 
-pub fn get_full_denom(contract_addr: String, subdenom: String) -> String {
+pub fn get_tokenfactory_denom(contract_addr: String, subdenom: String) -> String {
     format!("factory/{contract_addr}/{subdenom}")
 }
 
