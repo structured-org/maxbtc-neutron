@@ -20,7 +20,7 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> ContractResult<Response> {
-    cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     cw_ownable::initialize_owner(deps.storage, deps.api, Some(msg.owner.as_ref()))?;
     assert!(msg.fee_bps <= 10_000);
 
