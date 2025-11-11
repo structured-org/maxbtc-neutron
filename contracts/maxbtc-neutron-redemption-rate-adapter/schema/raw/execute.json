@@ -150,22 +150,26 @@
     },
     "UpdateConfig": {
       "type": "object",
-      "required": [
-        "core_contract",
-        "denom",
-        "fee_bps"
-      ],
       "properties": {
-        "core_contract": {
-          "type": "string"
-        },
         "denom": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "fee_bps": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint16",
           "minimum": 0.0
+        },
+        "twaer_provider_contract": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

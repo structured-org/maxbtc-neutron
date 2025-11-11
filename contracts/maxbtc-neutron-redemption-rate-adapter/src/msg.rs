@@ -33,16 +33,13 @@ pub struct RedemptionRateResponse {
 pub struct InstantiateMsg {
     pub owner: String,
     pub fee_bps: u16,
-    pub core_contract: String,
+    pub twaer_provider_contract: String,
     pub denom: String,
 }
 
 #[cw_serde]
 pub struct UpdateConfig {
-    pub denom: String,
-    pub fee_bps: u16,
-    pub core_contract: String,
+    pub denom: Option<String>,
+    pub fee_bps: Option<u16>,
+    pub twaer_provider_contract: Option<String>,
 }
-
-#[cw_serde]
-pub struct MigrateMsg {}

@@ -3,15 +3,12 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "core_contract",
     "denom",
     "fee_bps",
-    "owner"
+    "owner",
+    "twaer_provider_contract"
   ],
   "properties": {
-    "core_contract": {
-      "type": "string"
-    },
     "denom": {
       "type": "string"
     },
@@ -21,6 +18,9 @@
       "minimum": 0.0
     },
     "owner": {
+      "type": "string"
+    },
+    "twaer_provider_contract": {
       "type": "string"
     }
   },
