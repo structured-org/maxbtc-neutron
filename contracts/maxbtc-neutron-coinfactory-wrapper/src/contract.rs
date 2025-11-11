@@ -24,6 +24,8 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+    assert!(!msg.in_denom.is_empty());
+    assert!(!msg.subdenom.is_empty());
 
     let full_denom = get_full_denom(env.contract.address.to_string(), msg.subdenom.clone());
     let cfg = Config {
@@ -53,10 +55,7 @@ pub fn instantiate(
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
-        QueryMsg::Config {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-            Ok(to_json_binary(&cfg)?)
-        }
+        QueryMsg::Config {} => Ok(to_json_binary(&CONFIG.load(deps.storage)?)?),
         QueryMsg::Denom {} => Ok(to_json_binary(&CONFIG.load(deps.storage)?.out_denom)?),
         QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
