@@ -6,8 +6,8 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("Unauthorized: sender is not the contract owner")]
-    Unauthorized {},
+    #[error("{0}")]
+    OwnershipError(#[from] cw_ownable::OwnershipError),
 
     #[error("Invalid recipient address")]
     InvalidRecipient {},
@@ -20,9 +20,6 @@ pub enum ContractError {
         current_rate: Decimal,
         last_rate: Decimal,
     },
-
-    #[error("Invalid reply ID")]
-    InvalidReplyId {},
 
     #[error("Invalid zero amount")]
     InvalidZeroAmount {},
