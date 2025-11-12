@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { MaxbtcNeutronAllowList } from 'maxbtc-neutron-ts-client';
+import {
+  MaxbtcNeutronFeeCollector,
+  MaxbtcNeutronExchangeRateProvider,
+} from 'maxbtc-neutron-ts-client';
 
 import { join } from 'path';
 
@@ -14,9 +17,10 @@ import { GasPrice } from '@cosmjs/stargate';
 import { setupPark } from '../testSuite';
 import fs from 'fs';
 import Cosmopark from '@neutron-org/cosmopark';
-import { fromAscii, toAscii } from '@cosmjs/encoding';
 
-const AllowlistContractClient = MaxbtcNeutronAllowList.Client;
+const FeeCollectorContractClient = MaxbtcNeutronFeeCollector.Client;
+const ExchangeRateProviderContractClient =
+  MaxbtcNeutronExchangeRateProvider.Client;
 
 describe('Core', () => {
   const context: {
@@ -27,8 +31,15 @@ describe('Core', () => {
     client?: SigningCosmWasmClient;
     neutronClient?: InstanceType<typeof NeutronClient>;
 
-    allowlistContractClient?: InstanceType<typeof AllowlistContractClient>;
-    allowlistContractAddress?: string;
+    feeCollectorContractClient?: InstanceType<
+      typeof FeeCollectorContractClient
+    >;
+    feeCollectorContractAddress?: string;
+
+    exchangeRateProviderContractClient?: InstanceType<
+      typeof ExchangeRateProviderContractClient
+    >;
+    exchangeRateProviderContractAddress?: string;
   } = {};
 
   beforeAll(async (t) => {
@@ -61,7 +72,7 @@ describe('Core', () => {
   });
 
   describe('upload and instantiate contracts', () => {
-    it('instantiate allowlist', async () => {
+    it('instantiate exchange rate provider', async () => {
       const { client, account } = context;
       const res = await client.upload(
         account.address,
@@ -69,44 +80,97 @@ describe('Core', () => {
           fs.readFileSync(
             join(
               __dirname,
-              '../../artifacts/migration_contracts/v0.1.0/maxbtc_neutron_allow_list.wasm',
+              '../../../artifacts/maxbtc_neutron_exchange_rate_provider.wasm',
             ),
           ),
         ),
         1.5,
       );
       expect(res.codeId).toBeGreaterThan(0);
-      const instantiateRes = await MaxbtcNeutronAllowList.Client.instantiate(
+      const instantiateRes =
+        await ExchangeRateProviderContractClient.instantiate(
+          client,
+          account.address,
+          res.codeId,
+          { owner: account.address },
+          'label',
+          'auto',
+          [],
+        );
+      expect(instantiateRes.contractAddress).toHaveLength(66);
+      context.exchangeRateProviderContractClient =
+        new ExchangeRateProviderContractClient(
+          client,
+          instantiateRes.contractAddress,
+        );
+
+      context.exchangeRateProviderContractAddress =
+        instantiateRes.contractAddress;
+    });
+
+    it('instantiate fee collector', async () => {
+      const { client, account, exchangeRateProviderContractAddress } = context;
+      const res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(
+              __dirname,
+              '../../artifacts/migration_contracts/v0.1.0/maxbtc_neutron_fee_collector.wasm',
+            ),
+          ),
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+      const instantiateRes = await FeeCollectorContractClient.instantiate(
         client,
         account.address,
         res.codeId,
-        { owner: account.address },
+        {
+          owner: account.address,
+          collection_period_seconds: 100,
+          core_contract: exchangeRateProviderContractAddress,
+          fee_apy_reduction_percentage: '0.1',
+          fee_denom: 'maxBTC',
+          maxbtc_decimals: 6,
+        },
         'label',
         'auto',
         [],
         account.address,
       );
       expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.allowlistContractClient = new MaxbtcNeutronAllowList.Client(
+      context.feeCollectorContractClient = new FeeCollectorContractClient(
         client,
         instantiateRes.contractAddress,
       );
 
-      context.allowlistContractAddress = instantiateRes.contractAddress;
+      context.feeCollectorContractAddress = instantiateRes.contractAddress;
     });
   });
 
-  describe('Migration to new allow list and and set zkMe configuration', () => {
+  describe('Migration to new fee collector with changed owner code', () => {
     it('upload contracts nad migrate', async () => {
-      const { client, account, allowlistContractAddress } = context;
+      const {
+        client,
+        account,
+        feeCollectorContractAddress,
+        feeCollectorContractClient,
+        exchangeRateProviderContractAddress,
+      } = context;
 
       {
-        const zkMeSettingsRaw = await client.queryContractRaw(
-          allowlistContractAddress,
-          toAscii('zk_me_settings'),
-        );
+        const config = await feeCollectorContractClient.queryConfig();
 
-        expect(zkMeSettingsRaw.length).toBe(0);
+        expect(config).toEqual({
+          owner: account.address,
+          collection_period_seconds: 100,
+          core_contract: exchangeRateProviderContractAddress,
+          fee_apy_reduction_percentage: '0.1',
+          fee_denom: 'maxBTC',
+          maxbtc_decimals: 6,
+        });
       }
 
       const res = await client.upload(
@@ -115,14 +179,14 @@ describe('Core', () => {
           fs.readFileSync(
             join(
               __dirname,
-              '../../../artifacts/maxbtc_neutron_allow_list.wasm',
+              '../../../artifacts/maxbtc_neutron_fee_collector.wasm',
             ),
           ),
         ),
         1.5,
       );
       expect(res.codeId).toBeGreaterThan(0);
-      const allowlistCodeId = res.codeId;
+      const feeCollectorCodeId = res.codeId;
 
       const fee = {
         amount: coins(5000, 'untrn'),
@@ -131,42 +195,29 @@ describe('Core', () => {
 
       await client.migrate(
         account.address,
-        allowlistContractAddress,
-        allowlistCodeId,
+        feeCollectorContractAddress,
+        feeCollectorCodeId,
         {},
         fee,
       );
 
-      await client.execute(
-        account.address,
-        allowlistContractAddress,
-        {
-          update_zk_me_settings: {
-            settings: {
-              contract:
-                'neutron19t7s6aa9289e563mu9qrx5nh80xtn4vr5afdu8yctej6f7w6k9usv87acp',
-              cooperator: 'neutron13h2r2k8jwd0utnrzfud3n8uxq33lshvhql9yvv',
-            },
-          },
-        },
-        {
-          amount: coins(5000, 'untrn'),
-          gas: '2000000',
-        },
-      );
-
       {
-        const zkMeSettingsRaw = await client.queryContractRaw(
-          allowlistContractAddress,
-          toAscii('zk_me_settings'),
-        );
+        const config = await feeCollectorContractClient.queryConfig();
 
-        const zkMeSettings = JSON.parse(fromAscii(zkMeSettingsRaw));
+        expect(config).toEqual({
+          collection_period_seconds: 100,
+          core_contract: exchangeRateProviderContractAddress,
+          fee_apy_reduction_percentage: '0.1',
+          fee_denom: 'maxBTC',
+          maxbtc_decimals: 6,
+        });
 
-        expect(zkMeSettings).toEqual({
-          contract:
-            'neutron19t7s6aa9289e563mu9qrx5nh80xtn4vr5afdu8yctej6f7w6k9usv87acp',
-          cooperator: 'neutron13h2r2k8jwd0utnrzfud3n8uxq33lshvhql9yvv',
+        const owner = await feeCollectorContractClient.queryOwnership();
+
+        expect(owner).toEqual({
+          owner: account.address,
+          pending_expiry: null,
+          pending_owner: null,
         });
       }
     });

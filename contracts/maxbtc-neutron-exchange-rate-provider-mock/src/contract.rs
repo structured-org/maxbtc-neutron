@@ -86,6 +86,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             published_at: env.block.time.seconds(),
         })?,
         QueryMsg::GetAum {} => to_json_binary(&AUM.load(deps.storage)?)?,
+        QueryMsg::ExchangeRate {} => to_json_binary(&EXCHANGE_RATE.load(deps.storage)?)?,
     })
 }
 
