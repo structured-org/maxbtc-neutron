@@ -3795,6 +3795,7 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "maxbtc-helpers",
+ "neutron-std 5.0.0",
 ]
 
 [[package]]
@@ -3815,6 +3816,24 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "cw2",
+ "neutron-std 5.0.0",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-neutron-coinfactory-wrapper"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "maxbtc-base",
  "neutron-std 5.0.0",
  "schemars",
  "semver 1.0.25",
@@ -3885,6 +3904,22 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "cw2",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-neutron-redemption-rate-adapter"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw2",
+ "maxbtc-base",
  "schemars",
  "semver 1.0.25",
  "serde",
