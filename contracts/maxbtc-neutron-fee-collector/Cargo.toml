@@ -1,7 +1,7 @@
 [package]
 name = "maxbtc-neutron-fee-collector"
 version = "0.2.0"
-authors = ["Andrei Zavgorodnii <andrei.z@hadronlabs.org>"]
+authors = ["Andrei Zavgorodnii <andrei.z@hadronlabs.org>", "Albert Andrejev <albert.andrejev@gmail.com>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -40,6 +40,9 @@ schemars = { workspace = true }
 serde = { workspace = true }
 semver = { workspace = true }
 thiserror = { workspace = true }
+cw-ownable = { workspace = true }
+
+maxbtc-base = { workspace = true }
 
 [dev-dependencies]
-cw-multi-test = "2.0.0"
+cw-multi-test = { workspace = true }
