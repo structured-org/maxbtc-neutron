@@ -134,5 +134,55 @@ describe('Core', () => {
       ]);
       await expect(res).rejects.toThrow(/Must send reserve token/);
     });
+
+    it('[EmptyFunds] unwrap', async () => {
+      const { coinfactoryWrapper, account } = context;
+      const res = coinfactoryWrapper.unwrap(account.address);
+      await expect(res).rejects.toThrow(/No funds sent/);
+    });
+
+    it('[WrongDenom] unwrap', async () => {
+      const { coinfactoryWrapper, account } = context;
+      const res = coinfactoryWrapper.unwrap(
+        account.address,
+        'auto',
+        undefined,
+        [
+          {
+            denom: DEPOSIT_DENOM,
+            amount: '123',
+          },
+        ],
+      );
+      await expect(res).rejects.toThrow(/Must send reserve token/);
+    });
+
+    it('unwrap', async () => {
+      const { coinfactoryWrapper, account, client, coinfactoryDenom } = context;
+      const balanceBefore = await client.getBalance(
+        account.address,
+        DEPOSIT_DENOM,
+      );
+      const { gasWanted } = await coinfactoryWrapper.unwrap(
+        account.address,
+        'auto',
+        undefined,
+        [
+          {
+            denom: coinfactoryDenom,
+            amount: '123',
+          },
+        ],
+      );
+      const balanceAfter = await client.getBalance(
+        account.address,
+        DEPOSIT_DENOM,
+      );
+      expect(
+        Number(balanceBefore.amount) -
+          Math.ceil(Number(gasWanted) * 0.025) +
+          123,
+      ).toBe(Number(balanceAfter.amount));
+    });
   });
 });
