@@ -87,7 +87,7 @@ pub fn get_tokenfactory_denom(contract_addr: String, subdenom: String) -> String
 }
 
 pub fn get_coinfactory_denom(contract_addr: String, subdenom: String) -> String {
-    format!("factory.{contract_addr}.{subdenom}")
+    format!("coinfactory.{contract_addr}.{subdenom}")
 }
 
 pub fn create_set_denom_metadata_msg(
