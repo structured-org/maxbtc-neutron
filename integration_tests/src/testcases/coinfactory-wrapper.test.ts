@@ -52,21 +52,47 @@ describe('Core', () => {
   describe('upload and instantiate contracts', () => {
     it('upload contracts', async () => {
       const { client, account } = context;
-      {
-        const res = await client.upload(
-          account.address,
-          Uint8Array.from(
-            fs.readFileSync(
-              join(
-                __dirname,
-                '../../../artifacts/maxbtc_neutron_coinfactory_wrapper.wasm',
-              ),
+      const res = await client.upload(
+        account.address,
+        Uint8Array.from(
+          fs.readFileSync(
+            join(
+              __dirname,
+              '../../../artifacts/maxbtc_neutron_coinfactory_wrapper.wasm',
             ),
           ),
-          1.5,
-        );
-        expect(res.codeId).toBeGreaterThan(0);
-      }
+        ),
+        1.5,
+      );
+      expect(res.codeId).toBeGreaterThan(0);
+
+      const instantiateRes = await CoinfactoryWrapper.instantiate(
+        client,
+        account.address,
+        res.codeId,
+        {
+          owner: context.account.address,
+          in_denom: DEPOSIT_DENOM,
+          subdenom: 'subdenom',
+          token_metadata: {
+            exponent: 6,
+            display: 'subdenom',
+            name: 'subdenom',
+            description: '',
+            symbol: 'SUBDENOM',
+            uri: '',
+            uri_hash: '',
+          },
+        },
+        'drop-staking-factory',
+        'auto',
+        [],
+      );
+      expect(instantiateRes.contractAddress).toHaveLength(66);
+      context.coinfactoryWrapper = new CoinfactoryWrapper(
+        client,
+        instantiateRes.contractAddress,
+      );
     });
   });
 });
