@@ -117,5 +117,16 @@ describe('Core', () => {
         Number(balanceAfter.amount) - 123,
       );
     });
+
+    it('[WrongDenom] wrap', async () => {
+      const { coinfactoryWrapper, account, coinfactoryDenom } = context;
+      const res = coinfactoryWrapper.wrap(account.address, 'auto', undefined, [
+        {
+          denom: coinfactoryDenom,
+          amount: '123',
+        },
+      ]);
+      await expect(res).rejects.toThrow(/Must send reserve token/);
+    });
   });
 });
