@@ -17,6 +17,7 @@ describe('Core', () => {
     park?: Cosmopark;
     wallet?: DirectSecp256k1HdWallet;
     coinfactoryWrapper?: InstanceType<typeof CoinfactoryWrapper>;
+    coinfactoryDenom?: string;
     account?: { address: string };
     client?: SigningCosmWasmClient;
     neutronClient?: InstanceType<typeof NeutronClient>;
@@ -92,5 +93,29 @@ describe('Core', () => {
       client,
       instantiateRes.contractAddress,
     );
+    context.coinfactoryDenom = `coinfactory.${instantiateRes.contractAddress}.subdenom`;
+  });
+
+  describe('wrap -> unwrap', () => {
+    it('wrap', async () => {
+      const { coinfactoryWrapper, account, client } = context;
+      const balanceBefore = await client.getBalance(
+        account.address,
+        context.coinfactoryDenom,
+      );
+      await coinfactoryWrapper.wrap(account.address, 'auto', undefined, [
+        {
+          denom: DEPOSIT_DENOM,
+          amount: '123',
+        },
+      ]);
+      const balanceAfter = await client.getBalance(
+        account.address,
+        context.coinfactoryDenom,
+      );
+      expect(Number(balanceBefore.amount)).toBe(
+        Number(balanceAfter.amount) - 123,
+      );
+    });
   });
 });
