@@ -1,6 +1,6 @@
 #!/bin/bash
 DIR="$(dirname $0)"
-COMMIT_HASH_OR_BRANCH="v6.0.3"
+COMMIT_HASH_OR_BRANCH="e84324c4c02a30a6223b2438c5dd904d7895580f" # Neutron with coinfactory
 cd $DIR
 VERSION=$(cat ../../package.json | jq -r '.version')
 if [[ "$CI" == "true" ]]; then

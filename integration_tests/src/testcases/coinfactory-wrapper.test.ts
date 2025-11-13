@@ -1,0 +1,72 @@
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { MaxbtcNeutronCoinfactoryWrapper } from 'maxbtc-neutron-ts-client';
+import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
+import { Client as NeutronClient } from '@neutron-org/client-ts';
+import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
+import Cosmopark from '@neutron-org/cosmopark';
+import { setupPark } from '../testSuite';
+import { join } from 'path';
+import fs from 'fs';
+import { GasPrice } from '@cosmjs/stargate';
+
+const DEPOSIT_DENOM = 'untrn';
+const CoinfactoryWrapper = MaxbtcNeutronCoinfactoryWrapper.Client;
+
+describe('Core', () => {
+  const context: {
+    park?: Cosmopark;
+    wallet?: DirectSecp256k1HdWallet;
+    coinfactoryWrapper?: InstanceType<typeof CoinfactoryWrapper>;
+    account?: { address: string };
+    client?: SigningCosmWasmClient;
+    neutronClient?: InstanceType<typeof NeutronClient>;
+  } = {};
+
+  beforeAll(async (t) => {
+    context.park = await setupPark(t, ['neutron']);
+    context.wallet = await DirectSecp256k1HdWallet.fromMnemonic(
+      context.park.config.wallets.demowallet1.mnemonic,
+      {
+        prefix: 'neutron',
+      },
+    );
+    context.account = (await context.wallet.getAccounts())[0];
+    context.client = await SigningCosmWasmClient.connectWithSigner(
+      `http://127.0.0.1:${context.park.ports.neutron.rpc}`,
+      context.wallet,
+      {
+        gasPrice: GasPrice.fromString('0.025untrn'),
+      },
+    );
+    context.neutronClient = new NeutronClient({
+      apiURL: `http://127.0.0.1:${context.park.ports.neutron.rest}`,
+      rpcURL: `127.0.0.1:${context.park.ports.neutron.rpc}`,
+      prefix: 'neutron',
+    });
+  });
+
+  afterAll(async () => {
+    await context.park.stop();
+  });
+
+  describe('upload and instantiate contracts', () => {
+    it('upload contracts', async () => {
+      const { client, account } = context;
+      {
+        const res = await client.upload(
+          account.address,
+          Uint8Array.from(
+            fs.readFileSync(
+              join(
+                __dirname,
+                '../../../artifacts/maxbtc_neutron_coinfactory_wrapper.wasm',
+              ),
+            ),
+          ),
+          1.5,
+        );
+        expect(res.codeId).toBeGreaterThan(0);
+      }
+    });
+  });
+});
