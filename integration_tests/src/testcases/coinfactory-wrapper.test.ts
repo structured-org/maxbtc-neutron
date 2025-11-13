@@ -118,6 +118,12 @@ describe('Core', () => {
       );
     });
 
+    it('[EmptyFunds] wrap', async () => {
+      const { coinfactoryWrapper, account } = context;
+      const res = coinfactoryWrapper.wrap(account.address);
+      await expect(res).rejects.toThrow(/No funds sent/);
+    });
+
     it('[WrongDenom] wrap', async () => {
       const { coinfactoryWrapper, account, coinfactoryDenom } = context;
       const res = coinfactoryWrapper.wrap(account.address, 'auto', undefined, [
