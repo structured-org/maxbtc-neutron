@@ -123,7 +123,6 @@ pub fn instantiate(
         salt,
     )
     .map_err(ContractError::Instantiate2Error)?;
-
     let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
 
     let withdrawal_magnager_code_info = deps

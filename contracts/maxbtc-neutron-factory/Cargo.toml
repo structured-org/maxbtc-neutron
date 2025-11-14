@@ -28,7 +28,7 @@ library = []
 optimize = """docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-  cosmwasm/optimizer:0.16.0
+  cosmwasm/optimizer:0.17.0
 """
 
 [dependencies]
@@ -44,9 +44,9 @@ semver = { workspace = true }
 
 neutron-std = { workspace = true }
 
-maxbtc-neutron-allow-list = { path = "../maxbtc-neutron-allow-list" }
-maxbtc-neutron-exchange-rate-provider = { path = "../maxbtc-neutron-exchange-rate-provider" }
-maxbtc-neutron-fee-collector = { path = "../maxbtc-neutron-fee-collector" }
+maxbtc-neutron-allow-list = { path = "../maxbtc-neutron-allow-list", features = ["library"] }
+maxbtc-neutron-exchange-rate-provider = { path = "../maxbtc-neutron-exchange-rate-provider", features = ["library"] }
+maxbtc-neutron-fee-collector = { path = "../maxbtc-neutron-fee-collector", features = ["library"] }
 maxbtc-base = { workspace = true }
 
 [dev-dependencies]
