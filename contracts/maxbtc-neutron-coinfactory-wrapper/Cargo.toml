@@ -42,6 +42,5 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 semver = { workspace = true }
 maxbtc-base = { workspace = true }
-# Use the latest neutron-std to get all the necessary types for the coinfactory
-neutron-std = { git = "https://github.com/neutron-org/neutron-std", version = "9.0.0" }
+neutron-std = { workspace = true }
 cw-utils = { workspace = true }
