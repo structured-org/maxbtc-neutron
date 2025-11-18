@@ -4105,7 +4105,7 @@ dependencies = [
 [[package]]
 name = "neutron-std"
 version = "9.0.0"
-source = "git+https://github.com/neutron-org/neutron-std?branch=main#afc86c28c26e3c332f1d7e19b0b03c85aba5d318"
+source = "git+https://github.com/neutron-org/neutron-std#afc86c28c26e3c332f1d7e19b0b03c85aba5d318"
 dependencies = [
  "bech32 0.9.1",
  "chrono",
@@ -4113,7 +4113,7 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "ed25519-zebra",
- "neutron-std-derive 0.20.1 (git+https://github.com/neutron-org/neutron-std?branch=main)",
+ "neutron-std-derive 0.20.1 (git+https://github.com/neutron-org/neutron-std)",
  "prost 0.12.6",
  "prost-types",
  "protobuf",
@@ -4155,7 +4155,7 @@ dependencies = [
 [[package]]
 name = "neutron-std-derive"
 version = "0.20.1"
-source = "git+https://github.com/neutron-org/neutron-std?branch=main#afc86c28c26e3c332f1d7e19b0b03c85aba5d318"
+source = "git+https://github.com/neutron-org/neutron-std#afc86c28c26e3c332f1d7e19b0b03c85aba5d318"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",
