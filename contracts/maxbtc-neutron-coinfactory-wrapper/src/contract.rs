@@ -7,10 +7,12 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
 use maxbtc_base::msg::core::MigrateMsg;
-use maxbtc_base::msg::token::{create_set_denom_metadata_msg, get_tokenfactory_denom};
-use neutron_std::types::cosmos::bank::v1beta1::MsgSend;
+use maxbtc_base::msg::token::get_coinfactory_denom;
+use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata, MsgSend};
 use neutron_std::types::cosmos::base::v1beta1::Coin;
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{MsgBurn, MsgCreateDenom, MsgMint};
+use neutron_std::types::neutron::coinfactory::v1beta1::{
+    MsgBurn, MsgCreateDenom, MsgMint, MsgSetDenomMetadata,
+};
 
 const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -27,7 +29,7 @@ pub fn instantiate(
     assert!(!msg.in_denom.is_empty());
     assert!(!msg.subdenom.is_empty());
 
-    let full_denom = get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone());
+    let full_denom = get_coinfactory_denom(env.contract.address.to_string(), msg.subdenom.clone());
     let cfg = Config {
         in_denom: msg.in_denom.clone(),
         out_denom: full_denom.clone(),
@@ -38,11 +40,30 @@ pub fn instantiate(
         sender: env.contract.address.to_string(),
         subdenom: msg.subdenom.clone(),
     });
-    let set_denom_metadata_submsg = create_set_denom_metadata_msg(
-        env.contract.address.into_string(),
-        full_denom.clone(),
-        msg.token_metadata.clone(),
-    )?;
+    let set_denom_metadata_submsg = Into::<CosmosMsg>::into(MsgSetDenomMetadata {
+        sender: env.contract.address.to_string(),
+        metadata: Some(Metadata {
+            denom_units: vec![
+                DenomUnit {
+                    denom: full_denom.clone(),
+                    exponent: 0,
+                    aliases: vec![],
+                },
+                DenomUnit {
+                    denom: msg.token_metadata.display.clone(),
+                    exponent: msg.token_metadata.exponent,
+                    aliases: vec![],
+                },
+            ],
+            base: full_denom,
+            display: msg.token_metadata.display,
+            name: msg.token_metadata.name,
+            description: msg.token_metadata.description,
+            symbol: msg.token_metadata.symbol,
+            uri: msg.token_metadata.uri.unwrap_or_default(),
+            uri_hash: msg.token_metadata.uri_hash.unwrap_or_default(),
+        }),
+    });
     Ok(Response::new()
         .add_message(create_denom_submsg)
         .add_message(set_denom_metadata_submsg)
