@@ -1,8 +1,8 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
-    ContractResult, Decimal, Empty, Int256, OwnedDeps, Querier, QuerierResult, QueryRequest,
-    SystemError, SystemResult, Uint128, WasmQuery,
+    ContractResult, Decimal, Empty, GrpcQuery, Int256, OwnedDeps, Querier, QuerierResult,
+    QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use maxbtc_base::msg::core::{GetAumResponse, WaitosaurObserverQueryMsg};
 use maxbtc_base::msg::{
@@ -14,6 +14,7 @@ use maxbtc_base::state::core::WaitosaurObserverState;
 use maxbtc_base::state::{
     token::Config as TokenConfigResponse, waitosaur_holder::State as WaitsaurHolderState,
 };
+use neutron_std::types::osmosis::tokenfactory::v1beta1::QueryDenomAuthorityMetadataResponse;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -52,6 +53,8 @@ pub struct WasmMockQuerier {
 
     denom: String,
 
+    denom_metadata: QueryDenomAuthorityMetadataResponse,
+
     exchange_rate: Decimal,
 
     aum_in_wbtc: Int256,
@@ -89,6 +92,7 @@ impl WasmMockQuerier {
             exchange_rate: Decimal::one(),
             aum_in_wbtc: Int256::zero(),
             waitosaur_observer_state: WaitosaurObserverState::Unlocked {},
+            denom_metadata: QueryDenomAuthorityMetadataResponse::default(),
         }
     }
 
@@ -119,6 +123,10 @@ impl WasmMockQuerier {
 
     pub fn set_aum_in_wbtc(&mut self, aum_in_wbtc: Int256) {
         self.aum_in_wbtc = aum_in_wbtc;
+    }
+
+    pub fn set_denom_metadata(&mut self, denom_metadata: QueryDenomAuthorityMetadataResponse) {
+        self.denom_metadata = denom_metadata;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -312,6 +320,19 @@ impl WasmMockQuerier {
                 msg: msg.clone(),
             }))
     }
+
+    fn handle_grpc_query(&self, grpc_query: GrpcQuery) -> QuerierResult {
+        println!("Handling grpc query for path: {}", grpc_query.path);
+
+        match grpc_query.path.as_str() {
+            "/osmosis.tokenfactory.v1beta1.Query/DenomAuthorityMetadata" => {
+                let query_result: ContractResult<Binary> =
+                    to_json_binary(&self.denom_metadata).into();
+                SystemResult::Ok(query_result)
+            }
+            _ => self.base.handle_query(&QueryRequest::Grpc(grpc_query)),
+        }
+    }
 }
 
 /// Finally, implement the high-level `Querier` trait that calls
@@ -333,6 +354,7 @@ impl Querier for WasmMockQuerier {
         match request {
             QueryRequest::Bank(bank_query) => self.handle_bank_query(bank_query),
             QueryRequest::Wasm(wasm_query) => self.handle_wasm_query(wasm_query),
+            QueryRequest::Grpc(grpc_query) => self.handle_grpc_query(grpc_query),
             // Fallback for queries we don’t explicitly handle
             _ => self.base.handle_query(&request),
         }
