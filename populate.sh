@@ -181,18 +181,17 @@ run_setup() {
     echo "Sender Address: $SENDER_ADDRESS"
     echo ""
 
-    # 0. Fee Collector Contract
-    echo "--- [0/6] Uploading Fee Collector Contract ---"
+    # Current UTC timestamp for salt
+    SALT=$(date +%s)
+
+    # 0. Allow List Contract
+    echo "--- [0/6] Uploading Allow List Contract ---"
     ALLOW_LIST_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_allow_list.wasm")
-    ALLOW_LIST_INIT_MSG=$(printf '{"owner": "%s"}' "$SENDER_ADDRESS")
-    ALLOW_LIST_CONTRACT_ADDRESS=$(instantiate_contract "$ALLOW_LIST_CODE_ID" "$ALLOW_LIST_INIT_MSG" "maxbtc-neutron-exchange-allow-list")
     echo ""
 
-    # 1. Fee Collector Contract
-    echo "--- [1/6] Uploading Fee Collector Contract ---"
+    # 1. Exchange Rate Provider Contract
+    echo "--- [1/6] Uploading Exchange Rate Provider Contract ---"
     EXCHANGE_RATE_PROVIDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_exchange_rate_provider.wasm")
-    EXCHANGE_RATE_PROVIDER_INIT_MSG=$(printf '{"owner": "%s"}' "$SENDER_ADDRESS")
-    EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$(instantiate_contract "$EXCHANGE_RATE_PROVIDER_CODE_ID" "$EXCHANGE_RATE_PROVIDER_INIT_MSG" "maxbtc-neutron-exchange-rate-provider")
     echo ""
 
     # 2. Fee Collector Contract (Upload only)
@@ -200,98 +199,105 @@ run_setup() {
     FEE_COLLECTOR_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_fee_collector.wasm")
     echo ""
 
-    # 3. Forwarder Contract (Valence Base Account)
-    echo "--- [3/6] Deploying Forwarder Contract (Valence Base Account) ---"
-    FORWARDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_base_account.wasm")
-    FORWARDER_INIT_MSG=$(printf '{"admin": "%s", "approved_libraries": []}' "$SENDER_ADDRESS")
-    FORWARDER_CONTRACT_ADDRESS=$(instantiate_contract "$FORWARDER_CODE_ID" "$FORWARDER_INIT_MSG" "valence-forwarder")
+    # 3. Token Contract
+    echo "--- [3/6] Uploading Token Contract ---"
+    TOKEN_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_token.wasm")
     echo ""
 
-    # 4. Forwarder Library Contract (Valence IBC Transfer Library)
-    echo "--- [4/6] Deploying Forwarder Library Contract ---"
-    FORWARDER_LIBRARY_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/valence_neutron_ibc_transfer_library.wasm")
-    FORWARDER_LIBRARY_INIT_MSG=$(jq -c . <<EOF
-{
-  "owner": "$SENDER_ADDRESS",
-  "processor": "$SENDER_ADDRESS",
-  "config": {
-    "input_addr": { "library_account_addr": "$FORWARDER_CONTRACT_ADDRESS" },
-    "output_addr": { "library_account_addr": "0xd8cbA23cdaF8e969Fd17c8EAbeCF82a4f002ee8D" },
-    "denom": { "native": "$WBTC_DENOM" },
-    "amount": "full_amount",
-    "memo": "",
-    "remote_chain_info": { "channel_id": "channel-1" },
-    "denom_to_pfm_map": {},
-    "eureka_config": {
-      "callback_contract": "cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22",
-      "action_contract": "cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5",
-      "recover_address": "cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26",
-      "source_channel": "08-wasm-1369"
-    }
-  }
-}
-EOF
-)
-    FORWARDER_LIBRARY_CONTRACT_ADDRESS=$(instantiate_contract "$FORWARDER_LIBRARY_CODE_ID" "$FORWARDER_LIBRARY_INIT_MSG" "valence-forwarder-library")
-    echo ""
-
-    # 5. Approve Forwarder Library
-    echo "--- [5/6] Approving Forwarder Library ---"
-    APPROVE_MSG=$(printf '{"approve_library":{"library":"%s"}}' "$FORWARDER_LIBRARY_CONTRACT_ADDRESS")
-    execute_and_wait "Approve Forwarder Library" "$FORWARDER_CONTRACT_ADDRESS" "$APPROVE_MSG"
-    echo ""
-
-    # 6. Instantiate Core Contract
-    echo "--- [6/6] Deploying Core Contract ---"
+    # 4. Core Contract
+    echo "--- [4/6] Uploading Core Contract ---"
     CORE_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_core.wasm")
-    CORE_INIT_MSG=$(jq -c . <<EOF
+    echo ""
+
+    # 5. Waitosaur Observer Contract
+    echo "--- [5/6] Uploading Waitosaur Observer Contract ---"
+    WAITOSAUR_OBSERVER_CODE_ID=$(upload_contract "./integration_tests/artifacts/contracts_thirdparty/waitasaurus.wasm")
+    echo ""
+
+    # 6. Waitosaur Holder Contract
+    echo "--- [6/6] Uploading Waitosaur Holder Contract ---"
+    WAITOSAUR_HOLDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_waitosaur_holder.wasm")
+    echo ""
+
+    # 7. Withdrawal Manager Contract
+    echo "--- [7/6] Uploading Withdrawal Manager Contract ---"
+    WITHDRAWAL_MANAGER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_withdrawal_manager.wasm")
+    echo ""
+
+    # 8. Factory Contract
+    echo "--- [8/6] Uploading Factory Contract ---"
+    FACTORY_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_factory.wasm")
+
+    FACTORY_INIT_MSG=$(jq -c . <<EOF
 {
-  "exchange_rate_provider_contract": "$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS",
-  "allowlist_contract": "$ALLOW_LIST_CONTRACT_ADDRESS",
-  "deposit_forwarder_contract": "$FORWARDER_CONTRACT_ADDRESS",
-  "accepted_withdrawable_percentage": "0.005",
-  "batch_active_duration": 30,
-  "batch_withdrawing_duration": 30,
-  "deposit_decimals": 6,
-  "deposit_denom": "$WBTC_DENOM",
-  "deposit_cost": "0.01",
-  "deposit_flush_period": 30,
-  "maxbtc_denom": "$MAXBTC_DENOM",
+  "code_ids": {
+    "token_code_id": $TOKEN_CODE_ID,
+    "core_code_id": $CORE_CODE_ID,
+    "exchange_rate_provider_contract_code_id": $EXCHANGE_RATE_PROVIDER_CODE_ID,
+    "allowlist_contract_code_id": $ALLOW_LIST_CODE_ID,
+    "fee_collector_contract_code_id": $FEE_COLLECTOR_CODE_ID,
+    "waitosaur_observer_contract_code_id": $WAITOSAUR_OBSERVER_CODE_ID,
+    "waitosaur_holder_contract_code_id": $WAITOSAUR_HOLDER_CODE_ID,
+    "withdrawal_manager_contract_code_id": $WITHDRAWAL_MANAGER_CODE_ID
+  },
+  "salt": "$SALT",
   "owner": "$SENDER_ADDRESS",
+  "operator": "$OPERATOR_ADDRESS",
+  "ceffu_backend": "$CEFFU_BACKEND_ADDRESS",
+  "deposit_denom": "$WBTC_DENOM",
+  "deposit_decimals": 6,
+  "deposit_cost": "0.01",
+  "deposits_cap": null,
+  "maxbtc_denom": "maxbtc",
   "fee_collector_params": {
-    "code_id": $FEE_COLLECTOR_CODE_ID,
     "collection_period_seconds": 1,
-    "fee_apy_reduction_percentage": "0.1",
-    "salt": "ZmVlX2NvbGxlY3Rvcl9zYWx0"
-  }
+    "fee_apy_reduction_percentage": "0.1"
+  },
+  "binance_aum_contract": "$BINANCE_AUM_CONTRACT_ADDRESS",
+  "waitosaur_observer_unlocker": "$CEFFU_BACKEND_ADDRESS",
+  "deposit_forwarder_contract": "$FORWARDER_CONTRACT_ADDRESS"
 }
 EOF
 )
-    CORE_CONTRACT_ADDRESS=$(instantiate_contract "$CORE_CODE_ID" "$CORE_INIT_MSG" "maxbtc-core")
+    FACTORY_CONTRACT_ADDRESS=$(instantiate_contract "$FACTORY_CODE_ID" "$FACTORY_INIT_MSG" "maxbtc-neutron-factory")
     echo ""
+    echo "Factory Contract Address: $FACTORY_CONTRACT_ADDRESS"
 
     # Query for the dynamically created Fee Collector Address
-    FEE_COLLECTOR_CONTRACT_ADDRESS=$(neutrond query wasm contract-state smart "$CORE_CONTRACT_ADDRESS" '{"config":{}}' -o json --node "$NODE" | jq -r '.data.fee_collector_contract')
-    if [[ -z "$FEE_COLLECTOR_CONTRACT_ADDRESS" || "$FEE_COLLECTOR_CONTRACT_ADDRESS" == "null" ]]; then
-        echo "Warning: Could not query Fee Collector address from Core contract." >&2
-    else
-        echo "Queried Fee Collector Address: $FEE_COLLECTOR_CONTRACT_ADDRESS"
-    fi
+    FACTORY_STATE=$(neutrond query wasm contract-state smart "$FACTORY_CONTRACT_ADDRESS" '{"state":{}}' -o json --node "$NODE" | jq -r '.data')
+    FEE_COLLECTOR_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.fee_collector_contract')
+    EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.exchange_rate_provider_contract')
+    ALLOW_LIST_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.allowlist_contract')
+    WAITOSAUR_HOLDER_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.waitosaur_holder_contract')
+    WAITOSAUR_OBSERVER_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.waitosaur_observer_contract')
+    WITHDRAWAL_MANAGER_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.withdrawal_manager_contract')
+    CORE_CONTRACT_ADDRESS=$(echo "$FACTORY_STATE" | jq -r '.core_contract')
+    
 
     # Final Output and saving state
     {
+        echo "export NODE=$NODE"
+        echo "export CHAIN_ID=$CHAIN_ID"
+        echo "export OPERATOR_ADDRESS=$OPERATOR_ADDRESS"
+        echo "export CEFFU_BACKEND_ADDRESS=$CEFFU_BACKEND_ADDRESS"
+        echo "export BINANCE_AUM_CONTRACT_ADDRESS=$BINANCE_AUM_CONTRACT_ADDRESS"
+        echo "export FORWARDER_CONTRACT_ADDRESS=$FORWARDER_CONTRACT_ADDRESS"
         echo "export FEE_COLLECTOR_CODE_ID=$FEE_COLLECTOR_CODE_ID"
         echo "export ALLOW_LIST_CODE_ID=$ALLOW_LIST_CODE_ID"
         echo "export EXCHANGE_RATE_PROVIDER_CODE_ID=$EXCHANGE_RATE_PROVIDER_CODE_ID"
-        echo "export FORWARDER_CODE_ID=$FORWARDER_CODE_ID"
-        echo "export FORWARDER_LIBRARY_CODE_ID=$FORWARDER_LIBRARY_CODE_ID"
         echo "export CORE_CODE_ID=$CORE_CODE_ID"
+        echo "export WAITOSAUR_HOLDER_CODE_ID=$WAITOSAUR_HOLDER_CODE_ID"
+        echo "export WAITOSAUR_OBSERVER_CODE_ID=$WAITOSAUR_OBSERVER_CODE_ID"
+        echo "export WITHDRAWAL_MANAGER_CODE_ID=$WITHDRAWAL_MANAGER_CODE_ID"
         echo "export FORWARDER_CONTRACT_ADDRESS=$FORWARDER_CONTRACT_ADDRESS"
-        echo "export FORWARDER_LIBRARY_CONTRACT_ADDRESS=$FORWARDER_LIBRARY_CONTRACT_ADDRESS"
         echo "export CORE_CONTRACT_ADDRESS=$CORE_CONTRACT_ADDRESS"
         echo "export FEE_COLLECTOR_CONTRACT_ADDRESS=$FEE_COLLECTOR_CONTRACT_ADDRESS"
         echo "export EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS"
         echo "export ALLOW_LIST_CONTRACT_ADDRESS=$ALLOW_LIST_CONTRACT_ADDRESS"
+        echo "export WAITOSAUR_HOLDER_CONTRACT_ADDRESS=$WAITOSAUR_HOLDER_CONTRACT_ADDRESS"
+        echo "export WAITOSAUR_OBSERVER_CONTRACT_ADDRESS=$WAITOSAUR_OBSERVER_CONTRACT_ADDRESS"
+        echo "export WITHDRAWAL_MANAGER_CONTRACT_ADDRESS=$WITHDRAWAL_MANAGER_CONTRACT_ADDRESS"
+        echo "export FACTORY_CONTRACT_ADDRESS=$FACTORY_CONTRACT_ADDRESS"
     } > "$DEPLOYMENT_ENV_FILE"
 
     echo "================================================================="
