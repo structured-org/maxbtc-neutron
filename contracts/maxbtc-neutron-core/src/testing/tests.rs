@@ -20,6 +20,9 @@ use maxbtc_base::state::{
     },
     waitosaur_holder::State as WaitsaurHolderState,
 };
+use neutron_std::types::osmosis::tokenfactory::v1beta1::{
+    DenomAuthorityMetadata, QueryDenomAuthorityMetadataResponse,
+};
 
 #[test]
 fn test_instantiate_success() {
@@ -155,6 +158,13 @@ fn test_withdraw_no_denom_creation() {
             "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc",
         )],
     );
+
+    deps.querier
+        .set_denom_metadata(QueryDenomAuthorityMetadataResponse {
+            authority_metadata: Some(DenomAuthorityMetadata {
+                admin: "fee_collector_addr".to_string(),
+            }),
+        });
 
     // Set the total supply that the contract will check to create tokenfactory redemption denom.
     deps.querier.set_supply(
