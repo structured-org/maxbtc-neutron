@@ -521,8 +521,6 @@ describe('Core', () => {
         )
       ).data.balance.amount;
 
-      console.log(coreTokenBalanceBeforeMigration);
-
       const fee = {
         amount: coins(5000, 'untrn'),
         gas: '2000000',
@@ -556,8 +554,6 @@ describe('Core', () => {
       const { events } = tx;
       const newCoreContractAddress = events.find((e) => e.type === 'wasm')
         .attributes[1].value;
-
-      console.log(newCoreContractAddress);
 
       const totalDepositedStr = await client.queryContractRaw(
         coreContractAddress,
@@ -597,8 +593,6 @@ describe('Core', () => {
           { denom: DEPOSIT_DENOM },
         )
       ).data.balance.amount;
-
-      console.log(newCoreBalanceAfterMigration);
 
       expect(newCoreBalanceAfterMigration).toEqual(
         coreTokenBalanceBeforeMigration,
