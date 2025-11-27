@@ -813,8 +813,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "maxbtc-neutron-core"
-version = "0.2.0"
+name = "maxbtc-neutron-coinfactory-wrapper"
+version = "0.1.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
