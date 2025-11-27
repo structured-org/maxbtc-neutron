@@ -1,8 +1,8 @@
 use crate::error::ContractError;
 use cosmwasm_std::{
-    entry_point, instantiate2_address, to_json_binary, Addr, Binary, Checksum, CodeInfoResponse,
-    Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
-    WasmMsg,
+    entry_point, instantiate2_address, to_json_binary, Addr, BankMsg, Binary, Checksum,
+    CodeInfoResponse, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult, Uint128, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
@@ -409,11 +409,17 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
         };
         CONFIG.save(deps.storage, &new_config)?;
 
+        let send_msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: core_contract.to_string(),
+            amount: vec![deposit_balance],
+        });
+
         return Ok(Response::new()
             .add_message(instantiate_withdrawal_manager_contract_msg)
             .add_message(instantiate_waitosaur_contract_msg)
             .add_message(instantiate_waitosaur_holder_contract_msg)
             .add_message(instantiate_core_contract_msg)
+            .add_message(send_msg)
             .add_attribute("core_contract", core_contract.to_string()));
     }
     Ok(Response::default())
