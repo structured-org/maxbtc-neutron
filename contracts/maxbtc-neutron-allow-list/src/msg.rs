@@ -10,8 +10,12 @@ pub struct InstantiateMsg {
 #[cw_ownable_execute]
 #[cw_serde]
 pub enum ExecuteMsg {
-    UpdateAllowList { allow_list: Vec<String> },
-    UpdateZkMeSettings { settings: Option<ZkMeSettings> },
+    UpdateAllowList {
+        allow_list: Vec<String>,
+    },
+    UpdateZkMeSettings {
+        settings: Option<ZkMeSettingsUpdate>,
+    },
 }
 
 #[cw_serde]
@@ -21,6 +25,11 @@ pub struct MigrateMsg {}
 pub struct ZkMeSettings {
     pub contract: Addr,
     pub cooperator: Addr,
+}
+#[cw_serde]
+pub struct ZkMeSettingsUpdate {
+    pub contract: String,
+    pub cooperator: String,
 }
 
 #[cw_serde]
