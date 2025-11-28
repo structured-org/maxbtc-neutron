@@ -43,6 +43,10 @@ pub fn instantiate(
 
     FSM.set_initial_state(deps.storage, ContractState::Idle)?;
 
+    if msg.deposit_cost >= Decimal::one() {
+        return Err(ContractError::DepositCostTooHigh {});
+    }
+
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
@@ -396,6 +400,9 @@ fn execute_update_config(
         res = res.add_attribute("deposits_cap_updated", format!("{:?}", cap));
     }
     if let Some(deposit_cost) = updates.deposit_cost {
+        if deposit_cost >= Decimal::one() {
+            return Err(ContractError::DepositCostTooHigh {});
+        }
         cfg.deposit_cost = deposit_cost;
         res = res.add_attribute("deposit_cost_updated", deposit_cost.to_string());
     }
