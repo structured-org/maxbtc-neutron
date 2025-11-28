@@ -39,12 +39,12 @@ pub fn execute(
             let mut attrs = vec![];
             for addr in addresses {
                 let validated_addr = deps.api.addr_validate(&addr)?;
-                ALLOW_LIST.save(deps.storage, &validated_addr, &true)?;
+                ALLOW_LIST.save(deps.storage, &validated_addr, &())?;
                 attrs.push(("allowed_address", validated_addr));
             }
             Ok(Response::new()
-                .add_attributes(attrs)
-                .add_attribute("action", "allow_addresses"))
+                .add_attribute("action", "allow_addresses")
+                .add_attributes(attrs))
         }
 
         ExecuteMsg::Deny { addresses } => {
@@ -56,8 +56,8 @@ pub fn execute(
                 attrs.push(("denied_address", validated_addr));
             }
             Ok(Response::new()
-                .add_attributes(attrs)
-                .add_attribute("action", "deny_addresses"))
+                .add_attribute("action", "deny_addresses")
+                .add_attributes(attrs))
         }
 
         ExecuteMsg::UpdateOwnership(action) => {
@@ -95,18 +95,15 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             let start = start.as_ref().map(Bound::exclusive);
             let addrs: Vec<String> = ALLOW_LIST
                 .range(deps.storage, start, None, Order::Ascending)
-                .filter_map(|item| match item {
-                    Ok((addr, allowed)) if allowed => Some(addr.to_string()),
-                    _ => None,
-                })
                 .take(limit)
-                .collect();
+                .map(|item| item.map(|(addr, _)| addr.to_string()))
+                .collect::<Result<_, _>>()?;
             to_json_binary(&addrs)?
         }
         QueryMsg::IsAddressAllowed { address } => {
-            let allow_list =
+            let is_allowed =
                 ALLOW_LIST.may_load(deps.storage, &deps.api.addr_validate(&address)?)?;
-            if allow_list.unwrap_or(false) {
+            if is_allowed.is_some() {
                 return to_json_binary(&true).map_err(ContractError::Std);
             }
             let zk_me_settings = ZK_ME_SETTINGS.may_load(deps.storage)?;
@@ -148,9 +145,10 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
         let old_list = ALLOW_LIST_V1.may_load(deps.storage)?;
         if let Some(old_list) = old_list {
             for addr in old_list {
-                ALLOW_LIST.save(deps.storage, &addr, &true)?;
+                ALLOW_LIST.save(deps.storage, &addr, &())?;
             }
         }
+        ALLOW_LIST_V1.remove(deps.storage);
     }
 
     Ok(Response::new())

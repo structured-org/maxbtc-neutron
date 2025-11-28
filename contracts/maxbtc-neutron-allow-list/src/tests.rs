@@ -72,18 +72,19 @@ fn test_allow_addresses() {
     };
     let res = execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
     assert_eq!(res.attributes.len(), 3);
-    assert_eq!(res.attributes[0].key, "allowed_address");
-    assert_eq!(
-        res.attributes[0].value,
-        "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
-    );
+    assert_eq!(res.attributes[0].key, "action");
+    assert_eq!(res.attributes[0].value, "allow_addresses");
     assert_eq!(res.attributes[1].key, "allowed_address");
     assert_eq!(
         res.attributes[1].value,
+        "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
+    );
+    assert_eq!(res.attributes[2].key, "allowed_address");
+    assert_eq!(
+        res.attributes[2].value,
         "cosmwasm1jy7lsk5pk38zjfnn6nt6qlaphy9uejn496zwvh"
     );
-    assert_eq!(res.attributes[2].key, "action");
-    assert_eq!(res.attributes[2].value, "allow_addresses");
+
     // Query the allow list
     let query_msg = QueryMsg::AllowList {
         limit: Some(10u32),
@@ -157,14 +158,14 @@ fn test_deny_addresses() {
     let res = execute(deps.as_mut(), env.clone(), info, execute_msg).unwrap();
 
     assert_eq!(res.attributes.len(), 2);
-    assert_eq!(res.attributes[0].key, "denied_address");
+    assert_eq!(res.attributes[0].key, "action");
+    assert_eq!(res.attributes[0].value, "deny_addresses");
+    assert_eq!(res.attributes[1].key, "denied_address");
     assert_eq!(
-        res.attributes[0].value,
+        res.attributes[1].value,
         "cosmwasm1ygejj7rnheqlvvmcnmggllcd9y226ql5n7sw55"
     );
 
-    assert_eq!(res.attributes[1].key, "action");
-    assert_eq!(res.attributes[1].value, "deny_addresses");
     // Query the allow list
     let query_msg = QueryMsg::AllowList {
         limit: Some(10u32),
@@ -276,7 +277,7 @@ fn test_migrate_from_v1_to_v2() {
 
     // Check addresses migrated to v2
     for addr in old_addresses {
-        let allowed = ALLOW_LIST.load(deps.as_ref().storage, &addr).unwrap();
-        assert!(allowed);
+        let allowed = ALLOW_LIST.may_load(deps.as_ref().storage, &addr).unwrap();
+        assert!(allowed.is_some());
     }
 }
