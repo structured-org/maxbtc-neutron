@@ -718,7 +718,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
                     item.map(|(_, batch)| batch)
                         .map_err(|e| StdError::generic_err(e.to_string()))
                 })
-                .take(limit.unwrap_or(10) as usize)
+                .take(limit.unwrap_or(10).min(100) as usize)
                 .collect::<StdResult<Vec<Batch>>>()?;
 
             Ok(to_json_binary(&finalized_batches)?)

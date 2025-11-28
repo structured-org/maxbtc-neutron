@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, Int256, SignedDecimal256, Uint128};
+use cosmwasm_std::{Coin, Decimal, Int256, SignedDecimal256, Uint128, Uint64};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
@@ -91,7 +91,7 @@ pub enum QueryMsg {
     #[returns(Vec<crate::state::core::Batch>)]
     FinalizedBatches {
         limit: Option<u32>,
-        start_after: Option<u64>,
+        start_after: Option<Uint64>,
     },
     #[returns(crate::state::core::Batch)]
     FinalizedBatch { batch_id: u64 },

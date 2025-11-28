@@ -239,7 +239,7 @@ export interface Batch3 {
 }
 export interface FinalizedBatchesArgs {
   limit?: number | null;
-  start_after?: number | null;
+  start_after?: Uint64 | null;
 }
 export interface FinalizedBatchArgs {
   batch_id: number;
