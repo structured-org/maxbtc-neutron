@@ -2,11 +2,14 @@ use crate::error::ContractError;
 pub(crate) use crate::utils::dec_to_amount;
 use cosmwasm_std::{
     entry_point, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult, Uint128, WasmMsg,
+    Int256, MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult, Uint128,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
-use maxbtc_base::msg::core::{WaitosaurObserverExecuteMsg, WaitosaurObserverQueryMsg};
+use maxbtc_base::msg::core::{
+    GetAumResponse, WaitosaurObserverExecuteMsg, WaitosaurObserverQueryMsg,
+};
 use maxbtc_base::msg::token::ExecuteMsg as TokenExecuteMsg;
 use maxbtc_base::msg::{
     core::{
@@ -22,7 +25,7 @@ use maxbtc_base::msg::{
 use maxbtc_base::state::{
     core::{
         Batch, Config, ContractState, WaitosaurObserverState, ACTIVE_BATCH, BATCH_ID_COUNTER,
-        CONFIG, FINALIZED_BATCHES, FSM, TOTAL_DEPOSITED, WITHDRAWING_BATCH,
+        CONFIG, FINALIZED_BATCHES, FSM, WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitosaurHolderState,
 };
@@ -65,11 +68,6 @@ pub fn instantiate(
         withdrawal_manager_contract: deps.api.addr_validate(&msg.withdrawal_manager_contract)?,
     };
     CONFIG.save(deps.storage, &cfg)?;
-
-    TOTAL_DEPOSITED.save(
-        deps.storage,
-        &msg.total_deposited.unwrap_or(Uint128::zero()),
-    )?;
 
     WITHDRAWING_BATCH.save(deps.storage, &None)?;
 
@@ -505,10 +503,6 @@ pub(crate) fn execute_deposit(
         funds: vec![],
     });
 
-    TOTAL_DEPOSITED.update(deps.storage, |total| -> Result<Uint128, ContractError> {
-        Ok(total + amount)
-    })?;
-
     // Return the response
     Ok(Response::new()
         .add_message(mint_msg)
@@ -804,6 +798,18 @@ pub(crate) fn get_exchange_rate(deps: &Deps, cfg: &Config) -> Result<Decimal, Co
     Ok(res.twaer)
 }
 
+/// Queries the AUM from the twaer provider contract.
+pub(crate) fn get_aum(deps: &Deps, cfg: &Config) -> Result<Int256, ContractError> {
+    let res: GetAumResponse =
+        deps.querier
+            .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
+                contract_addr: cfg.exchange_rate_provider_contract.to_string(),
+                msg: to_json_binary(&ExchangeRateProviderQueryMsg::GetAum {})?,
+            }))?;
+
+    Ok(res.aum_in_wbtc)
+}
+
 /// Verifies that the current Deposits does **not** exceed the optional *deposit cap*.
 fn check_deposit_cap(
     deps: &Deps,
@@ -811,9 +817,8 @@ fn check_deposit_cap(
     deposit: Option<Uint128>,
 ) -> Result<(), ContractError> {
     if let Some(deposits_cap) = cfg.deposits_cap {
-        // Note: real assets under management can be different, but for now we don't care.
-        let current_deposits = TOTAL_DEPOSITED.load(deps.storage)?;
-        if current_deposits + deposit.unwrap_or_default() > deposits_cap {
+        let current_aum = get_aum(deps, cfg)?;
+        if current_aum + Int256::from(deposit.unwrap_or_default()) > deposits_cap.into() {
             return Err(ContractError::DepositCapExceeded {});
         }
     }

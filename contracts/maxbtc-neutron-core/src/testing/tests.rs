@@ -5,8 +5,8 @@ use crate::error::ContractError;
 use crate::testing::mock_querier::{mock_dependencies, WasmMockQuerier};
 use cosmwasm_std::testing::{message_info, mock_env, MockApi, MockStorage};
 use cosmwasm_std::{
-    coin, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, MessageInfo,
-    OwnedDeps, Response, SignedDecimal256, SubMsg, Uint128, WasmMsg,
+    coin, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, Int256,
+    MessageInfo, OwnedDeps, Response, SignedDecimal256, SubMsg, Uint128, WasmMsg,
 };
 use cw_utils::PaymentError;
 use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, WaitosaurObserverExecuteMsg};
@@ -16,7 +16,7 @@ use maxbtc_base::msg::{
 use maxbtc_base::state::{
     core::{
         Batch, ContractState, WaitosaurObserverState, ACTIVE_BATCH, CONFIG, FINALIZED_BATCHES, FSM,
-        TOTAL_DEPOSITED, WITHDRAWING_BATCH,
+        WITHDRAWING_BATCH,
     },
     waitosaur_holder::State as WaitsaurHolderState,
 };
@@ -397,9 +397,8 @@ fn test_deposit_exceeds_cap() {
     cfg.paused = false;
     cfg.deposits_cap = Some(Uint128::from(100_000_000u128)); // 100 wBTC
     CONFIG.save(&mut deps.storage, &cfg).unwrap();
-    TOTAL_DEPOSITED
-        .save(&mut deps.storage, &Uint128::from(110_000_000u128))
-        .unwrap();
+
+    deps.querier.set_aum_in_wbtc(Int256::from(110_000_000u128));
 
     // Provide a deposit
     let info = message_info(
@@ -1054,8 +1053,6 @@ fn default_instantiate_msg(
         waitosaur_observer_contract: deps.api.addr_make("waitosaur_addr").to_string(),
         waitosaur_holder_contract: deps.api.addr_make("waitosaur_holder_contract").to_string(),
         withdrawal_manager_contract: deps.api.addr_make("withdrawal_manager_addr").to_string(),
-        total_deposited: None,
-        current_deposit_balance: None,
     }
 }
 

@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Coin, Decimal, SignedDecimal256, Uint128};
+use cosmwasm_std::{Coin, Decimal, Int256, SignedDecimal256, Uint128};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 /// InstantiateMsg configures the contract on initialization.
@@ -37,10 +37,6 @@ pub struct InstantiateMsg {
     pub waitosaur_holder_contract: String,
     /// Address of the withdrawal manager contract
     pub withdrawal_manager_contract: String,
-    /// Total amount of BTC deposited by the contract (used in migration)
-    pub total_deposited: Option<Uint128>,
-    /// Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
-    pub current_deposit_balance: Option<Uint128>,
 }
 
 /// Message for updating configuration parameters (owner-only).
@@ -133,6 +129,14 @@ pub enum AllowlistQueryMsg {
 pub enum ExchangeRateProviderQueryMsg {
     #[returns(GetTwaerResponse)]
     GetTwaer {},
+    #[returns(GetAumResponse)]
+    GetAum {},
+}
+
+#[cw_serde]
+pub struct GetAumResponse {
+    pub aum_in_wbtc: Int256,
+    pub decimals: u32,
 }
 
 #[cw_serde]
