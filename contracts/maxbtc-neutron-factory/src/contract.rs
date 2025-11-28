@@ -259,8 +259,6 @@ pub fn instantiate(
             waitosaur_observer_contract: waitosaur_observer_contract.to_string(),
             waitosaur_holder_contract: waitosaur_holder_contract.to_string(),
             withdrawal_manager_contract: withdrawal_manager_contract.to_string(),
-            total_deposited: None,
-            current_deposit_balance: None,
         })?,
         funds: vec![],
         salt: Binary::from(salt),

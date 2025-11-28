@@ -248,10 +248,6 @@ export interface InstantiateMsg {
    */
   allowlist_contract: string;
   /**
-   * Amount of BTC deposited by the contract and waiting to be transfered to JLP (used in migration)
-   */
-  current_deposit_balance?: Uint128 | null;
-  /**
    * One-off cost (Decimal) charged when a user deposits to mint maxBTC
    */
   deposit_cost: Decimal;
@@ -292,10 +288,6 @@ export interface InstantiateMsg {
    * Contract that owns and creates token factory tokens.
    */
   token_contract: string;
-  /**
-   * Total amount of BTC deposited by the contract (used in migration)
-   */
-  total_deposited?: Uint128 | null;
   /**
    * Address of the waitosaur holder contract
    */

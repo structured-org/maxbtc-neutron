@@ -352,12 +352,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             salt: Binary::from(salt),
         });
 
-        let total_deposited = Item::<Uint128>::new("total_deposited").load(deps.storage)?;
-
-        let deposit_balance = deps
-            .querier
-            .query_balance(env.contract.address.to_string(), &old_config.deposit_denom)?;
-
         let instantiate_waitosaur_holder_contract_msg = CosmosMsg::Wasm(WasmMsg::Instantiate2 {
             admin: Some(msg.factory_contract.to_string()), // The core contract owner is admin
             code_id: msg.waitosaur_holder_code_id,
@@ -397,8 +391,6 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 fee_collector_contract: old_config.fee_collector_contract.into_string(),
                 waitosaur_observer_contract: waitosaur_observer_contract.into_string(),
                 withdrawal_manager_contract: withdrawal_manager_contract.into_string(),
-                total_deposited: Some(total_deposited),
-                current_deposit_balance: Some(deposit_balance.amount),
             })?,
             funds: vec![],
             salt: Binary::from(salt),
