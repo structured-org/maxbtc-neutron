@@ -12,7 +12,7 @@ use crate::msg::{
 };
 use crate::state::{AUM, EXCHANGE_RATE};
 
-const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider";
+const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider-mock";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
