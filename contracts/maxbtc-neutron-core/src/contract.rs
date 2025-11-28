@@ -333,7 +333,7 @@ fn execute_mint_fee(
     )?;
 
     if amount.denom != maxbtc_denom {
-        return Err(ContractError::InvalidDepositDenom {
+        return Err(ContractError::InvalidFeeDenom {
             expected: maxbtc_denom,
             received: amount.denom.to_string(),
         });
