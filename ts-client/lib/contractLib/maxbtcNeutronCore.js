@@ -38,6 +38,9 @@ class Client {
     queryFinalizedBatches = async (args) => {
         return this.client.queryContractSmart(this.contractAddress, { finalized_batches: args });
     };
+    queryFinalizedBatch = async (args) => {
+        return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
+    };
     queryConfig = async () => {
         return this.client.queryContractSmart(this.contractAddress, { config: {} });
     };

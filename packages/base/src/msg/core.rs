@@ -89,7 +89,12 @@ pub enum QueryMsg {
     #[returns(crate::state::core::Batch)]
     WithdrawingBatch {},
     #[returns(Vec<crate::state::core::Batch>)]
-    FinalizedBatches { batch_id: Option<u64> },
+    FinalizedBatches {
+        limit: Option<u32>,
+        start_after: Option<u64>,
+    },
+    #[returns(crate::state::core::Batch)]
+    FinalizedBatch { batch_id: u64 },
     /// Returns the Config state
     #[returns(ConfigResponse)]
     Config {},

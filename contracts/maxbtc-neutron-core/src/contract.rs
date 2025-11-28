@@ -7,6 +7,7 @@ use cosmwasm_std::{
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
+use cw_storage_plus::Bound;
 use maxbtc_base::msg::core::{
     GetAumResponse, WaitosaurObserverExecuteMsg, WaitosaurObserverQueryMsg,
 };
@@ -708,20 +709,21 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Bi
             let withdrawing_batch = WITHDRAWING_BATCH.load(deps.storage)?;
             Ok(to_json_binary(&withdrawing_batch)?)
         }
-        QueryMsg::FinalizedBatches { batch_id } => {
-            let finalized_batches = if let Some(batch_id) = batch_id {
-                FINALIZED_BATCHES
-                    .load(deps.storage, batch_id)
-                    .map(|batch| vec![batch])?
-            } else {
-                FINALIZED_BATCHES
-                    .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
-                    .map(|item| {
-                        item.map(|(_, batch)| batch)
-                            .map_err(|e| StdError::generic_err(e.to_string()))
-                    })
-                    .collect::<StdResult<Vec<Batch>>>()?
-            };
+        QueryMsg::FinalizedBatch { batch_id } => {
+            let finalized_batch = FINALIZED_BATCHES.load(deps.storage, batch_id)?;
+            Ok(to_json_binary(&finalized_batch)?)
+        }
+        QueryMsg::FinalizedBatches { start_after, limit } => {
+            let bound = start_after.map(Bound::exclusive);
+            let finalized_batches = FINALIZED_BATCHES
+                .range(deps.storage, bound, None, cosmwasm_std::Order::Ascending)
+                .map(|item| {
+                    item.map(|(_, batch)| batch)
+                        .map_err(|e| StdError::generic_err(e.to_string()))
+                })
+                .take(limit.unwrap_or(10) as usize)
+                .collect::<StdResult<Vec<Batch>>>()?;
+
             Ok(to_json_binary(&finalized_batches)?)
         }
         QueryMsg::ExchangeRate {} => {
