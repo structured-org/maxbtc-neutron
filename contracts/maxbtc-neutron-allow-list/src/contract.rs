@@ -6,6 +6,7 @@ use cw2::set_contract_version;
 use crate::error::{ContractError, ContractResult};
 use crate::msg::{
     ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, ZkMeHasApprovedResponse, ZkMeQueryMsg,
+    ZkMeSettings,
 };
 use crate::state::{ALLOW_LIST, ZK_ME_SETTINGS};
 
@@ -52,7 +53,13 @@ pub fn execute(
         ExecuteMsg::UpdateZkMeSettings { settings } => {
             cw_ownable::assert_owner(deps.storage, &info.sender)?;
             if let Some(settings) = settings {
-                ZK_ME_SETTINGS.save(deps.storage, &settings)?;
+                ZK_ME_SETTINGS.save(
+                    deps.storage,
+                    &ZkMeSettings {
+                        contract: deps.api.addr_validate(&settings.contract)?,
+                        cooperator: deps.api.addr_validate(&settings.cooperator)?,
+                    },
+                )?;
             } else {
                 ZK_ME_SETTINGS.remove(deps.storage);
             }
