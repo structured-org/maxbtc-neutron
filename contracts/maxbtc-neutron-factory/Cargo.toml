@@ -45,7 +45,7 @@ semver = { workspace = true }
 neutron-std = { workspace = true }
 
 maxbtc-neutron-allow-list = { path = "../maxbtc-neutron-allow-list", features = ["library"] }
-maxbtc-neutron-exchange-rate-provider = { path = "../maxbtc-neutron-exchange-rate-provider", features = ["library"] }
+maxbtc-neutron-exchange-rate-provider = { path = "../maxbtc-neutron-exchange-rate-provider-mock", features = ["library"] }
 maxbtc-neutron-fee-collector = { path = "../maxbtc-neutron-fee-collector", features = ["library"] }
 maxbtc-base = { workspace = true }
 
