@@ -393,7 +393,10 @@ fn execute_update_config(
     }
     if let Some(cap) = updates.deposits_cap {
         cfg.deposits_cap = cap;
-        res = res.add_attribute("deposits_cap_updated", cap.unwrap());
+        res = res.add_attribute(
+            "deposits_cap_updated",
+            cap.map(|c| c.to_string()).unwrap_or("None".to_string()),
+        );
     }
     if let Some(deposit_cost) = updates.deposit_cost {
         cfg.deposit_cost = deposit_cost;
