@@ -88,8 +88,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             if is_allowed_by_allow_list {
                 return to_json_binary(&true).map_err(ContractError::Std);
             }
-            let zk_me_settings = ZK_ME_SETTINGS.load(deps.storage);
-            if let Ok(zk_me_settings) = zk_me_settings {
+            let zk_me_settings = ZK_ME_SETTINGS.may_load(deps.storage)?;
+            if let Some(zk_me_settings) = zk_me_settings {
                 let res: ZkMeHasApprovedResponse = deps.querier.query_wasm_smart(
                     zk_me_settings.contract,
                     &ZkMeQueryMsg::HasApproved {
