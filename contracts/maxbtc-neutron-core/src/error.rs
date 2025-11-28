@@ -24,6 +24,9 @@ pub enum ContractError {
     #[error("Invalid deposit denom. Expected {expected}, got {received}")]
     InvalidDepositDenom { expected: String, received: String },
 
+    #[error("Invalid fee denom. Expected {expected}, got {received}")]
+    InvalidFeeDenom { expected: String, received: String },
+
     #[error("Invalid deposit amount")]
     InvalidDepositAmount {},
 
