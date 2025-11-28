@@ -33,6 +33,9 @@ pub enum ContractError {
     #[error("Division by zero error")]
     DivideByZeroError(#[from] DivideByZeroError),
 
+    #[error("Collection period must not be less than one hour")]
+    InvalidCollectionPeriod {},
+
     #[error("Can't migrate from {storage_contract_name} to {contract_name}")]
     MigrationError {
         storage_contract_name: String,

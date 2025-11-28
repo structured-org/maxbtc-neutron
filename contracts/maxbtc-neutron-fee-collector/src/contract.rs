@@ -38,10 +38,14 @@ pub fn instantiate(
 
     let core_contract = deps.api.addr_validate(&msg.core_contract)?;
 
+    if msg.collection_period_hours < 1 {
+        return Err(ContractError::InvalidCollectionPeriod {});
+    }
+
     let config = Config {
         core_contract: core_contract.clone(),
         fee_apy_reduction_percentage: msg.fee_apy_reduction_percentage,
-        collection_period_seconds: msg.collection_period_seconds,
+        collection_period_seconds: msg.collection_period_hours * 60 * 60,
         fee_denom: msg.fee_denom,
         maxbtc_decimals: msg.maxbtc_decimals,
     };
@@ -231,6 +235,9 @@ pub fn execute_update_config(
         );
     }
     if let Some(new_period) = collection_period_hours {
+        if new_period < 1 {
+            return Err(ContractError::InvalidCollectionPeriod {});
+        }
         config.collection_period_seconds = new_period * 60 * 60;
         response =
             response.add_attribute("collection_period_hours_updated", new_period.to_string());
