@@ -54,6 +54,9 @@ pub enum ContractError {
     #[error("Wrong redemption token denom or no redemption tokens attached")]
     WrongRedemptionTokenOrNoFunds {},
 
+    #[error("Deposit cost must be less than one")]
+    DepositCostTooHigh {},
+
     #[error("{0}")]
     DecimalRangeExceeded(#[from] DecimalRangeExceeded),
 
