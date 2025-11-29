@@ -606,7 +606,7 @@ pub(crate) fn execute_withdraw(
         msg: to_json_binary(&TokenExecuteMsg::Mint {
             amount: Coin {
                 amount: minted_redemption,
-                denom: redemption_denom_full.clone(),
+                denom: redemption_denom_full,
             },
             recipient: info.sender.to_string(),
         })?,
