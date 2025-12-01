@@ -17,6 +17,19 @@ export type Addr = string;
  */
 export type Decimal = string;
 /**
+ * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
+ */
+export type Expiration =
+  | {
+      at_height: number;
+    }
+  | {
+      at_time: Timestamp;
+    }
+  | {
+      never: {};
+    };
+/**
  * A point in time in nanosecond precision.
  *
  * This type can represent times from 1970-01-01T00:00:00Z to 2554-07-21T23:34:33Z.
@@ -54,10 +67,22 @@ export type Uint64 = string;
  * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
  */
 export type Uint128 = string;
+/**
+ * Actions that can be taken to alter the contract's ownership
+ */
+export type UpdateOwnershipArgs =
+  | {
+      transfer_ownership: {
+        expiry?: Expiration | null;
+        new_owner: string;
+      };
+    }
+  | "accept_ownership"
+  | "renounce_ownership";
 
 export interface MaxbtcNeutronFeeCollectorSchema {
-  responses: Config | State;
-  execute: ClaimArgs | UpdateConfigArgs;
+  responses: Config | OwnershipForString | State;
+  execute: ClaimArgs | UpdateConfigArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -82,10 +107,23 @@ export interface Config {
    * The number of decimals for the maxBTC token.
    */
   maxbtc_decimals: number;
+}
+/**
+ * The contract's ownership info
+ */
+export interface OwnershipForString {
   /**
-   * The address authorized to claim fees and update the config.
+   * The contract's current owner. `None` if the ownership has been renounced.
    */
-  owner: Addr;
+  owner?: string | null;
+  /**
+   * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
+   */
+  pending_expiry?: Expiration | null;
+  /**
+   * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
+   */
+  pending_owner?: string | null;
 }
 export interface State {
   /**
@@ -109,7 +147,6 @@ export interface UpdateConfigArgs {
   collection_period_hours?: number | null;
   core_contract?: string | null;
   fee_apy_reduction_percentage?: Decimal | null;
-  owner?: string | null;
 }
 export interface InstantiateMsg {
   collection_period_seconds: number;
@@ -174,6 +211,9 @@ export class Client {
   queryState = async(): Promise<State> => {
     return this.client.queryContractSmart(this.contractAddress, { state: {} });
   }
+  queryOwnership = async(): Promise<OwnershipForString> => {
+    return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
+  }
   collectFee = async(sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.collectFeeMsg(), fee || "auto", memo, funds);
@@ -189,4 +229,9 @@ export class Client {
     return this.client.execute(sender, this.contractAddress, this.updateConfigMsg(args), fee || "auto", memo, funds);
   }
   updateConfigMsg = (args: UpdateConfigArgs): { update_config: UpdateConfigArgs } => { return { update_config: args }; }
+  updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
+  }
+  updateOwnershipMsg = (args: UpdateOwnershipArgs): { update_ownership: UpdateOwnershipArgs } => { return { update_ownership: args }; }
 }

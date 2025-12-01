@@ -8,6 +8,7 @@
     "test:core": "vitest --run core.test.ts --bail 1",
     "test:core:migration": "vitest --run core-migration.test.ts --bail 1",
     "test:coinfactory-wrapper": "vitest --run coinfactory-wrapper.test.ts --bail 1",
+    "test:fee-collector:migration": "vitest --run fee-collector-migration.test.ts --bail 1",
     "debug": "vitest --inspect-brk --bail 1 --threads false --run core.test.ts",
     "watch": "vitest",
     "build-ts-client": "ts-node ./src/rebuild-client.ts",
