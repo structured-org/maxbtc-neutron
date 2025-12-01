@@ -824,7 +824,7 @@ fn check_deposit_cap(
     Ok(())
 }
 
-/// Ensures that `recipient` is present in the *allow-list* by querying
+/// Ensures that `user` is present in the *allow-list* by querying
 /// the allow-list contract.
 fn check_allowlist(deps: &Deps, cfg: &Config, user: String) -> Result<(), ContractError> {
     deps.api.addr_validate(&user)?;
