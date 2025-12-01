@@ -826,13 +826,13 @@ fn check_deposit_cap(
 
 /// Ensures that `recipient` is present in the *allow-list* by querying
 /// the allow-list contract.
-fn check_allowlist(deps: &Deps, cfg: &Config, recipient: String) -> Result<(), ContractError> {
-    deps.api.addr_validate(&recipient)?;
+fn check_allowlist(deps: &Deps, cfg: &Config, user: String) -> Result<(), ContractError> {
+    deps.api.addr_validate(&user)?;
     let is_allowed: bool =
         deps.querier
             .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
                 contract_addr: cfg.allowlist_contract.to_string(),
-                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: recipient })?,
+                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: user })?,
             }))?;
     if !is_allowed {
         Err(ContractError::AddressNotAllowed {})
