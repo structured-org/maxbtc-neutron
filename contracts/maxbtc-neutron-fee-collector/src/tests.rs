@@ -16,7 +16,6 @@ use cosmwasm_std::{
 use maxbtc_base::msg::core::{ExecuteMsg as CoreExecuteMsg, QueryMsg as CoreQueryMsg};
 
 #[cw_serde]
-#[non_exhaustive]
 pub struct SupplyResponse {
     /// Always returns a Coin with the requested denom.
     /// This will be of zero amount if the denom does not exist.
