@@ -1,6 +1,6 @@
 use cosmwasm_schema::write_api;
 
-use maxbtc_neutron_core::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use maxbtc_base::msg::core::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     write_api! {

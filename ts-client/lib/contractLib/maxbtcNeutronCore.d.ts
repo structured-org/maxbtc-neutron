@@ -1,17 +1,33 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate";
 import { StdFee } from "@cosmjs/amino";
 /**
+ * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u128` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
+ *
+ * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
+ *
+ * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
+ */
+export type Uint128 = string;
+/**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
+export type ContractState = "idle" | "deposit_neutron" | "deposit_pending" | "deposit_j_l_p" | "withdraw_j_l_p" | "withdraw_pending" | "withdraw_neutron";
 /**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal1 = string;
+export type ArrayOfBatch = Batch2[];
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -47,20 +63,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
- *
- * # Examples
- *
- * Use `from` to create instances of this and `u128` to get the value out:
- *
- * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
- *
- * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
- *
- * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
- */
-export type Uint128 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs = {
@@ -69,18 +71,38 @@ export type UpdateOwnershipArgs = {
         new_owner: string;
     };
 } | "accept_ownership" | "renounce_ownership";
-/**
- * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
- *
- * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
- */
-export type Binary = string;
 export interface MaxbtcNeutronCoreSchema {
-    responses: ConfigResponse | Decimal1 | OwnershipForString | SimulateDepositResponse;
-    query: SimulateDepositArgs;
+    responses: Batch | ConfigResponse | ContractState | Decimal1 | Batch1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch3;
+    query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
     execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch {
+    batch_id: number;
+    /**
+     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+     */
+    btc_requested: Uint128;
+    /**
+     * If in FINALIZED state, how much BTC was actually collected?
+     */
+    collected_amount: Uint128;
+    /**
+     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+     */
+    collector_historical_balance: Uint128;
+    /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
+     * The amount of maxBTC burned for this batch
+     */
+    maxbtc_burned: Uint128;
 }
 /**
  * Response for querying config
@@ -88,9 +110,63 @@ export interface MaxbtcNeutronCoreSchema {
 export interface ConfigResponse {
     deposit_cost: Decimal;
     deposit_denom: string;
-    deposit_flush_period: number;
     fee_collector_contract: string;
-    maxbtc_denom: string;
+    operator: string;
+    waitosaur_observer_contract: string;
+    waitsaur_holder_contract: string;
+    withdrawal_manager_contract: string;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch1 {
+    batch_id: number;
+    /**
+     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+     */
+    btc_requested: Uint128;
+    /**
+     * If in FINALIZED state, how much BTC was actually collected?
+     */
+    collected_amount: Uint128;
+    /**
+     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+     */
+    collector_historical_balance: Uint128;
+    /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
+     * The amount of maxBTC burned for this batch
+     */
+    maxbtc_burned: Uint128;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch2 {
+    batch_id: number;
+    /**
+     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+     */
+    btc_requested: Uint128;
+    /**
+     * If in FINALIZED state, how much BTC was actually collected?
+     */
+    collected_amount: Uint128;
+    /**
+     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+     */
+    collector_historical_balance: Uint128;
+    /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
+     * The amount of maxBTC burned for this batch
+     */
+    maxbtc_burned: Uint128;
 }
 /**
  * The contract's ownership info
@@ -111,6 +187,39 @@ export interface OwnershipForString {
 }
 export interface SimulateDepositResponse {
     minted_amount: Uint128;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch3 {
+    batch_id: number;
+    /**
+     * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+     */
+    btc_requested: Uint128;
+    /**
+     * If in FINALIZED state, how much BTC was actually collected?
+     */
+    collected_amount: Uint128;
+    /**
+     * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+     */
+    collector_historical_balance: Uint128;
+    /**
+     * Number of decimals carried by the `deposit_denom` asset
+     */
+    deposit_decimals: number;
+    /**
+     * The amount of maxBTC burned for this batch
+     */
+    maxbtc_burned: Uint128;
+}
+export interface FinalizedBatchesArgs {
+    limit?: number | null;
+    start_after?: Uint64 | null;
+}
+export interface FinalizedBatchArgs {
+    batch_id: number;
 }
 export interface SimulateDepositArgs {
     amount: Uint128;
@@ -159,10 +268,6 @@ export interface InstantiateMsg {
      */
     deposit_denom: string;
     /**
-     * Minimum number of seconds that must elapse between two deposit-flush operations
-     */
-    deposit_flush_period: number;
-    /**
      * Contract that forwards freshly-received deposits to the custody chain.
      */
     deposit_forwarder_contract: string;
@@ -175,50 +280,73 @@ export interface InstantiateMsg {
      */
     exchange_rate_provider_contract: string;
     /**
-     * Instantiation parameters for the fee collector.
+     * Admin contract with high privileges
      */
-    fee_collector_params: FeeMinterParams;
+    factory_contract: string;
     /**
-     * The token-factory sub-denom used for the maxBTC token
+     * This contract is allowed to mint maxBTC to take a fee on the accrued protocol APR
      */
-    maxbtc_denom: string;
+    fee_collector_contract: string;
+    /**
+     * Operator address
+     */
+    operator: string;
     owner: string;
-}
-/**
- * New struct to hold parameters for instantiating the fee collector contract.
- */
-export interface FeeMinterParams {
     /**
-     * The code ID of the fee collector contract wasm.
+     * Contract that owns and creates token factory tokens.
      */
-    code_id: number;
+    token_contract: string;
     /**
-     * The duration in seconds for each fee collection period.
+     * Address of the waitosaur holder contract
      */
-    collection_period_seconds: number;
+    waitosaur_holder_contract: string;
     /**
-     * The percentage of APY to be taken as a fee.
+     * Address of the waitosaur contract
      */
-    fee_apy_reduction_percentage: Decimal;
+    waitosaur_observer_contract: string;
     /**
-     * A unique salt for generating a predictable address with Instantiate2.
+     * Address of the withdrawal manager contract
      */
-    salt: Binary;
+    withdrawal_manager_contract: string;
 }
 export declare class Client {
     private readonly client;
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
-    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    queryContractState: () => Promise<ContractState>;
+    queryActiveBatch: () => Promise<Batch>;
+    queryWithdrawingBatch: () => Promise<Batch>;
+    queryFinalizedBatches: (args: FinalizedBatchesArgs) => Promise<ArrayOfBatch>;
+    queryFinalizedBatch: (args: FinalizedBatchArgs) => Promise<Batch>;
     queryConfig: () => Promise<ConfigResponse>;
     queryExchangeRate: () => Promise<Decimal>;
     querySimulateDeposit: (args: SimulateDepositArgs) => Promise<SimulateDepositResponse>;
     queryOwnership: () => Promise<OwnershipForString>;
+    tick: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    tickMsg: () => {
+        tick: {};
+    };
     deposit: (sender: string, args: DepositArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
-    flushDeposits: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    depositMsg: (args: DepositArgs) => {
+        deposit: DepositArgs;
+    };
+    withdraw: (sender: string, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    withdrawMsg: () => {
+        withdraw: {};
+    };
     updateConfig: (sender: string, args: UpdateConfigArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateConfigMsg: (args: UpdateConfigArgs) => {
+        update_config: UpdateConfigArgs;
+    };
     mintFee: (sender: string, args: MintFeeArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    mintFeeMsg: (args: MintFeeArgs) => {
+        mint_fee: MintFeeArgs;
+    };
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateOwnershipMsg: (args: UpdateOwnershipArgs) => {
+        update_ownership: UpdateOwnershipArgs;
+    };
 }

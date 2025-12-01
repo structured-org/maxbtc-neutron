@@ -1,12 +1,9 @@
+use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Decimal, Timestamp};
 use cw_storage_plus::Item;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct Config {
-    /// The address authorized to claim fees and update the config.
-    pub owner: Addr,
     /// The address of the maxbtc-neutron-core contract.
     pub core_contract: Addr,
     /// The percentage of the APY gain to be collected as a fee (e.g., 0.1 for 10%).
@@ -19,7 +16,7 @@ pub struct Config {
     pub maxbtc_decimals: u32,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[cw_serde]
 pub struct State {
     /// The timestamp of the last successful fee collection.
     pub last_collection_timestamp: Timestamp,
@@ -27,5 +24,5 @@ pub struct State {
     pub last_exchange_rate: Decimal,
 }
 
-pub const CONFIG: Item<Config> = Item::new("config");
+pub const CONFIG: Item<Config> = Item::new("config_v2");
 pub const STATE: Item<State> = Item::new("state");

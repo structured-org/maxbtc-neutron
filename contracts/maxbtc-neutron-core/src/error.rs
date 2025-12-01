@@ -1,6 +1,7 @@
 use cosmwasm_std::{
     DecimalRangeExceeded, DivideByZeroError, Instantiate2AddressError, OverflowError, StdError,
 };
+use cw_utils::PaymentError;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -22,6 +23,9 @@ pub enum ContractError {
 
     #[error("Invalid deposit denom. Expected {expected}, got {received}")]
     InvalidDepositDenom { expected: String, received: String },
+
+    #[error("Invalid mint denom. Expected {expected}, got {received}")]
+    InvalidMintDenom { expected: String, received: String },
 
     #[error("Invalid deposit amount")]
     InvalidDepositAmount {},
@@ -50,6 +54,9 @@ pub enum ContractError {
     #[error("Wrong redemption token denom or no redemption tokens attached")]
     WrongRedemptionTokenOrNoFunds {},
 
+    #[error("Deposit cost must be less than one")]
+    DepositCostTooHigh {},
+
     #[error("{0}")]
     DecimalRangeExceeded(#[from] DecimalRangeExceeded),
 
@@ -64,6 +71,31 @@ pub enum ContractError {
 
     #[error("{0}")]
     DivideByZeroError(#[from] DivideByZeroError),
+
     #[error("{0}")]
     Instantiate2Error(Instantiate2AddressError),
+
+    #[error("Flush deposit is allowed in DepositNeutron state only")]
+    FlushDepositAllowedInDepositNeutron {},
+
+    #[error("Waitosaur is locked")]
+    WaitosaurLocked {},
+
+    #[error("{0}")]
+    PaymentError(#[from] PaymentError),
+
+    #[error("Can't migrate from {storage_contract_name} to {contract_name}")]
+    MigrationError {
+        storage_contract_name: String,
+        contract_name: String,
+    },
+
+    #[error("Semver parsing error: {0}")]
+    SemVer(String),
+}
+
+impl From<semver::Error> for ContractError {
+    fn from(err: semver::Error) -> Self {
+        Self::SemVer(err.to_string())
+    }
 }

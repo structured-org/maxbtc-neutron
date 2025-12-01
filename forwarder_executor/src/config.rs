@@ -71,10 +71,10 @@ impl Config {
 
         // Helper to parse bools
         let parse_bool = |var_name: &str| -> Result<bool, AppError> {
-            let val_str = env::var(var_name)
-                .map_err(|_| AppError::Config(format!("{} not set", var_name)))?;
+            let val_str =
+                env::var(var_name).map_err(|_| AppError::Config(format!("{var_name} not set")))?;
             bool::from_str(&val_str)
-                .map_err(|_| AppError::Config(format!("{} must be 'true' or 'false'", var_name)))
+                .map_err(|_| AppError::Config(format!("{var_name} must be 'true' or 'false'")))
         };
 
         let allow_multi_tx = parse_bool("SKIP_ALLOW_MULTI_TX")?;
