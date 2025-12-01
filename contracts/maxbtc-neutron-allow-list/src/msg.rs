@@ -10,8 +10,11 @@ pub struct InstantiateMsg {
 #[cw_ownable_execute]
 #[cw_serde]
 pub enum ExecuteMsg {
-    UpdateAllowList {
-        allow_list: Vec<String>,
+    Allow {
+        addresses: Vec<String>,
+    },
+    Deny {
+        addresses: Vec<String>,
     },
     UpdateZkMeSettings {
         settings: Option<ZkMeSettingsUpdate>,
@@ -49,7 +52,10 @@ pub struct ZkMeHasApprovedResponse {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(Vec<String>)]
-    AllowList {},
+    AllowList {
+        limit: Option<u32>,
+        start_after: Option<String>,
+    },
     #[returns(bool)]
     IsAddressAllowed { address: String },
 }
