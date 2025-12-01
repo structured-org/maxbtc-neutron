@@ -476,7 +476,7 @@ pub(crate) fn execute_deposit(
     // We can't deposit if the total AUM are greater than the cap.
     check_deposit_cap(&deps.as_ref(), &cfg, Some(amount))?;
     // We can't deposit if the recipient address is not allowlisted.
-    check_deposits_allowlist(&deps.as_ref(), &cfg, recipient.clone())?;
+    check_allowlist(&deps.as_ref(), &cfg, recipient.clone())?;
 
     // Calculate the amount of maxBTC to mint.
     let minted_amount = calculate_mint_amount(deps.as_ref(), amount)?;
@@ -533,6 +533,9 @@ pub(crate) fn execute_withdraw(
     if cfg.paused {
         return Err(ContractError::ContractPaused {});
     }
+
+    // We can't withdraw if the sender/recipient address is not allowlisted.
+    check_allowlist(&deps.as_ref(), &cfg, info.sender.to_string())?;
 
     let mut msgs = vec![];
 
@@ -853,19 +856,15 @@ fn check_deposit_cap(
     Ok(())
 }
 
-/// Ensures that `recipient` is present in the *allow-list* for deposits by querying
+/// Ensures that `user` is present in the *allow-list* by querying
 /// the allow-list contract.
-fn check_deposits_allowlist(
-    deps: &Deps,
-    cfg: &Config,
-    recipient: String,
-) -> Result<(), ContractError> {
-    deps.api.addr_validate(&recipient)?;
+fn check_allowlist(deps: &Deps, cfg: &Config, user: String) -> Result<(), ContractError> {
+    deps.api.addr_validate(&user)?;
     let is_allowed: bool =
         deps.querier
             .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
                 contract_addr: cfg.allowlist_contract.to_string(),
-                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: recipient })?,
+                msg: to_json_binary(&AllowlistQueryMsg::IsAddressAllowed { address: user })?,
             }))?;
     if !is_allowed {
         Err(ContractError::AddressNotAllowed {})

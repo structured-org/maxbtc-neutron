@@ -258,6 +258,29 @@ fn test_withdraw_paused() {
 }
 
 #[test]
+fn test_withdraw_not_allowlisted() {
+    let (mut deps, env, _) = setup_contract();
+    deps.querier.set_allowed_recipient(false);
+    let withdraw_amount: Uint128 = Uint128::from(1_000_000u128);
+    let info = message_info(
+        &deps.api.addr_make("depositor"),
+        &[coin(
+            withdraw_amount.u128(),
+            "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc",
+        )],
+    );
+
+    // Act
+    let err = do_withdraw(deps.as_mut(), env.clone(), info.clone()).unwrap_err();
+
+    // Assert
+    match err {
+        ContractError::AddressNotAllowed {} => (),
+        e => panic!("Unexpected error: {e:?}"),
+    }
+}
+
+#[test]
 fn test_withdraw_wrong_denom() {
     // Arrange
     let (mut deps, env, _) = setup_contract();
