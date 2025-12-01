@@ -10,7 +10,6 @@ use std::marker::PhantomData;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub struct BalanceResponse {
     /// Always returns a Coin with the requested denom.
     /// This may be of 0 amount if no such funds.
@@ -19,7 +18,6 @@ pub struct BalanceResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub struct SupplyResponse {
     /// Always returns a Coin with the requested denom.
     /// This will be of zero amount if the denom does not exist.
