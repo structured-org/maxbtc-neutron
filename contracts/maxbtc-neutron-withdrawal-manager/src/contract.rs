@@ -131,17 +131,13 @@ pub(crate) fn execute_claim(
     let batch_id = get_batch_id_from_redemption_coin(&cfg, redemption_coin.clone())?;
 
     // Check the batch is in FINALIZED state
-    let res: Vec<Batch> = deps
+    let batch: Batch = deps
         .querier
         .query(&QueryRequest::Wasm(cosmwasm_std::WasmQuery::Smart {
             contract_addr: cfg.core_contract.to_string(),
-            msg: to_json_binary(&CoreQueryMsg::FinalizedBatches {
-                batch_id: Some(batch_id),
-            })?,
+            msg: to_json_binary(&CoreQueryMsg::FinalizedBatch { batch_id })?,
         }))
         .map_err(|_| ContractError::BatchIsNotWithdrawn {})?;
-
-    let batch = res.first().ok_or(ContractError::BatchIsNotWithdrawn {})?;
 
     // The user’s portion = collected_amount * (user_redemption_tokens / total_redemption_tokens)
     let redemption_token_supply = deps.querier.query_supply(redemption_coin.denom.clone())?;

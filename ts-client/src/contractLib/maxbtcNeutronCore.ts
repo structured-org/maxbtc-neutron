@@ -34,7 +34,7 @@ export type ContractState =
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal1 = string;
-export type ArrayOfBatch = Batch1[];
+export type ArrayOfBatch = Batch2[];
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -91,11 +91,12 @@ export interface MaxbtcNeutronCoreSchema {
     | ConfigResponse
     | ContractState
     | Decimal1
+    | Batch1
     | ArrayOfBatch
     | OwnershipForString
     | SimulateDepositResponse
-    | Batch2;
-  query: FinalizedBatchesArgs | SimulateDepositArgs;
+    | Batch3;
+  query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
   execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
@@ -165,26 +166,6 @@ export interface Batch1 {
   maxbtc_burned: Uint128;
 }
 /**
- * The contract's ownership info
- */
-export interface OwnershipForString {
-  /**
-   * The contract's current owner. `None` if the ownership has been renounced.
-   */
-  owner?: string | null;
-  /**
-   * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
-   */
-  pending_expiry?: Expiration | null;
-  /**
-   * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
-   */
-  pending_owner?: string | null;
-}
-export interface SimulateDepositResponse {
-  minted_amount: Uint128;
-}
-/**
  * Each batch has a batch_id, which increments.
  */
 export interface Batch2 {
@@ -210,8 +191,58 @@ export interface Batch2 {
    */
   maxbtc_burned: Uint128;
 }
+/**
+ * The contract's ownership info
+ */
+export interface OwnershipForString {
+  /**
+   * The contract's current owner. `None` if the ownership has been renounced.
+   */
+  owner?: string | null;
+  /**
+   * The deadline for the pending owner to accept the ownership. `None` if there isn't a pending ownership transfer, or if a transfer exists and it doesn't have a deadline.
+   */
+  pending_expiry?: Expiration | null;
+  /**
+   * The account who has been proposed to take over the ownership. `None` if there isn't a pending ownership transfer.
+   */
+  pending_owner?: string | null;
+}
+export interface SimulateDepositResponse {
+  minted_amount: Uint128;
+}
+/**
+ * Each batch has a batch_id, which increments.
+ */
+export interface Batch3 {
+  batch_id: number;
+  /**
+   * If the batch is in WITHDRAWING or FINALIZED, how much BTC was requested?
+   */
+  btc_requested: Uint128;
+  /**
+   * If in FINALIZED state, how much BTC was actually collected?
+   */
+  collected_amount: Uint128;
+  /**
+   * Historical collector balance recorded at the time the batch transitions to WITHDRAWING
+   */
+  collector_historical_balance: Uint128;
+  /**
+   * Number of decimals carried by the `deposit_denom` asset
+   */
+  deposit_decimals: number;
+  /**
+   * The amount of maxBTC burned for this batch
+   */
+  maxbtc_burned: Uint128;
+}
 export interface FinalizedBatchesArgs {
-  batch_id?: number | null;
+  limit?: number | null;
+  start_after?: Uint64 | null;
+}
+export interface FinalizedBatchArgs {
+  batch_id: number;
 }
 export interface SimulateDepositArgs {
   amount: Uint128;
@@ -361,6 +392,9 @@ export class Client {
   }
   queryFinalizedBatches = async(args: FinalizedBatchesArgs): Promise<ArrayOfBatch> => {
     return this.client.queryContractSmart(this.contractAddress, { finalized_batches: args });
+  }
+  queryFinalizedBatch = async(args: FinalizedBatchArgs): Promise<Batch> => {
+    return this.client.queryContractSmart(this.contractAddress, { finalized_batch: args });
   }
   queryConfig = async(): Promise<ConfigResponse> => {
     return this.client.queryContractSmart(this.contractAddress, { config: {} });
