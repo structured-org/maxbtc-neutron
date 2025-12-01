@@ -88,8 +88,11 @@ pub fn execute(
             collection_period_hours,
         ),
         ExecuteMsg::UpdateOwnership(action) => {
-            cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
-            Ok(Response::new().add_attribute("action", "update_ownership"))
+            let ownership =
+                cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
+            Ok(Response::new()
+                .add_attribute("action", "update_ownership")
+                .add_attributes(ownership.into_attributes()))
         }
     }
 }
