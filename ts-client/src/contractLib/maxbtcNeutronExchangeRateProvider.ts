@@ -1,11 +1,6 @@
-import {
-  CosmWasmClient,
-  SigningCosmWasmClient,
-  ExecuteResult,
-  InstantiateResult,
-} from '@cosmjs/cosmwasm-stargate';
-import { StdFee } from '@cosmjs/amino';
-import { Coin } from '@cosmjs/amino';
+import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
+import { StdFee } from "@cosmjs/amino";
+import { Coin } from "@cosmjs/amino";
 /**
  * An implementation of i256 that is using strings for JSON encoding/decoding, such that the full i256 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
  *
@@ -22,12 +17,6 @@ export type Int256 = string;
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
-/**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal1 = string;
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -75,12 +64,12 @@ export type UpdateOwnershipArgs =
         new_owner: string;
       };
     }
-  | 'accept_ownership'
-  | 'renounce_ownership';
+  | "accept_ownership"
+  | "renounce_ownership";
 
 export interface MaxbtcNeutronExchangeRateProviderSchema {
-  responses: Decimal | GetTwaerResponse | OwnershipForString;
-  execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
+  responses: GetAumResponse | GetTwaerResponse | OwnershipForString;
+  execute: UpdateExchangeRateArgs | UpdateAumArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -99,7 +88,7 @@ export interface GetAumResponse {
 }
 export interface GetTwaerResponse {
   published_at: number;
-  twaer: Decimal1;
+  twaer: Decimal;
 }
 /**
  * The contract's ownership info
@@ -119,7 +108,7 @@ export interface OwnershipForString {
   pending_owner?: string | null;
 }
 export interface UpdateExchangeRateArgs {
-  rate: Decimal1;
+  rate: Decimal;
 }
 export interface UpdateAumArgs {
   aum_in_wbtc: Int256;
@@ -129,8 +118,9 @@ export interface InstantiateMsg {
   owner: string;
 }
 
+
 function isSigningCosmWasmClient(
-  client: CosmWasmClient | SigningCosmWasmClient,
+  client: CosmWasmClient | SigningCosmWasmClient
 ): client is SigningCosmWasmClient {
   return 'execute' in client;
 }
@@ -138,15 +128,12 @@ function isSigningCosmWasmClient(
 export class Client {
   private readonly client: CosmWasmClient | SigningCosmWasmClient;
   contractAddress: string;
-  constructor(
-    client: CosmWasmClient | SigningCosmWasmClient,
-    contractAddress: string,
-  ) {
+  constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string) {
     this.client = client;
     this.contractAddress = contractAddress;
   }
   mustBeSigningClient(): Error {
-    return new Error('This client is not a SigningCosmWasmClient');
+    return new Error("This client is not a SigningCosmWasmClient");
   }
   static async instantiate(
     client: SigningCosmWasmClient,
@@ -159,8 +146,7 @@ export class Client {
     admin?: string,
   ): Promise<InstantiateResult> {
     const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
-      ...(admin && { admin: admin }),
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
@@ -175,103 +161,33 @@ export class Client {
     initCoins?: readonly Coin[],
     admin?: string,
   ): Promise<InstantiateResult> {
-    const res = await client.instantiate2(
-      sender,
-      codeId,
-      salt,
-      initMsg,
-      label,
-      fees,
-      {
-        ...(initCoins && initCoins.length && { funds: initCoins }),
-        ...(admin && { admin: admin }),
-      },
-    );
+    const res = await client.instantiate2(sender, codeId, salt, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
+    });
     return res;
   }
-  queryGetTwaer = async (): Promise<GetTwaerResponse> => {
-    return this.client.queryContractSmart(this.contractAddress, {
-      get_twaer: {},
-    });
-  };
-  queryExchangeRate = async (): Promise<Decimal> => {
-    return this.client.queryContractSmart(this.contractAddress, {
-      exchange_rate: {},
-    });
-  };
-  queryOwnership = async (): Promise<OwnershipForString> => {
-    return this.client.queryContractSmart(this.contractAddress, {
-      ownership: {},
-    });
-  };
-  updateExchangeRate = async (
-    sender: string,
-    args: UpdateExchangeRateArgs,
-    fee?: number | StdFee | 'auto',
-    memo?: string,
-    funds?: Coin[],
-  ): Promise<ExecuteResult> => {
-    if (!isSigningCosmWasmClient(this.client)) {
-      throw this.mustBeSigningClient();
-    }
-    return this.client.execute(
-      sender,
-      this.contractAddress,
-      this.updateExchangeRateMsg(args),
-      fee || 'auto',
-      memo,
-      funds,
-    );
-  };
-  updateExchangeRateMsg = (
-    args: UpdateExchangeRateArgs,
-  ): { update_exchange_rate: UpdateExchangeRateArgs } => {
-    return { update_exchange_rate: args };
-  };
-  updateAum = async (
-    sender: string,
-    args: UpdateAumArgs,
-    fee?: number | StdFee | 'auto',
-    memo?: string,
-    funds?: Coin[],
-  ): Promise<ExecuteResult> => {
-    if (!isSigningCosmWasmClient(this.client)) {
-      throw this.mustBeSigningClient();
-    }
-    return this.client.execute(
-      sender,
-      this.contractAddress,
-      this.updateAumMsg(args),
-      fee || 'auto',
-      memo,
-      funds,
-    );
-  };
-  updateAumMsg = (args: UpdateAumArgs): { update_aum: UpdateAumArgs } => {
-    return { update_aum: args };
-  };
-  updateOwnership = async (
-    sender: string,
-    args: UpdateOwnershipArgs,
-    fee?: number | StdFee | 'auto',
-    memo?: string,
-    funds?: Coin[],
-  ): Promise<ExecuteResult> => {
-    if (!isSigningCosmWasmClient(this.client)) {
-      throw this.mustBeSigningClient();
-    }
-    return this.client.execute(
-      sender,
-      this.contractAddress,
-      this.updateOwnershipMsg(args),
-      fee || 'auto',
-      memo,
-      funds,
-    );
-  };
-  updateOwnershipMsg = (
-    args: UpdateOwnershipArgs,
-  ): { update_ownership: UpdateOwnershipArgs } => {
-    return { update_ownership: args };
-  };
+  queryGetTwaer = async(): Promise<GetTwaerResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_twaer: {} });
+  }
+  queryGetAum = async(): Promise<GetAumResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_aum: {} });
+  }
+  queryOwnership = async(): Promise<OwnershipForString> => {
+    return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
+  }
+  updateExchangeRate = async(sender:string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateExchangeRateMsg(args), fee || "auto", memo, funds);
+  }
+  updateExchangeRateMsg = (args: UpdateExchangeRateArgs): { update_exchange_rate: UpdateExchangeRateArgs } => { return { update_exchange_rate: args }; }
+  updateAum = async(sender:string, args: UpdateAumArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateAumMsg(args), fee || "auto", memo, funds);
+  }
+  updateAumMsg = (args: UpdateAumArgs): { update_aum: UpdateAumArgs } => { return { update_aum: args }; }
+  updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
+  }
+  updateOwnershipMsg = (args: UpdateOwnershipArgs): { update_ownership: UpdateOwnershipArgs } => { return { update_ownership: args }; }
 }
