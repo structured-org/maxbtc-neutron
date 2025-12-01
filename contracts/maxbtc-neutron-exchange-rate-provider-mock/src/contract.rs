@@ -1,14 +1,18 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{
+    to_json_binary, Binary, Decimal, Deps, DepsMut, Env, Int256, MessageInfo, Response,
+};
 use cw2::set_contract_version;
 use cw_ownable::assert_owner;
 
 use crate::error::{ContractError, ContractResult};
-use crate::msg::{ExecuteMsg, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg};
-use crate::state::EXCHANGE_RATE;
+use crate::msg::{
+    ExecuteMsg, GetAumResponse, GetTwaerResponse, InstantiateMsg, MigrateMsg, QueryMsg,
+};
+use crate::state::{AUM, EXCHANGE_RATE};
 
-const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider";
+const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-exchange-rate-provider-mock";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -21,6 +25,13 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     cw_ownable::initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
     EXCHANGE_RATE.save(deps.storage, &Decimal::one())?;
+    AUM.save(
+        deps.storage,
+        &GetAumResponse {
+            aum_in_wbtc: Int256::zero(),
+            decimals: 8,
+        },
+    )?;
     Ok(Response::new().add_attribute("action", "instantiate"))
 }
 
@@ -38,6 +49,23 @@ pub fn execute(
             Ok(Response::new()
                 .add_attribute("action", "update_exchange_rate")
                 .add_attribute("rate", rate.to_string()))
+        }
+        ExecuteMsg::UpdateAum {
+            aum_in_wbtc,
+            decimals,
+        } => {
+            assert_owner(deps.storage, &info.sender)?;
+            AUM.save(
+                deps.storage,
+                &GetAumResponse {
+                    aum_in_wbtc,
+                    decimals,
+                },
+            )?;
+            Ok(Response::new()
+                .add_attribute("action", "update_aum")
+                .add_attribute("aum_in_wbtc", aum_in_wbtc.to_string())
+                .add_attribute("decimals", decimals.to_string()))
         }
 
         ExecuteMsg::UpdateOwnership(action) => {
@@ -57,6 +85,7 @@ pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> ContractResult<Binary> {
             twaer: EXCHANGE_RATE.load(deps.storage)?,
             published_at: env.block.time.seconds(),
         })?,
+        QueryMsg::GetAum {} => to_json_binary(&AUM.load(deps.storage)?)?,
     })
 }
 

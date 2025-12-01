@@ -1,10 +1,10 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage};
 use cosmwasm_std::{
     coin, from_json, to_json_binary, Addr, BankQuery, Binary, Checksum, CodeInfoResponse, Coin,
-    ContractResult, Decimal, Empty, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError,
-    SystemResult, Uint128, WasmQuery,
+    ContractResult, Decimal, Empty, Int256, OwnedDeps, Querier, QuerierResult, QueryRequest,
+    SystemError, SystemResult, Uint128, WasmQuery,
 };
-use maxbtc_base::msg::core::WaitosaurObserverQueryMsg;
+use maxbtc_base::msg::core::{GetAumResponse, WaitosaurObserverQueryMsg};
 use maxbtc_base::msg::{
     core::{AllowlistQueryMsg, ExchangeRateProviderQueryMsg, GetTwaerResponse},
     token::QueryMsg as TokenConfigQueryMsg,
@@ -53,6 +53,8 @@ pub struct WasmMockQuerier {
     denom: String,
 
     exchange_rate: Decimal,
+
+    aum_in_wbtc: Int256,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
@@ -85,6 +87,7 @@ impl WasmMockQuerier {
             waitosaur_holder_state: WaitsaurHolderState::Unlocked {},
             denom: "maxBTC".to_string(),
             exchange_rate: Decimal::one(),
+            aum_in_wbtc: Int256::zero(),
             waitosaur_observer_state: WaitosaurObserverState::Unlocked {},
         }
     }
@@ -112,6 +115,10 @@ impl WasmMockQuerier {
 
     pub fn set_exchange_rate(&mut self, exchange_rate: Decimal) {
         self.exchange_rate = exchange_rate;
+    }
+
+    pub fn set_aum_in_wbtc(&mut self, aum_in_wbtc: Int256) {
+        self.aum_in_wbtc = aum_in_wbtc;
     }
 
     // ---------- Implementation of the Querier trait ----------
@@ -180,6 +187,16 @@ impl WasmMockQuerier {
                             to_json_binary(&GetTwaerResponse {
                                 twaer: val,
                                 published_at: 1234567890,
+                            })
+                            .unwrap(),
+                        ))
+                    }
+                    ExchangeRateProviderQueryMsg::GetAum {} => {
+                        let val = self.aum_in_wbtc;
+                        SystemResult::Ok(ContractResult::Ok(
+                            to_json_binary(&GetAumResponse {
+                                aum_in_wbtc: val,
+                                decimals: 8,
                             })
                             .unwrap(),
                         ))

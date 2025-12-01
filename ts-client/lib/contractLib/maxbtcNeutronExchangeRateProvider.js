@@ -29,6 +29,9 @@ class Client {
     queryGetTwaer = async () => {
         return this.client.queryContractSmart(this.contractAddress, { get_twaer: {} });
     };
+    queryGetAum = async () => {
+        return this.client.queryContractSmart(this.contractAddress, { get_aum: {} });
+    };
     queryOwnership = async () => {
         return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
@@ -39,6 +42,13 @@ class Client {
         return this.client.execute(sender, this.contractAddress, this.updateExchangeRateMsg(args), fee || "auto", memo, funds);
     };
     updateExchangeRateMsg = (args) => { return { update_exchange_rate: args }; };
+    updateAum = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.updateAumMsg(args), fee || "auto", memo, funds);
+    };
+    updateAumMsg = (args) => { return { update_aum: args }; };
     updateOwnership = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

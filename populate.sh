@@ -190,7 +190,7 @@ run_setup() {
 
     # 1. Fee Collector Contract
     echo "--- [1/6] Uploading Fee Collector Contract ---"
-    EXCHANGE_RATE_PROVIDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_exchange_rate_provider.wasm")
+    EXCHANGE_RATE_PROVIDER_CODE_ID=$(upload_contract "$ARTIFACTS_DIR/maxbtc_neutron_exchange_rate_provider_mock.wasm")
     EXCHANGE_RATE_PROVIDER_INIT_MSG=$(printf '{"owner": "%s"}' "$SENDER_ADDRESS")
     EXCHANGE_RATE_PROVIDER_CONTRACT_ADDRESS=$(instantiate_contract "$EXCHANGE_RATE_PROVIDER_CODE_ID" "$EXCHANGE_RATE_PROVIDER_INIT_MSG" "maxbtc-neutron-exchange-rate-provider")
     echo ""

@@ -44,9 +44,6 @@ pub struct Config {
 /// A single global config item
 pub const CONFIG: Item<Config> = Item::new("config");
 
-/// Total amount of BTC deposited by the contract
-pub const TOTAL_DEPOSITED: Item<Uint128> = Item::new("total_deposited");
-
 #[cw_serde]
 pub enum ContractState {
     Idle,
