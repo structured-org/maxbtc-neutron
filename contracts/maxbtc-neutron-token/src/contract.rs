@@ -379,7 +379,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
                 token_contract: env.contract.address.to_string(),
                 factory_contract: msg.factory_contract.to_string(),
                 deposit_forwarder_contract: old_config.deposit_forwarder_contract.into_string(),
-                deposit_denom: old_config.deposit_denom,
+                deposit_denom: old_config.deposit_denom.clone(),
                 deposit_decimals: old_config.deposit_decimals,
                 deposit_cost: old_config.deposit_cost,
                 deposits_cap: old_config.deposits_cap,
@@ -401,6 +401,10 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
             denom: get_maxbtc_denom(env.contract.address.to_string(), old_config.maxbtc_denom),
         };
         CONFIG.save(deps.storage, &new_config)?;
+
+        let deposit_balance = deps
+            .querier
+            .query_balance(env.contract.address.to_string(), &old_config.deposit_denom)?;
 
         let send_msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: core_contract.to_string(),
