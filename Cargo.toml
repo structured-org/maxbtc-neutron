@@ -21,6 +21,7 @@ thiserror = { version = "2.0.12" }
 neutron-std = { version = "9.0.0" }
 semver = { version = "1.0.22", default-features = false }
 cw-multi-test = "2.0.0"
+prost = "0.12.6"
 
 maxbtc-base = { path = "./packages/base" }
 maxbtc-helpers = { path = "./packages/helpers" }

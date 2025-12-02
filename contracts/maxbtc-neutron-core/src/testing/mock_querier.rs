@@ -15,6 +15,7 @@ use maxbtc_base::state::{
     token::Config as TokenConfigResponse, waitosaur_holder::State as WaitsaurHolderState,
 };
 use neutron_std::types::osmosis::tokenfactory::v1beta1::QueryDenomAuthorityMetadataResponse;
+use prost::Message;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -324,8 +325,10 @@ impl WasmMockQuerier {
 
         match grpc_query.path.as_str() {
             "/osmosis.tokenfactory.v1beta1.Query/DenomAuthorityMetadata" => {
-                let query_result: ContractResult<Binary> =
-                    to_json_binary(&self.denom_metadata).into();
+                let bytes = self.denom_metadata.encode_to_vec();
+
+                let query_result: ContractResult<Binary> = ContractResult::Ok(Binary::from(bytes));
+
                 SystemResult::Ok(query_result)
             }
             _ => self.base.handle_query(&QueryRequest::Grpc(grpc_query)),

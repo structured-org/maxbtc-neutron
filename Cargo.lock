@@ -832,6 +832,7 @@ dependencies = [
  "cw2",
  "maxbtc-base",
  "neutron-std",
+ "prost 0.12.6",
  "schemars",
  "semver",
  "serde",

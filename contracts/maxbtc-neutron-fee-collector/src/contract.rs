@@ -38,6 +38,10 @@ pub fn instantiate(
 
     let core_contract = deps.api.addr_validate(&msg.core_contract)?;
 
+    if msg.collection_period_seconds < 1 {
+        return Err(ContractError::InvalidCollectionPeriod {});
+    }
+
     let config = Config {
         core_contract: core_contract.clone(),
         fee_apy_reduction_percentage: msg.fee_apy_reduction_percentage,
@@ -78,14 +82,14 @@ pub fn execute(
         ExecuteMsg::UpdateConfig {
             core_contract,
             fee_apy_reduction_percentage,
-            collection_period_hours,
+            collection_period_seconds,
         } => execute_update_config(
             deps,
             env,
             info,
             core_contract,
             fee_apy_reduction_percentage,
-            collection_period_hours,
+            collection_period_seconds,
         ),
         ExecuteMsg::UpdateOwnership(action) => {
             let ownership =
@@ -200,7 +204,7 @@ pub fn execute_update_config(
     info: MessageInfo,
     core_contract: Option<String>,
     fee_apy_reduction_percentage: Option<Decimal>,
-    collection_period_hours: Option<u64>,
+    collection_period_seconds: Option<u64>,
 ) -> Result<Response, ContractError> {
     assert_owner(deps.storage, &info.sender)?;
 
@@ -230,10 +234,13 @@ pub fn execute_update_config(
             new_percentage.to_string(),
         );
     }
-    if let Some(new_period) = collection_period_hours {
-        config.collection_period_seconds = new_period * 60 * 60;
+    if let Some(new_period) = collection_period_seconds {
+        if new_period < 1 {
+            return Err(ContractError::InvalidCollectionPeriod {});
+        }
+        config.collection_period_seconds = new_period;
         response =
-            response.add_attribute("collection_period_hours_updated", new_period.to_string());
+            response.add_attribute("collection_period_seconds_updated", new_period.to_string());
     }
 
     CONFIG.save(deps.storage, &config)?;

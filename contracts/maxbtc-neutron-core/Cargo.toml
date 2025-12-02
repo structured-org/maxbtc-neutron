@@ -43,6 +43,7 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 semver = { workspace = true }
 neutron-std = { workspace = true }
+prost = { workspace = true }
 
 maxbtc-base = { workspace = true }
 

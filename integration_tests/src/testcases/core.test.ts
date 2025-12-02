@@ -491,9 +491,9 @@ describe('Core', () => {
       const { allowlistContractClient, client, account } = context;
 
       // Add the account to the allowlist
-      const addRes = await allowlistContractClient.updateAllowList(
+      const addRes = await allowlistContractClient.allow(
         account.address,
-        { allow_list: [account.address] },
+        { addresses: [account.address] },
         'auto',
         'adding account to allowlist',
       );
@@ -1039,8 +1039,9 @@ describe('Core', () => {
 
       const config = await feeCollectorContractClient.queryConfig();
       const state = await feeCollectorContractClient.queryState();
+      const ownership = await feeCollectorContractClient.queryOwnership();
 
-      expect(config.owner).toEqual(account.address);
+      expect(ownership.owner).toEqual(account.address);
       expect(config.core_contract).toEqual(coreContractAddress);
       expect(config.fee_apy_reduction_percentage).toEqual('0.1');
       expect(config.collection_period_seconds).toEqual(10);
@@ -1160,7 +1161,7 @@ describe('Core', () => {
         const updateRes = await feeCollectorContractClient.updateConfig(
           account.address,
           {
-            collection_period_hours: newPeriodHours,
+            collection_period_seconds: newPeriodHours,
             fee_apy_reduction_percentage: newPercentage,
           },
           'auto',
@@ -1168,9 +1169,7 @@ describe('Core', () => {
         await waitForTx(client, updateRes.transactionHash);
 
         const newConfig = await feeCollectorContractClient.queryConfig();
-        expect(newConfig.collection_period_seconds).toEqual(
-          newPeriodHours * 3600,
-        );
+        expect(newConfig.collection_period_seconds).toEqual(newPeriodHours);
         expect(newConfig.fee_apy_reduction_percentage).toEqual(newPercentage);
       });
     });

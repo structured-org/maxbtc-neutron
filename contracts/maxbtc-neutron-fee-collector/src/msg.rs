@@ -23,7 +23,7 @@ pub enum ExecuteMsg {
     UpdateConfig {
         core_contract: Option<String>,
         fee_apy_reduction_percentage: Option<Decimal>,
-        collection_period_hours: Option<u64>,
+        collection_period_seconds: Option<u64>,
     },
 }
 
