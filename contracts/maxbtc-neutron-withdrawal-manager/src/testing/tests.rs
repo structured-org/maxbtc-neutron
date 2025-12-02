@@ -321,7 +321,7 @@ fn test_claim_success() {
 
     deps.querier.update_wasm(
         deps.api.addr_make("core_contract").to_string(),
-        to_json_binary(&[finalized_batch]).unwrap(),
+        to_json_binary(&finalized_batch).unwrap(),
     );
 
     // Set the total supply that the contract will check to create tokenfactory redemption denom.
@@ -409,7 +409,7 @@ fn test_claim_part_of_the_batch_success() {
 
     deps.querier.update_wasm(
         deps.api.addr_make("core_contract").to_string(),
-        to_json_binary(&[finalized_batch]).unwrap(),
+        to_json_binary(&finalized_batch).unwrap(),
     );
 
     // Set the total supply that the contract will check to create tokenfactory redemption denom.
@@ -649,7 +649,7 @@ fn test_claim_supply_mismatch() {
     };
     deps.querier.update_wasm(
         deps.api.addr_make("core_contract").to_string(),
-        to_json_binary(&[finalized_batch]).unwrap(),
+        to_json_binary(&finalized_batch).unwrap(),
     );
 
     // Act
