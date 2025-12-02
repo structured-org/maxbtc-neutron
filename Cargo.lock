@@ -821,8 +821,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "maxbtc-neutron-core"
-version = "0.2.0"
+name = "maxbtc-neutron-coinfactory-wrapper"
+version = "0.1.0"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -881,8 +881,10 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cw-multi-test",
+ "cw-ownable",
  "cw-storage-plus",
  "cw2",
+ "maxbtc-base",
  "schemars",
  "semver",
  "serde",
