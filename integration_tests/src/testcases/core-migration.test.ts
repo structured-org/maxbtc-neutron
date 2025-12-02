@@ -260,9 +260,9 @@ describe('Core', () => {
       const { allowlistContractClient, client, account } = context;
 
       // Add the account to the allowlist
-      const addRes = await allowlistContractClient.updateAllowList(
+      const addRes = await allowlistContractClient.allow(
         account.address,
-        { allow_list: [account.address] },
+        { addresses: [account.address] },
         'auto',
         'adding account to allowlist',
       );

@@ -144,7 +144,7 @@ export interface Coin {
   denom: string;
 }
 export interface UpdateConfigArgs {
-  collection_period_hours?: number | null;
+  collection_period_seconds?: number | null;
   core_contract?: string | null;
   fee_apy_reduction_percentage?: Decimal | null;
 }

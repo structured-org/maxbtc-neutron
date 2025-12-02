@@ -41,16 +41,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A human readable address.
- *
- * In Cosmos, this is typically bech32 encoded. But for multi-chain smart contracts no assumptions should be made other than being UTF-8 encoded and of reasonable length.
- *
- * This type represents a validated address. It can be created in the following ways 1. Use `Addr::unchecked(input)` 2. Use `let checked: Addr = deps.api.addr_validate(input)?` 3. Use `let checked: Addr = deps.api.addr_humanize(canonical_addr)?` 4. Deserialize from JSON. This must only be done from JSON that was validated before such as a contract's state. `Addr` must not be used in messages sent by the user because this would result in unvalidated instances.
- *
- * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
- */
-export type Addr = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs =
@@ -65,8 +55,8 @@ export type UpdateOwnershipArgs =
 
 export interface MaxbtcNeutronAllowListSchema {
   responses: ArrayOfString | Boolean | OwnershipForString;
-  query: IsAddressAllowedArgs;
-  execute: UpdateAllowListArgs | UpdateZkMeSettingsArgs | UpdateOwnershipArgs;
+  query: AllowListArgs | IsAddressAllowedArgs;
+  execute: AllowArgs | DenyArgs | UpdateZkMeSettingsArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -87,18 +77,25 @@ export interface OwnershipForString {
    */
   pending_owner?: string | null;
 }
+export interface AllowListArgs {
+  limit?: number | null;
+  start_after?: string | null;
+}
 export interface IsAddressAllowedArgs {
   address: string;
 }
-export interface UpdateAllowListArgs {
-  allow_list: string[];
+export interface AllowArgs {
+  addresses: string[];
+}
+export interface DenyArgs {
+  addresses: string[];
 }
 export interface UpdateZkMeSettingsArgs {
-  settings?: ZkMeSettings | null;
+  settings?: ZkMeSettingsUpdate | null;
 }
-export interface ZkMeSettings {
-  contract: Addr;
-  cooperator: Addr;
+export interface ZkMeSettingsUpdate {
+  contract: string;
+  cooperator: string;
 }
 export interface InstantiateMsg {
   owner: string;
@@ -152,8 +149,8 @@ export class Client {
     });
     return res;
   }
-  queryAllowList = async(): Promise<ArrayOfString> => {
-    return this.client.queryContractSmart(this.contractAddress, { allow_list: {} });
+  queryAllowList = async(args: AllowListArgs): Promise<ArrayOfString> => {
+    return this.client.queryContractSmart(this.contractAddress, { allow_list: args });
   }
   queryIsAddressAllowed = async(args: IsAddressAllowedArgs): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, { is_address_allowed: args });
@@ -161,11 +158,16 @@ export class Client {
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
-  updateAllowList = async(sender:string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  allow = async(sender:string, args: AllowArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, this.updateAllowListMsg(args), fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.allowMsg(args), fee || "auto", memo, funds);
   }
-  updateAllowListMsg = (args: UpdateAllowListArgs): { update_allow_list: UpdateAllowListArgs } => { return { update_allow_list: args }; }
+  allowMsg = (args: AllowArgs): { allow: AllowArgs } => { return { allow: args }; }
+  deny = async(sender:string, args: DenyArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.denyMsg(args), fee || "auto", memo, funds);
+  }
+  denyMsg = (args: DenyArgs): { deny: DenyArgs } => { return { deny: args }; }
   updateZkMeSettings = async(sender:string, args: UpdateZkMeSettingsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateZkMeSettingsMsg(args), fee || "auto", memo, funds);

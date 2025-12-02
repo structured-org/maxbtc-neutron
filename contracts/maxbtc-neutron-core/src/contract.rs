@@ -2,8 +2,8 @@ use crate::error::ContractError;
 pub(crate) use crate::utils::dec_to_amount;
 use cosmwasm_std::{
     entry_point, to_json_binary, Attribute, BankMsg, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    GrpcQuery, Int256, MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult,
-    Uint128, WasmMsg,
+    Int256, MessageInfo, QueryRequest, Response, SignedDecimal256, StdError, StdResult, Uint128,
+    WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::{assert_owner, initialize_owner};
@@ -30,9 +30,7 @@ use maxbtc_base::state::{
     },
     waitosaur_holder::State as WaitosaurHolderState,
 };
-use neutron_std::types::osmosis::tokenfactory::v1beta1::{
-    QueryDenomAuthorityMetadataRequest, QueryDenomAuthorityMetadataResponse,
-};
+use neutron_std::types::osmosis::tokenfactory::v1beta1::TokenfactoryQuerier;
 
 const CONTRACT_NAME: &str = concat!("crates.io:structured-maxbtc__", env!("CARGO_PKG_NAME"));
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -574,22 +572,16 @@ pub(crate) fn execute_withdraw(
         },
     )?;
 
-    let denom_metadata: QueryDenomAuthorityMetadataResponse = deps.querier
-            .query(&QueryRequest::Grpc(GrpcQuery {
-                path: "/osmosis.tokenfactory.v1beta1.Query/DenomAuthorityMetadata".to_string(),
-                data: QueryDenomAuthorityMetadataRequest {
-                    creator: cfg.token_contract.to_string(),
-                    subdenom: redemption_subdenom.to_string(),
-                }
-                .into(),
-            }))
-            .map_err(|e| {
-                StdError::generic_err(format!(
-                    "Query denom authority for creator {} and subdenom {redemption_subdenom} failed: {e}", cfg.token_contract
-                ))
-            })?;
+    let tf = TokenfactoryQuerier::new(&deps.querier);
 
-    if denom_metadata.authority_metadata.is_none() {
+    let denom_metadata = tf.denom_authority_metadata(
+        cfg.token_contract.to_string(),
+        redemption_subdenom.to_string(),
+    )?;
+
+    if denom_metadata.authority_metadata.is_none()
+        || denom_metadata.authority_metadata.unwrap().admin.is_empty()
+    {
         let mint_msg = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: cfg.token_contract.to_string(),
             msg: to_json_binary(&TokenExecuteMsg::CreateRedemptionToken {
