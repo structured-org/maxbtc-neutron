@@ -649,10 +649,7 @@ fn test_mint_by_owner_unauthorized() {
     .unwrap_err();
 
     // Assert
-    match err {
-        ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner) => {}
-        e => panic!("Unexpected error: {e:?}"),
-    }
+    assert_eq!(err, ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner));
 }
 
 #[test]
