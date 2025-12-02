@@ -95,14 +95,20 @@ fn test_mint_success() {
     // The response should have exactly one message: the tokenfactory Mint
     assert_eq!(res.messages.len(), 1);
 
-    let minted_attr = res
+    let minted_amount = res
         .attributes
         .iter()
         .find(|attr| attr.key == "amount")
         .expect("amount attribute must be present");
+    assert_eq!(minted_amount.value, "1000000");
+    let minted_denom = res
+        .attributes
+        .iter()
+        .find(|attr| attr.key == "denom")
+        .expect("denom attribute must be present");
     assert_eq!(
-        minted_attr.value,
-        "1000000factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
+        minted_denom.value,
+        "factory/cosmwasm1jpev2csrppg792t22rn8z8uew8h3sjcpglcd0qv9g8gj8ky922tscp8avs/maxbtc"
     );
 }
 
