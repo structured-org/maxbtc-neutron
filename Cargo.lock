@@ -3795,6 +3795,7 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "maxbtc-helpers",
+ "neutron-std 9.0.0",
 ]
 
 [[package]]
@@ -3815,7 +3816,25 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "cw2",
- "neutron-std 5.0.0",
+ "neutron-std 9.0.0",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "maxbtc-neutron-coinfactory-wrapper"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "maxbtc-base",
+ "neutron-std 9.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -3833,7 +3852,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "maxbtc-base",
- "neutron-std 5.0.0",
+ "neutron-std 9.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -3849,7 +3868,7 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "cw2",
- "neutron-std 5.0.0",
+ "neutron-std 9.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -3869,7 +3888,7 @@ dependencies = [
  "maxbtc-neutron-allow-list",
  "maxbtc-neutron-exchange-rate-provider",
  "maxbtc-neutron-fee-collector",
- "neutron-std 5.0.0",
+ "neutron-std 9.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -3892,6 +3911,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxbtc-neutron-redemption-rate-adapter"
+version = "0.1.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw2",
+ "maxbtc-base",
+ "schemars",
+ "semver 1.0.25",
+ "serde",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "maxbtc-neutron-token"
 version = "0.2.0"
 dependencies = [
@@ -3902,7 +3937,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "maxbtc-base",
- "neutron-std 5.0.0",
+ "neutron-std 9.0.0",
  "schemars",
  "semver 1.0.25",
  "serde",
@@ -4020,15 +4055,16 @@ dependencies = [
 
 [[package]]
 name = "neutron-std"
-version = "5.0.0"
-source = "git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable#a4ee7d08ccb5927ac870a89a37c6334a0ab5b440"
+version = "5.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fd808afc35eaeb219789e6e508a0dff51a195d557212b7fbcc2f4a33b9bd8d7"
 dependencies = [
  "bech32 0.9.1",
  "chrono",
  "cosmos-sdk-proto 0.20.0",
  "cosmwasm-schema",
  "cosmwasm-std",
- "neutron-std-derive 0.20.1 (git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable)",
+ "neutron-std-derive",
  "prost 0.12.6",
  "prost-types",
  "protobuf",
@@ -4044,16 +4080,17 @@ dependencies = [
 
 [[package]]
 name = "neutron-std"
-version = "5.1.4"
+version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fd808afc35eaeb219789e6e508a0dff51a195d557212b7fbcc2f4a33b9bd8d7"
+checksum = "0e4457becff580ceda49dd4d4c0e379d0dbc426fdf3675c2da2f78925df07905"
 dependencies = [
  "bech32 0.9.1",
  "chrono",
  "cosmos-sdk-proto 0.20.0",
  "cosmwasm-schema",
  "cosmwasm-std",
- "neutron-std-derive 0.20.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ed25519-zebra",
+ "neutron-std-derive",
  "prost 0.12.6",
  "prost-types",
  "protobuf",
@@ -4072,18 +4109,6 @@ name = "neutron-std-derive"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22f4948005dcbb0c4eb644141d00dcbdc422b1b7024fb008712ca2960392ec11"
-dependencies = [
- "itertools 0.10.5",
- "proc-macro2",
- "prost-types",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "neutron-std-derive"
-version = "0.20.1"
-source = "git+https://github.com/neutron-org/neutron-std?branch=feat%2Frespect-gogoproto-nullable#a4ee7d08ccb5927ac870a89a37c6334a0ab5b440"
 dependencies = [
  "itertools 0.10.5",
  "proc-macro2",
