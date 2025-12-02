@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Decimal, Uint128, Uint64};
+use cosmwasm_std::{CosmosMsg, Decimal, Uint128, Uint64};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 
 use crate::state::{CodeIds, WaitosaurObserverConfig};
@@ -69,7 +69,9 @@ pub struct UpdateConfigMsg {
 #[cw_ownable_execute]
 #[cw_serde]
 #[allow(clippy::large_enum_variant)]
-pub enum ExecuteMsg {}
+pub enum ExecuteMsg {
+    AdminExecute { msgs: Vec<CosmosMsg> },
+}
 
 /// QueryMsg for reading contract states.
 #[cw_ownable_query]

@@ -4,8 +4,8 @@ use crate::msg::{
 };
 use crate::state::{State, WaitosaurObserverConfig, STATE};
 use cosmwasm_std::{
-    entry_point, instantiate2_address, to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult, WasmMsg,
+    entry_point, instantiate2_address, to_json_binary, Binary, CosmosMsg, Deps, DepsMut, Env,
+    MessageInfo, Response, StdResult, WasmMsg,
 };
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
@@ -304,7 +304,20 @@ pub fn execute(
             cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
+        ExecuteMsg::AdminExecute { msgs } => execute_admin_execute(deps, env, info, msgs),
     }
+}
+
+fn execute_admin_execute(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msgs: Vec<CosmosMsg>,
+) -> Result<Response, ContractError> {
+    cw_ownable::assert_owner(deps.storage, &info.sender)?;
+    Ok(Response::new()
+        .add_attribute("action", "admin-execute")
+        .add_messages(msgs))
 }
 
 #[entry_point]
