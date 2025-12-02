@@ -41,7 +41,7 @@ pub fn instantiate(
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         factory_contract: deps.api.addr_validate(&msg.factory_contract)?,
-        denom: get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone()),
+        denom: get_tokenfactory_denom(env.contract.address.as_ref(), &msg.subdenom),
     };
     CONFIG.save(deps.storage, &cfg)?;
 
@@ -225,8 +225,8 @@ pub fn get_denom(deps: Deps, env: Env, subdenom: Option<String>) -> Result<Strin
     let cfg = CONFIG.load(deps.storage)?;
     if let Some(subdenom) = subdenom {
         Ok(get_tokenfactory_denom(
-            env.contract.address.to_string(),
-            subdenom,
+            env.contract.address.as_ref(),
+            &subdenom,
         ))
     } else {
         Ok(cfg.denom)
@@ -403,10 +403,7 @@ pub fn migrate(deps: DepsMut, env: Env, msg: MigrateMsg) -> Result<Response, Con
 
         let new_config = Config {
             factory_contract: msg.factory_contract,
-            denom: get_tokenfactory_denom(
-                env.contract.address.to_string(),
-                old_config.maxbtc_denom,
-            ),
+            denom: get_tokenfactory_denom(env.contract.address.as_ref(), &old_config.maxbtc_denom),
         };
         CONFIG.save(deps.storage, &new_config)?;
 
