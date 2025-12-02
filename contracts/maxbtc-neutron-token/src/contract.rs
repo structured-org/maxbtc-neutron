@@ -193,7 +193,7 @@ pub(crate) fn execute_set_token_metadata(
         env.contract.address.into_string(),
         cfg.denom.clone(),
         token_metadata.clone(),
-    )?;
+    );
 
     Ok(Response::new()
         .add_message(metadata_msg)

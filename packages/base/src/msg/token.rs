@@ -91,9 +91,9 @@ pub fn create_set_denom_metadata_msg(
     contract_address: String,
     denom: String,
     token_metadata: DenomMetadata,
-) -> StdResult<CosmosMsg> {
-    Ok(Into::<CosmosMsg>::into(MsgSetDenomMetadata {
-        sender: contract_address.to_string(),
+) -> CosmosMsg {
+    Into::<CosmosMsg>::into(MsgSetDenomMetadata {
+        sender: contract_address,
         metadata: Some(Metadata {
             denom_units: vec![
                 DenomUnit {
@@ -115,5 +115,5 @@ pub fn create_set_denom_metadata_msg(
             uri: token_metadata.uri.unwrap_or_default(),
             uri_hash: token_metadata.uri_hash.unwrap_or_default(),
         }),
-    }))
+    })
 }
