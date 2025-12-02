@@ -72,17 +72,9 @@ pub fn execute(
         }
         ExecuteMsg::UpdateConfig {
             factory_contract,
-            core_contract,
             token_contract,
             deposit_denom,
-        } => execute_update_config(
-            deps,
-            info,
-            factory_contract,
-            core_contract,
-            token_contract,
-            deposit_denom,
-        ),
+        } => execute_update_config(deps, info, factory_contract, token_contract, deposit_denom),
         ExecuteMsg::SetPause { pause } => execute_set_pause(deps, info, pause),
         ExecuteMsg::Claim { recipient } => execute_claim(deps, env, info, recipient),
     }
@@ -195,7 +187,6 @@ fn execute_update_config(
     deps: DepsMut,
     info: MessageInfo,
     factory_contract: Option<String>,
-    core_contract: Option<String>,
     token_contract: Option<String>,
     deposit_denom: Option<String>,
 ) -> Result<Response, ContractError> {
@@ -207,10 +198,6 @@ fn execute_update_config(
     if let Some(factory_contract) = factory_contract {
         config.factory_contract = deps.api.addr_validate(&factory_contract)?;
         attrs.push(attr("factory_contract", factory_contract));
-    }
-    if let Some(core_contract) = core_contract {
-        config.core_contract = deps.api.addr_validate(&core_contract)?;
-        attrs.push(attr("core_contract", core_contract));
     }
     if let Some(token_contract) = token_contract {
         config.token_contract = deps.api.addr_validate(&token_contract)?;

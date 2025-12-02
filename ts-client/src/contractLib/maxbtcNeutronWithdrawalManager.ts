@@ -94,7 +94,6 @@ export interface Pause {
   receive_nft_withdraw: boolean;
 }
 export interface UpdateConfigArgs {
-  core_contract?: string | null;
   deposit_denom?: string | null;
   factory_contract?: string | null;
   token_contract?: string | null;
