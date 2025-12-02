@@ -1,7 +1,7 @@
 use crate::error::ContractError;
 use cosmwasm_std::{
-    entry_point, to_json_binary, BankMsg, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response,
-    Uint128,
+    attr, entry_point, to_json_binary, BankMsg, CosmosMsg, Deps, DepsMut, Env, MessageInfo,
+    Response, Uint128,
 };
 use cw2::set_contract_version;
 use cw_ownable::initialize_owner;
@@ -77,12 +77,18 @@ fn execute_lock(
     if let State::Locked { .. } = current_state {
         return Err(ContractError::AlreadyLocked {});
     }
+    let ts = env.block.time.nanos();
     let state = State::Locked {
         amount,
-        at_timestamp: env.block.time.nanos(),
+        at_timestamp: ts.clone(),
     };
     STATE.save(deps.storage, &state)?;
-    Ok(Response::new().add_attribute("action", "lock"))
+    Ok(Response::new()
+        .add_attribute("action", "lock")
+        .add_attributes([
+            attr("amount", amount.to_string()),
+            attr("timestamp", ts.to_string()),
+        ]))
 }
 
 fn execute_unlock(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
@@ -108,14 +114,18 @@ fn execute_unlock(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response
 
             let msg = CosmosMsg::Bank(BankMsg::Send {
                 to_address: config.withdraw_manager_contract.to_string(),
-                amount: vec![waitosaur_balance],
+                amount: vec![waitosaur_balance.clone()],
             });
 
             let state = State::Unlocked {};
             STATE.save(deps.storage, &state)?;
             Ok(Response::new()
                 .add_message(msg)
-                .add_attribute("action", "unlock"))
+                .add_attribute("action", "unlock")
+                .add_attributes([
+                    attr("waitosaur_balance", waitosaur_balance.amount.to_string()),
+                    attr("locked_amount", amount.to_string()),
+                ]))
         }
         State::Unlocked {} => Err(ContractError::AlreadyUnlocked {}),
     }
@@ -129,23 +139,33 @@ fn execute_update_config(
     cw_ownable::assert_owner(deps.storage, &info.sender)?;
 
     let mut config = CONFIG.load(deps.storage)?;
+    let mut attrs = vec![];
 
     // Update configuration if fields are provided
     if let Some(locker) = new_config.locker {
         config.locker = deps.api.addr_validate(&locker)?;
+        attrs.push(attr("locker_updated", locker));
     }
     if let Some(unlocker) = new_config.unlocker {
         config.unlocker = deps.api.addr_validate(&unlocker)?;
+        attrs.push(attr("unlocker_updated", unlocker));
     }
     if let Some(asset) = new_config.asset {
         config.asset = asset;
+        attrs.push(attr("asset_updated", config.asset.clone()));
     }
     if let Some(withdraw_manager_contract) = new_config.withdraw_manager_contract {
         config.withdraw_manager_contract = deps.api.addr_validate(&withdraw_manager_contract)?;
+        attrs.push(attr(
+            "withdraw_manager_contract_updated",
+            withdraw_manager_contract,
+        ));
     }
 
     CONFIG.save(deps.storage, &config)?;
-    Ok(Response::new().add_attribute("action", "update_config"))
+    Ok(Response::new()
+        .add_attribute("action", "update_config")
+        .add_attributes(attrs))
 }
 
 #[entry_point]
