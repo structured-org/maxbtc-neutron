@@ -47,7 +47,6 @@ describe('Core', () => {
 
     coreContractAddress?: string;
     forwarderContractAddress?: string;
-    forwarderLibraryContractAddress?: string;
     fee_collector_code_id?: number;
 
     feeCollectorContractClient?: InstanceType<
@@ -85,6 +84,9 @@ describe('Core', () => {
     // Random address, doesn't really matter for the tests
     context.treasuryAddress =
       'neutron1nxshmmwrvxa2cp80nwvf03t8u5kvl2ttr8m8f43vamudsqrdvs8qqvfwpj';
+
+    context.forwarderContractAddress =
+      'neutron1n5ngef5cj32jezpq30ygys3ygggjnduxmlyvrl';
   });
 
   afterAll(async () => {
@@ -171,110 +173,6 @@ describe('Core', () => {
       expect(res.codeId).toBeGreaterThan(0);
 
       context.fee_collector_code_id = res.codeId;
-    });
-
-    it('instantiate forwarder (valence base account)', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(__dirname, '../../../artifacts/valence_base_account.wasm'),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-
-      const instantiateMsg = {
-        admin: account.address,
-        approved_libraries: [],
-      };
-
-      const instantiateRes = await client.instantiate(
-        account.address,
-        res.codeId,
-        instantiateMsg,
-        'label',
-        'auto',
-      );
-
-      expect(instantiateRes.contractAddress).toBeTruthy();
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.forwarderContractAddress = instantiateRes.contractAddress;
-    });
-
-    it('instantiate forwarder library (valence ibc transfer library)', async () => {
-      const { client, account } = context;
-      const res = await client.upload(
-        account.address,
-        Uint8Array.from(
-          fs.readFileSync(
-            join(
-              __dirname,
-              '../../../artifacts/valence_neutron_ibc_transfer_library.wasm',
-            ),
-          ),
-        ),
-        1.5,
-      );
-      expect(res.codeId).toBeGreaterThan(0);
-
-      const instantiateMsg = {
-        owner: account.address,
-        processor: account.address,
-        config: {
-          input_addr: {
-            library_account_addr: context.forwarderContractAddress,
-          },
-          output_addr: {
-            library_account_addr: '0x1234567890123456789012345678901234567890',
-          },
-          denom: {
-            native:
-              'ibc/0E293A7622DC9A6439DB60E6D234B5AF446962E27CA3AB44D0590603DFF6968E',
-          },
-          amount: 'full_amount',
-          memo: '',
-          remote_chain_info: {
-            channel_id: 'channel-1',
-          },
-          denom_to_pfm_map: {},
-          eureka_config: {
-            callback_contract:
-              'cosmos1lqu9662kd4my6dww4gzp3730vew0gkwe0nl9ztjh0n5da0a8zc4swsvd22',
-            action_contract:
-              'cosmos1clswlqlfm8gpn7n5wu0ypu0ugaj36urlhj7yz30hn7v7mkcm2tuqy9f8s5',
-            recover_address: 'cosmos1ep2umj6kn34g2ttjalsc5r9w8pt7sv4x9z0q26',
-            source_channel: '08-wasm-1369',
-          },
-        },
-      };
-
-      const instantiateRes = await client.instantiate(
-        account.address,
-        res.codeId,
-        instantiateMsg,
-        'label',
-        'auto',
-      );
-
-      expect(instantiateRes.contractAddress).toBeTruthy();
-      expect(instantiateRes.contractAddress).toHaveLength(66);
-      context.forwarderLibraryContractAddress = instantiateRes.contractAddress;
-
-      const approveRes = await client.execute(
-        account.address,
-        context.forwarderContractAddress,
-        {
-          approve_library: {
-            library: context.forwarderLibraryContractAddress,
-          },
-        },
-        'auto',
-      );
-      expect(approveRes.transactionHash).toHaveLength(64);
-      await waitForTx(client, approveRes.transactionHash);
     });
 
     it('instantiate core', async () => {
@@ -539,7 +437,7 @@ describe('Core', () => {
       );
     });
     it('upload contracts nad migrate', async () => {
-      const { client, account, coreContractAddress } = context;
+      const { client, account, coreContractAddress, neutronClient } = context;
       let res = await client.upload(
         account.address,
         Uint8Array.from(
@@ -609,6 +507,20 @@ describe('Core', () => {
       expect(res.codeId).toBeGreaterThan(0);
       const waitosaurCodeId = res.codeId;
 
+      await client.sendTokens(
+        account.address,
+        coreContractAddress,
+        [{ denom: DEPOSIT_DENOM, amount: '100000' }],
+        { amount: [{ denom: 'untrn', amount: '200000' }], gas: '2000000' },
+      );
+
+      const coreTokenBalanceBeforeMigration = (
+        await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+          coreContractAddress,
+          { denom: DEPOSIT_DENOM },
+        )
+      ).data.balance.amount;
+
       const fee = {
         amount: coins(5000, 'untrn'),
         gas: '2000000',
@@ -638,6 +550,11 @@ describe('Core', () => {
         fee,
       );
 
+      const tx = await context.client.getTx(result.transactionHash);
+      const { events } = tx;
+      const newCoreContractAddress = events.find((e) => e.type === 'wasm')
+        .attributes[1].value;
+
       const totalDepositedStr = await client.queryContractRaw(
         coreContractAddress,
         toAscii('total_deposited'),
@@ -660,6 +577,26 @@ describe('Core', () => {
       );
 
       expect(lastDepositFlushTimeMigrated).toEqual(lastDepositFlushTime);
+
+      const coreTokenBalanceAfterMigration = (
+        await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+          coreContractAddress,
+          { denom: DEPOSIT_DENOM },
+        )
+      ).data.balance.amount;
+
+      expect(coreTokenBalanceAfterMigration).toEqual('0');
+
+      const newCoreBalanceAfterMigration = (
+        await neutronClient.CosmosBankV1Beta1.query.queryBalance(
+          newCoreContractAddress,
+          { denom: DEPOSIT_DENOM },
+        )
+      ).data.balance.amount;
+
+      expect(newCoreBalanceAfterMigration).toEqual(
+        coreTokenBalanceBeforeMigration,
+      );
     });
   });
 });
