@@ -122,6 +122,8 @@ pub(crate) fn execute_claim(
         return Err(ContractError::WrongRedemptionTokenOrNoFunds {});
     }
 
+    deps.api.addr_validate(&recipient)?;
+
     let redemption_coin = &info
         .funds
         .first()
