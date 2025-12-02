@@ -619,7 +619,7 @@ fn test_mint_by_owner_success() {
                 msg: to_json_binary(&TokenExecuteMsg::Mint {
                     amount: Coin {
                         amount: Uint128::from(1_000_000u128),
-                        denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string().clone(),
+                        denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string(),
                     },
                     recipient,
                 }).unwrap(),
