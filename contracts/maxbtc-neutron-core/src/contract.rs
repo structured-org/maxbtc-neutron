@@ -51,6 +51,10 @@ pub fn instantiate(
         return Err(ContractError::DepositCostTooHigh {});
     }
 
+    if msg.exchange_rate_stale_period < Uint64::one() {
+        return Err(ContractError::StalePeriodMustBePositive {});
+    }
+
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
