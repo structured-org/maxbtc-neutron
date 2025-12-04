@@ -432,12 +432,7 @@ fn test_deposit_exchange_rate_stale() {
         recipient.to_string(),
         None,
     );
-    assert!(res.is_err());
-    let err = res.err().unwrap();
-    match err {
-        ContractError::ERDataStale {} => {}
-        e => panic!("Unexpected error: {e:?}"),
-    }
+    assert_eq!(res, Err(ContractError::ERDataStale {}));
 }
 
 #[test]
