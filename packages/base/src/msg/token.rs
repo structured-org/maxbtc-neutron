@@ -1,5 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Addr, Coin, CosmosMsg, StdResult, Uint64};
+use cosmwasm_std::{Addr, Coin, CosmosMsg, Uint64};
 use cw_ownable::{cw_ownable_execute, cw_ownable_query};
 use neutron_std::types::cosmos::bank::v1beta1::{DenomUnit, Metadata};
 use neutron_std::types::osmosis::tokenfactory::v1beta1::MsgSetDenomMetadata;
