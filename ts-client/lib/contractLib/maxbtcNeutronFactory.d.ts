@@ -156,6 +156,10 @@ export interface InstantiateMsg {
      * Address of the waitosaur observer unlocker
      */
     waitosaur_observer_unlocker: string;
+    /**
+     * One-off cost (Decimal) charged when a user withdraws from maxBTC
+     */
+    withdrawal_cost: Decimal;
 }
 export interface CodeIds {
     allowlist_contract_code_id: number;

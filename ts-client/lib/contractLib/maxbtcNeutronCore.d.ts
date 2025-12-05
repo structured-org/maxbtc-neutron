@@ -176,6 +176,10 @@ export interface Config {
      */
     waitosaur_observer_contract: Addr;
     /**
+     * One-off cost (Decimal) charged when a user withdraws from maxBTC
+     */
+    withdrawal_cost: Decimal;
+    /**
      * Contract that handles withdrawals
      */
     withdrawal_manager_contract: Addr;
@@ -376,6 +380,10 @@ export interface InstantiateMsg {
      * Address of the waitosaur contract
      */
     waitosaur_observer_contract: string;
+    /**
+     * One-off cost (Decimal) charged when a user withdraws from maxBTC
+     */
+    withdrawal_cost: Decimal;
     /**
      * Address of the withdrawal manager contract
      */

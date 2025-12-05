@@ -20,6 +20,8 @@ pub struct InstantiateMsg {
     pub deposit_decimals: u32,
     /// One-off cost (Decimal) charged when a user deposits to mint maxBTC
     pub deposit_cost: Decimal,
+    /// One-off cost (Decimal) charged when a user withdraws from maxBTC
+    pub withdrawal_cost: Decimal,
     /// Upper limit on total AUM; deposits are rejected once the cap
     /// (if present) is exceeded
     pub deposits_cap: Option<Uint128>,
@@ -54,8 +56,9 @@ pub struct UpdateConfigMsg {
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
     pub waitosaur_observer_contract: Option<String>,
-    pub waitsaur_holder_contract: Option<String>,
+    pub waitosaur_holder_contract: Option<String>,
     pub withdrawal_manager_contract: Option<String>,
+    pub withdrawal_cost: Option<Decimal>,
 }
 
 /// ExecuteMsg enumerates all possible actions in this contract.

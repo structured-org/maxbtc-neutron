@@ -55,6 +55,10 @@ pub fn instantiate(
         return Err(ContractError::StalePeriodMustBePositive {});
     }
 
+    if msg.withdrawal_cost >= Decimal::one() {
+        return Err(ContractError::WithdrawalCostTooHigh {});
+    }
+
     // Build the Config, now with the predictable fee collector address
     let cfg = Config {
         paused: false,
@@ -65,6 +69,7 @@ pub fn instantiate(
         deposit_denom: msg.deposit_denom.clone(),
         deposit_decimals: msg.deposit_decimals,
         deposit_cost: msg.deposit_cost,
+        withdrawal_cost: msg.withdrawal_cost,
         deposits_cap: msg.deposits_cap,
         allowlist_contract: deps.api.addr_validate(&msg.allowlist_contract)?,
         exchange_rate_provider_contract: deps
@@ -93,7 +98,8 @@ pub fn instantiate(
             "instantiated_fee_collector_address",
             cfg.fee_collector_contract.to_string(),
         )
-        .add_attribute("deposit_cost", cfg.deposit_cost.to_string()))
+        .add_attribute("deposit_cost", cfg.deposit_cost.to_string())
+        .add_attribute("withdrawal_cost", cfg.withdrawal_cost.to_string()))
 }
 
 #[entry_point]
@@ -238,11 +244,34 @@ fn execute_tick_idle(
             )?)?
             .to_uint_floor();
 
-        active_withdraw_batch.collected_amount = active_withdraw_batch
-            .btc_requested
-            .min(deposit_balance.amount);
+        // Calculate deposit amount before fees taken. Deposit amount + deposit fee
+        let deposit_fee_multiplier = Decimal::one() - cfg.deposit_cost;
+        let deposit_before_fees = Decimal::from_atomics(active_withdraw_batch.btc_requested, 0)?
+            .checked_div(deposit_fee_multiplier)?
+            .to_uint_ceil();
 
-        if active_withdraw_batch.btc_requested <= deposit_balance.amount {
+        // It calculates how much of the withdrawal can be offset using the deposits.
+        // It compares two values: the total amount of available deposits and the calculated
+        // amount of BTC withdrawals plus withdrawal costs, and takes the lesser of the two.
+        // This ensures that we do not exceed the available deposits.
+        let offsetting_amount_full = deposit_before_fees.min(deposit_balance.amount);
+
+        // Apply the deposit fee (cost)
+        let offsetting_amount = deposit_fee_multiplier
+            .checked_mul(Decimal::from_atomics(offsetting_amount_full, 0)?)?;
+
+        // Apply the withdrawal fee (cost)
+        let withdrawal_fee_multiplier = Decimal::one() - cfg.withdrawal_cost;
+
+        let offsetting_amount = withdrawal_fee_multiplier
+            .checked_mul(offsetting_amount)?
+            .to_uint_floor();
+
+        let offsetting_cost = offsetting_amount_full - offsetting_amount;
+
+        active_withdraw_batch.collected_amount = offsetting_amount;
+
+        if deposit_before_fees <= deposit_balance.amount {
             FINALIZED_BATCHES.save(
                 deps.storage,
                 active_withdraw_batch.batch_id,
@@ -259,13 +288,22 @@ fn execute_tick_idle(
         let send_covered_withdrawal_manager_msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cfg.withdrawal_manager_contract.to_string(),
             amount: vec![Coin {
-                denom: cfg.deposit_denom,
+                denom: cfg.deposit_denom.clone(),
                 amount: active_withdraw_batch.collected_amount,
+            }],
+        });
+
+        let send_offsetting_cost_fee_collector_msg = CosmosMsg::Bank(BankMsg::Send {
+            to_address: cfg.fee_collector_contract.to_string(),
+            amount: vec![Coin {
+                denom: cfg.deposit_denom,
+                amount: offsetting_cost,
             }],
         });
 
         return Ok(Response::new()
             .add_message(send_covered_withdrawal_manager_msg)
+            .add_message(send_offsetting_cost_fee_collector_msg)
             .add_attribute("action", "tick")
             .add_attribute("stage", "idle")
             .add_attribute("amount", active_withdraw_batch.btc_requested.to_string())
@@ -273,6 +311,7 @@ fn execute_tick_idle(
                 "covered_from_deposit",
                 active_withdraw_batch.collected_amount.to_string(),
             )
+            .add_attribute("offsetting_cost", offsetting_cost.to_string())
             .add_attribute("new_batch_id", new_batch_id.to_string()));
     } else if !deposit_balance.amount.is_zero() {
         FSM.go_to(deps.storage, ContractState::DepositNeutron)?;
@@ -455,6 +494,13 @@ fn execute_update_config(
         cfg.deposit_cost = deposit_cost;
         res = res.add_attribute("deposit_cost_updated", deposit_cost.to_string());
     }
+    if let Some(withdrawal_cost) = updates.withdrawal_cost {
+        if withdrawal_cost >= Decimal::one() {
+            return Err(ContractError::WithdrawalCostTooHigh {});
+        }
+        cfg.withdrawal_cost = withdrawal_cost;
+        res = res.add_attribute("withdrawal_cost_updated", withdrawal_cost.to_string());
+    }
     if let Some(allowlist_contract) = updates.allowlist_contract {
         let validated_addr = deps.api.addr_validate(&allowlist_contract)?;
         cfg.allowlist_contract = validated_addr.clone();
@@ -482,7 +528,7 @@ fn execute_update_config(
         );
     }
 
-    if let Some(addr) = updates.waitsaur_holder_contract {
+    if let Some(addr) = updates.waitosaur_holder_contract {
         let validated_addr = deps.api.addr_validate(&addr)?;
         cfg.waitosaur_holder_contract = validated_addr.clone();
         res = res.add_attribute(
@@ -738,10 +784,7 @@ fn execute_flush_deposits(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<cosmwasm_std::Binary> {
     match msg {
         QueryMsg::ContractState {} => Ok(to_json_binary(&FSM.get_current_state(deps.storage)?)?),
-        QueryMsg::Config {} => {
-            let cfg = CONFIG.load(deps.storage)?;
-            Ok(to_json_binary(&cfg)?)
-        }
+        QueryMsg::Config {} => Ok(to_json_binary(&CONFIG.load(deps.storage)?)?),
         QueryMsg::ActiveBatch {} => {
             let active_batch = ACTIVE_BATCH.load(deps.storage)?;
             Ok(to_json_binary(&active_batch)?)

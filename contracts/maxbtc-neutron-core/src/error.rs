@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    DecimalRangeExceeded, DivideByZeroError, Instantiate2AddressError, OverflowError, StdError,
+    CheckedFromRatioError, DecimalRangeExceeded, DivideByZeroError, Instantiate2AddressError,
+    OverflowError, StdError,
 };
 use cw_utils::PaymentError;
 use thiserror::Error;
@@ -57,6 +58,9 @@ pub enum ContractError {
     #[error("Deposit cost must be less than one")]
     DepositCostTooHigh {},
 
+    #[error("Withdrawal cost must be less than one")]
+    WithdrawalCostTooHigh {},
+
     #[error("{0}")]
     DecimalRangeExceeded(#[from] DecimalRangeExceeded),
 
@@ -98,6 +102,9 @@ pub enum ContractError {
 
     #[error("Exchange rate data is stale")]
     ERDataStale {},
+
+    #[error("{0}")]
+    CheckedFromRatioError(#[from] CheckedFromRatioError),
 }
 
 impl From<semver::Error> for ContractError {

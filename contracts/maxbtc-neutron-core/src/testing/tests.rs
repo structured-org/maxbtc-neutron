@@ -737,6 +737,50 @@ fn test_idle_tick_wrong_operator() {
 }
 
 #[test]
+fn test_idle_tick_withdraw_equals_deposit_and_stay_idle() {
+    let (mut deps, env, _) = setup_contract();
+
+    deps.querier
+        .set_exchange_rate((Decimal::from_str("0.95").unwrap(), env.block.time.seconds()));
+
+    FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
+        .unwrap();
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    deps.querier.set_balance(
+        env.contract.address.as_ref(),
+        &cfg.deposit_denom,
+        Uint128::new(95_960u128),
+    );
+
+    let batch_id = 1u64;
+    let burned_amount = Uint128::new(100_000u128);
+    ACTIVE_BATCH
+        .save(
+            &mut deps.storage,
+            &Batch {
+                batch_id,
+                btc_requested: Uint128::zero(),
+                maxbtc_burned: burned_amount,
+                collected_amount: Uint128::zero(),
+                deposit_decimals: 6u32,
+                collector_historical_balance: Uint128::zero(),
+            },
+        )
+        .unwrap();
+
+    let operator = deps.api.addr_make("operator_addr");
+
+    let info = message_info(&operator, &[]);
+
+    execute_tick(deps.as_mut(), env.clone(), info).unwrap();
+
+    let current_state = FSM.get_current_state(&deps.storage).unwrap();
+    assert_eq!(current_state, ContractState::Idle);
+}
+
+#[test]
 fn test_idle_tick_withdraw_and_stay_idle() {
     let (mut deps, env, _) = setup_contract();
 
@@ -782,14 +826,22 @@ fn test_idle_tick_withdraw_and_stay_idle() {
             .add_message(CosmosMsg::Bank(BankMsg::Send {
                 to_address: cfg.withdrawal_manager_contract.to_string(),
                 amount: vec![Coin {
+                    denom: cfg.deposit_denom.clone(),
+                    amount: Uint128::new(94_050u128),
+                }],
+            }))
+            .add_message(CosmosMsg::Bank(BankMsg::Send {
+                to_address: cfg.fee_collector_contract.to_string(),
+                amount: vec![Coin {
                     denom: cfg.deposit_denom,
-                    amount: Uint128::new(95_000u128),
+                    amount: Uint128::new(1_910u128),
                 }],
             }))
             .add_attribute("action", "tick")
             .add_attribute("stage", "idle")
             .add_attribute("amount", "95000")
-            .add_attribute("covered_from_deposit", "95000")
+            .add_attribute("covered_from_deposit", "94050")
+            .add_attribute("offsetting_cost", "1910")
             .add_attribute("new_batch_id", "2")
     );
 
@@ -813,7 +865,7 @@ fn test_idle_tick_withdraw_and_stay_idle() {
             batch_id,
             btc_requested: Uint128::new(95_000u128),
             maxbtc_burned: Uint128::new(100_000u128),
-            collected_amount: Uint128::new(95_000u128),
+            collected_amount: Uint128::new(94_050u128),
             collector_historical_balance: Uint128::zero(),
             deposit_decimals: 6u32,
         }
@@ -860,7 +912,7 @@ fn test_ticks_cycle() {
     deps.querier.set_balance(
         env.contract.address.as_ref(),
         &cfg.deposit_denom,
-        Uint128::new(180_000u128),
+        Uint128::new(170_000u128),
     );
 
     let batch_id = 1u64;
@@ -891,14 +943,22 @@ fn test_ticks_cycle() {
             .add_message(CosmosMsg::Bank(BankMsg::Send {
                 to_address: cfg.withdrawal_manager_contract.to_string(),
                 amount: vec![Coin {
+                    denom: cfg.deposit_denom.clone(),
+                    amount: Uint128::new(166_617u128),
+                }],
+            }))
+            .add_message(CosmosMsg::Bank(BankMsg::Send {
+                to_address: cfg.fee_collector_contract.to_string(),
+                amount: vec![Coin {
                     denom: cfg.deposit_denom,
-                    amount: Uint128::new(180_000u128),
+                    amount: Uint128::new(3_383u128),
                 }],
             }))
             .add_attribute("action", "tick")
             .add_attribute("stage", "idle")
             .add_attribute("amount", "190000")
-            .add_attribute("covered_from_deposit", "180000",)
+            .add_attribute("covered_from_deposit", "166617")
+            .add_attribute("offsetting_cost", "3383")
             .add_attribute("new_batch_id", "2")
     );
 
@@ -922,7 +982,7 @@ fn test_ticks_cycle() {
             batch_id: 1u64,
             btc_requested: Uint128::new(190_000u128),
             maxbtc_burned: Uint128::new(200_000u128),
-            collected_amount: Uint128::new(180_000u128),
+            collected_amount: Uint128::new(166_617u128),
             deposit_decimals: 6u32,
             collector_historical_balance: Uint128::zero(),
         })
@@ -978,14 +1038,22 @@ fn test_withdraw_ticks_cycle() {
             .add_message(CosmosMsg::Bank(BankMsg::Send {
                 to_address: cfg.withdrawal_manager_contract.to_string(),
                 amount: vec![Coin {
+                    denom: cfg.deposit_denom.clone(),
+                    amount: Uint128::new(147_015u128),
+                }],
+            }))
+            .add_message(CosmosMsg::Bank(BankMsg::Send {
+                to_address: cfg.fee_collector_contract.to_string(),
+                amount: vec![Coin {
                     denom: cfg.deposit_denom,
-                    amount: Uint128::new(150_000u128),
+                    amount: Uint128::new(2_985u128),
                 }],
             }))
             .add_attribute("action", "tick")
             .add_attribute("stage", "idle")
             .add_attribute("amount", "200000")
-            .add_attribute("covered_from_deposit", "150000")
+            .add_attribute("covered_from_deposit", "147015")
+            .add_attribute("offsetting_cost", "2985")
             .add_attribute("new_batch_id", "2")
     );
 
@@ -1019,7 +1087,7 @@ fn test_withdraw_ticks_cycle() {
             batch_id,
             btc_requested: Uint128::new(200_000u128),
             maxbtc_burned: Uint128::new(200_000u128),
-            collected_amount: Uint128::new(200_000u128),
+            collected_amount: Uint128::new(197_015u128),
             deposit_decimals: 6u32,
             collector_historical_balance: Uint128::zero(),
         }
@@ -1188,6 +1256,7 @@ fn default_instantiate_msg(
         deposit_denom: "wBTC".to_string(),
         deposit_decimals: 6u32,
         deposit_cost: Decimal::percent(1),
+        withdrawal_cost: Decimal::percent(1),
         deposits_cap: None,
         allowlist_contract: deps.api.addr_make("allow_list_addr").to_string(),
         fee_collector_contract: deps.api.addr_make("fee_collector_addr").to_string(),
