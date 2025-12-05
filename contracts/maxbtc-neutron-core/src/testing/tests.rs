@@ -741,7 +741,7 @@ fn test_idle_tick_withdraw_equals_deposit_and_stay_idle() {
     let (mut deps, env, _) = setup_contract();
 
     deps.querier
-        .set_exchange_rate(Decimal::from_str("0.95").unwrap());
+        .set_exchange_rate((Decimal::from_str("0.95").unwrap(), env.block.time.seconds()));
 
     FSM.set_initial_state(&mut deps.storage, ContractState::Idle)
         .unwrap();
