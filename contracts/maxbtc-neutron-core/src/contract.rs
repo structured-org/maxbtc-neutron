@@ -116,6 +116,9 @@ pub fn execute(
             Ok(Response::new().add_attribute("action", "update_ownership"))
         }
         ExecuteMsg::Withdraw {} => execute_withdraw(deps, env, info),
+        ExecuteMsg::MintByOwner { amount, recipient } => {
+            execute_mint_by_owner(deps, env, info, amount, recipient)
+        }
     }
 }
 
@@ -318,6 +321,48 @@ fn execute_tick_deposit_jlp(deps: DepsMut) -> Result<Response, ContractError> {
     Ok(Response::new()
         .add_attribute("action", "tick")
         .add_attribute("stage", "deposit_jlp"))
+}
+
+fn execute_mint_by_owner(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    amount: Uint128,
+    recipient: String,
+) -> Result<Response, ContractError> {
+    // Only the current owner may mint additional maxBtc.
+    assert_owner(deps.storage, &info.sender)?;
+
+    let cfg = CONFIG.load(deps.storage)?;
+    if cfg.paused {
+        return Err(ContractError::ContractPaused {});
+    }
+
+    let maxbtc_denom = deps.querier.query_wasm_smart::<String>(
+        &cfg.token_contract,
+        &TokenQueryMsg::GetDenom { subdenom: None },
+    )?;
+
+    // Mint the maxBTC to the recipient
+    let mint_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: cfg.token_contract.to_string(),
+        msg: to_json_binary(&TokenExecuteMsg::Mint {
+            amount: Coin {
+                amount,
+                denom: maxbtc_denom,
+            },
+            recipient: recipient.clone(),
+        })?,
+        funds: vec![],
+    });
+
+    // Return the response
+    Ok(Response::new()
+        .add_message(mint_msg)
+        .add_attribute("action", "execute_mint_by_owner")
+        .add_attribute("sender", info.sender)
+        .add_attribute("recipient", recipient)
+        .add_attribute("minted_maxbtc", amount.to_string()))
 }
 
 fn execute_mint_fee(

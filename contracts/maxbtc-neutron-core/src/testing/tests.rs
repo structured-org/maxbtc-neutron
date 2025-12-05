@@ -593,6 +593,69 @@ fn test_deposit_wrong_denom() {
 }
 
 #[test]
+fn test_mint_by_owner_success() {
+    let (mut deps, env, _) = setup_contract();
+
+    let cfg = CONFIG.load(&deps.storage).unwrap();
+
+    let info = message_info(&deps.api.addr_make("owner_addr"), &[]);
+
+    let recipient = deps.api.addr_make("recipient_addr").to_string();
+    let resp = do_mint_by_owner(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        Uint128::from(1_000_000u128),
+        recipient.clone(),
+    )
+    .unwrap();
+
+    // Assert
+    assert_eq!(
+        resp,
+        Response::new()
+            .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.token_contract.to_string(),
+                msg: to_json_binary(&TokenExecuteMsg::Mint {
+                    amount: Coin {
+                        amount: Uint128::from(1_000_000u128),
+                        denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string(),
+                    },
+                    recipient,
+                }).unwrap(),
+                funds: vec![],
+            }))
+            .add_attribute("action", "execute_mint_by_owner")
+            .add_attribute("sender", deps.api.addr_make("owner_addr").to_string())
+            .add_attribute("recipient", deps.api.addr_make("recipient_addr").to_string())
+            .add_attribute("minted_maxbtc", "1000000")
+    );
+}
+
+#[test]
+fn test_mint_by_owner_unauthorized() {
+    let (mut deps, env, _) = setup_contract();
+
+    let info = message_info(&deps.api.addr_make("depositor"), &[]);
+
+    let recipient = deps.api.addr_make("recipient_addr").to_string();
+    let err = do_mint_by_owner(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        Uint128::from(1_000_000u128),
+        recipient,
+    )
+    .unwrap_err();
+
+    // Assert
+    assert_eq!(
+        err,
+        ContractError::OwnershipError(cw_ownable::OwnershipError::NotOwner)
+    );
+}
+
+#[test]
 fn test_withdraw_pending_tick_collect_ceffu_amount() {
     let (mut deps, env, _) = setup_contract();
 
@@ -1156,4 +1219,20 @@ fn do_deposit(
 /// A convenience helper for calling the `execute_withdraw` entry point.
 fn do_withdraw(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     execute(deps, env, info, ExecuteMsg::Withdraw {})
+}
+
+/// A convenience helper for calling the `execute_withdraw` entry point.
+fn do_mint_by_owner(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    amount: Uint128,
+    recipient: String,
+) -> Result<Response, ContractError> {
+    execute(
+        deps,
+        env,
+        info,
+        ExecuteMsg::MintByOwner { amount, recipient },
+    )
 }

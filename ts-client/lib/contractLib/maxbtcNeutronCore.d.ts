@@ -84,7 +84,7 @@ export type UpdateOwnershipArgs = {
 export interface MaxbtcNeutronCoreSchema {
     responses: Batch | Config | ContractState | Decimal1 | Batch1 | ArrayOfBatch | OwnershipForString | SimulateDepositResponse | Batch3;
     query: FinalizedBatchesArgs | FinalizedBatchArgs | SimulateDepositArgs;
-    execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | UpdateOwnershipArgs;
+    execute: DepositArgs | UpdateConfigArgs | MintFeeArgs | MintByOwnerArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -311,6 +311,10 @@ export interface Coin {
     amount: Uint128;
     denom: string;
 }
+export interface MintByOwnerArgs {
+    amount: Uint128;
+    recipient: string;
+}
 /**
  * InstantiateMsg configures the contract on initialization.
  */
@@ -412,6 +416,10 @@ export declare class Client {
     mintFee: (sender: string, args: MintFeeArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     mintFeeMsg: (args: MintFeeArgs) => {
         mint_fee: MintFeeArgs;
+    };
+    mintByOwner: (sender: string, args: MintByOwnerArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    mintByOwnerMsg: (args: MintByOwnerArgs) => {
+        mint_by_owner: MintByOwnerArgs;
     };
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
     updateOwnershipMsg: (args: UpdateOwnershipArgs) => {

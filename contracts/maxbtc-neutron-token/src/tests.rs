@@ -39,7 +39,7 @@ fn test_instantiate_success() {
         Attribute::new("factory_contract", msg.factory_contract.clone()),
         Attribute::new(
             "denom",
-            get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone()),
+            get_tokenfactory_denom(env.contract.address.as_ref(), &msg.subdenom),
         ),
     ];
     for attr in expected_attributes {
@@ -63,7 +63,7 @@ fn test_instantiate_success() {
     );
     assert_eq!(
         cfg.denom,
-        get_tokenfactory_denom(env.contract.address.to_string(), msg.subdenom.clone())
+        get_tokenfactory_denom(env.contract.address.as_ref(), &msg.subdenom)
     );
 }
 
