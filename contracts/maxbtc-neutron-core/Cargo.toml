@@ -48,3 +48,4 @@ prost = { workspace = true }
 maxbtc-base = { workspace = true }
 
 [dev-dependencies]
+prost = { workspace = true }

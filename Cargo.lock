@@ -793,6 +793,7 @@ dependencies = [
  "cw-ownable",
  "cw-storage-plus",
  "maxbtc-helpers",
+ "neutron-std",
 ]
 
 [[package]]

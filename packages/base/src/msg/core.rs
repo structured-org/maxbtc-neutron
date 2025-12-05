@@ -25,6 +25,8 @@ pub struct InstantiateMsg {
     pub deposits_cap: Option<Uint128>,
     /// This contract provides the exchange rate for maxBTC
     pub exchange_rate_provider_contract: String,
+    /// Exchange rate timeout in seconds
+    pub exchange_rate_stale_period: Uint64,
     /// Contract address of the allow-list contract that manages
     /// the list of addresses allowed or passed KYC to mint maxBTC
     pub allowlist_contract: String,
@@ -47,6 +49,7 @@ pub struct UpdateConfigMsg {
     pub deposit_forwarder_contract: Option<String>,
     pub deposit_cost: Option<Decimal>,
     pub exchange_rate_provider_contract: Option<String>,
+    pub exchange_rate_stale_period: Option<Uint64>,
     pub deposits_cap: Option<Option<Uint128>>,
     pub allowlist_contract: Option<String>,
     pub fee_collector_contract: Option<String>,
@@ -96,7 +99,7 @@ pub enum QueryMsg {
     #[returns(crate::state::core::Batch)]
     FinalizedBatch { batch_id: u64 },
     /// Returns the Config state
-    #[returns(ConfigResponse)]
+    #[returns(crate::state::core::Config)]
     Config {},
     #[returns(Decimal)]
     ExchangeRate {},
@@ -108,18 +111,6 @@ pub enum QueryMsg {
 #[cw_serde]
 pub struct SimulateDepositResponse {
     pub minted_amount: Uint128,
-}
-
-/// Response for querying config
-#[cw_serde]
-pub struct ConfigResponse {
-    pub operator: String,
-    pub deposit_denom: String,
-    pub deposit_cost: Decimal,
-    pub fee_collector_contract: String,
-    pub waitsaur_holder_contract: String,
-    pub withdrawal_manager_contract: String,
-    pub waitosaur_observer_contract: String,
 }
 
 #[cw_serde]

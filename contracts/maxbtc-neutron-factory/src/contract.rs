@@ -123,7 +123,6 @@ pub fn instantiate(
         salt,
     )
     .map_err(ContractError::Instantiate2Error)?;
-
     let waitosaur_holder_contract = deps.api.addr_humanize(&waitosaur_holder_address)?;
 
     let withdrawal_magnager_code_info = deps
@@ -255,6 +254,7 @@ pub fn instantiate(
             deposits_cap: msg.deposits_cap,
             allowlist_contract: allowlist_contract.to_string(),
             exchange_rate_provider_contract: exchange_rate_provider_contract.to_string(),
+            exchange_rate_stale_period: msg.exchange_rate_stale_period,
             fee_collector_contract: fee_collector_contract.to_string(),
             waitosaur_observer_contract: waitosaur_observer_contract.to_string(),
             waitosaur_holder_contract: waitosaur_holder_contract.to_string(),

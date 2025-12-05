@@ -138,6 +138,10 @@ export interface InstantiateMsg {
      */
     deposits_cap?: Uint128 | null;
     /**
+     * Exchange rate timeout in seconds
+     */
+    exchange_rate_stale_period: Uint64;
+    /**
      * Instantiation parameters for the fee collector.
      */
     fee_collector_params: FeeMinterParams;

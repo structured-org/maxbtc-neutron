@@ -405,6 +405,7 @@ describe('Core', () => {
             collection_period_seconds: 10,
           },
           deposit_forwarder_contract: depositForwarderAddress,
+          exchange_rate_stale_period: '60',
         },
         'label',
         'auto',
