@@ -80,7 +80,7 @@ fn execute_lock(
     let ts = env.block.time.nanos();
     let state = State::Locked {
         amount,
-        at_timestamp: ts.clone(),
+        at_timestamp: ts,
     };
     STATE.save(deps.storage, &state)?;
     Ok(Response::new()
