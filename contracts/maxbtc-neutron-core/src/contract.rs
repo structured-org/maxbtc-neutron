@@ -345,8 +345,6 @@ fn execute_tick_deposit_neutron(deps: DepsMut) -> Result<Response, ContractError
 fn execute_tick_deposit_pending(deps: DepsMut) -> Result<Response, ContractError> {
     FSM.go_to(deps.storage, ContractState::DepositJLP)?;
 
-    // TODO: Implement
-
     Ok(Response::new()
         .add_attribute("action", "tick")
         .add_attribute("stage", "deposit_pending"))
@@ -354,8 +352,6 @@ fn execute_tick_deposit_pending(deps: DepsMut) -> Result<Response, ContractError
 
 fn execute_tick_deposit_jlp(deps: DepsMut) -> Result<Response, ContractError> {
     FSM.go_to(deps.storage, ContractState::Idle)?;
-
-    // TODO: Implement
 
     Ok(Response::new()
         .add_attribute("action", "tick")
