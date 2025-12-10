@@ -26,7 +26,6 @@ pub enum QueryMsg {
 pub enum ExecuteMsg {
     UpdateConfig {
         factory_contract: Option<String>,
-        core_contract: Option<String>,
         token_contract: Option<String>,
         deposit_denom: Option<String>,
     },

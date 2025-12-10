@@ -182,7 +182,6 @@ fn update_config_by_owner() {
     let owner = deps.api.addr_make("owner");
     let msg = ExecuteMsg::UpdateConfig {
         factory_contract: Some(deps.api.addr_make("new_factory_contract").into_string()),
-        core_contract: Some(deps.api.addr_make("new_core_contract").into_string()),
         token_contract: Some(deps.api.addr_make("new_token_contract").into_string()),
         deposit_denom: Some("new_deposit_denom".to_string()),
     };
@@ -193,7 +192,7 @@ fn update_config_by_owner() {
     let config = CONFIG.load(&deps.storage).unwrap();
     let expected_config = Config {
         factory_contract: deps.api.addr_make("new_factory_contract"),
-        core_contract: deps.api.addr_make("new_core_contract"),
+        core_contract: deps.api.addr_make("core_contract"),
         token_contract: deps.api.addr_make("new_token_contract"),
         deposit_denom: "new_deposit_denom".to_string(),
     };
@@ -207,7 +206,6 @@ fn update_config_by_unauthorized() {
 
     let msg = ExecuteMsg::UpdateConfig {
         factory_contract: Some(deps.api.addr_make("new_factory_contract").into_string()),
-        core_contract: Some(deps.api.addr_make("new_core_contract").into_string()),
         token_contract: Some(deps.api.addr_make("new_token_contract").into_string()),
         deposit_denom: Some("new_deposit_denom".to_string()),
     };
