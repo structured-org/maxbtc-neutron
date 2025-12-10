@@ -93,16 +93,12 @@ pub async fn query_skip_api(
         // If the code reaches here, the status was a success.
         // We can now safely consume the response to get the JSON body.
         let route_response: SkipRouteResponse = res.json().await?;
-        log::debug!("Skip API Response: {:?}", route_response);
+        log::debug!("Skip API Response: {route_response:?}");
         Ok(route_response)
     } else {
         // If the status is not success, try to parse the error body
         let error_text = res.text().await?;
-        log::error!(
-            "Skip API returned an error status ({}): {}",
-            status,
-            error_text
-        );
+        log::error!("Skip API returned an error status ({status}): {error_text}");
         Err(AppError::SkipError {
             error_message: error_text,
         })

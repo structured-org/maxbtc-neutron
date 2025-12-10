@@ -21,7 +21,7 @@ compile:
 		--mount type=volume,source="$(notdir $(CURDIR))_cache",target=/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
 		--platform linux/amd64 \
-		cosmwasm/optimizer:0.16.1
+		cosmwasm/optimizer:0.17.0
 	@sudo chown -R $(shell id -u):$(shell id -g) artifacts
 
 compile_arm64:
@@ -29,11 +29,11 @@ compile_arm64:
 		--mount type=volume,source="$(notdir $(CURDIR))_cache",target=/target \
 		--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
 		--platform linux/arm64 \
-		cosmwasm/optimizer-arm64:0.16.1
+		cosmwasm/optimizer-arm64:0.17.0
 
 check_contracts:
 	@cargo install cosmwasm-check --locked
-	@cosmwasm-check --available-capabilities iterator,staking,stargate,neutron,cosmwasm_1_1,cosmwasm_1_2 artifacts/*.wasm
+	@cosmwasm-check --available-capabilities iterator,staking,stargate,neutron,cosmwasm_1_1,cosmwasm_1_2,cosmwasm_1_3,cosmwasm_1_4,cosmwasm_2_0 artifacts/*.wasm
 
 build_arm64: schema clippy test fmt doc compile_arm64 check_contracts
 

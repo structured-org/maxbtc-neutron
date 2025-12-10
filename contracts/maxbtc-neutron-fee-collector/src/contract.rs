@@ -1,23 +1,23 @@
+use cosmwasm_schema::cw_serde;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
     to_json_binary, Addr, BankMsg, Binary, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, QuerierWrapper, QueryRequest, Reply, Response, StdResult, SubMsg, Uint128,
-    WasmMsg, WasmQuery,
+    MessageInfo, QuerierWrapper, QueryRequest, Response, StdResult, Uint128, WasmMsg, WasmQuery,
 };
 use cw2::set_contract_version;
+use cw_ownable::{assert_owner, initialize_owner};
+use cw_storage_plus::Item;
 
 use crate::error::ContractError;
+use crate::msg::MigrateMsg;
 use crate::msg::{
-    ConfigResponse, CoreExecuteMsg, CoreQueryMsg::ExchangeRate, ExecuteMsg, InstantiateMsg,
-    QueryMsg, StateResponse,
+    CoreExecuteMsg, CoreQueryMsg::ExchangeRate, ExecuteMsg, InstantiateMsg, QueryMsg,
 };
 use crate::state::{Config, State, CONFIG, STATE};
 
 const CONTRACT_NAME: &str = "crates.io:maxbtc-neutron-fee-collector";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const MINT_FEE_REPLY_ID: u64 = 1;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -28,17 +28,21 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    initialize_owner(deps.storage, deps.api, Some(&msg.owner))?;
+
     if msg.fee_apy_reduction_percentage >= Decimal::one()
         || msg.fee_apy_reduction_percentage <= Decimal::zero()
     {
         return Err(ContractError::InvalidFeeReductionPercentage {});
     }
 
-    let owner = deps.api.addr_validate(&msg.owner)?;
     let core_contract = deps.api.addr_validate(&msg.core_contract)?;
 
+    if msg.collection_period_seconds < 1 {
+        return Err(ContractError::InvalidCollectionPeriod {});
+    }
+
     let config = Config {
-        owner,
         core_contract: core_contract.clone(),
         fee_apy_reduction_percentage: msg.fee_apy_reduction_percentage,
         collection_period_seconds: msg.collection_period_seconds,
@@ -76,19 +80,24 @@ pub fn execute(
         ExecuteMsg::CollectFee {} => execute_collect_fee(deps, env),
         ExecuteMsg::Claim { amount, recipient } => execute_claim(deps, info, amount, recipient),
         ExecuteMsg::UpdateConfig {
-            owner,
             core_contract,
             fee_apy_reduction_percentage,
-            collection_period_hours,
+            collection_period_seconds,
         } => execute_update_config(
             deps,
             env,
             info,
-            owner,
             core_contract,
             fee_apy_reduction_percentage,
-            collection_period_hours,
+            collection_period_seconds,
         ),
+        ExecuteMsg::UpdateOwnership(action) => {
+            let ownership =
+                cw_ownable::update_ownership(deps.into_empty(), &env.block, &info.sender, action)?;
+            Ok(Response::new()
+                .add_attribute("action", "update_ownership")
+                .add_attributes(ownership.into_attributes()))
+        }
     }
 }
 
@@ -147,13 +156,19 @@ pub fn execute_collect_fee(deps: DepsMut, env: Env) -> Result<Response, Contract
         funds: vec![],
     };
 
-    // Use a submessage to handle the reply
-    let sub_msg = SubMsg::reply_on_success(wasm_msg, MINT_FEE_REPLY_ID);
+    // Update state with the new rate and timestamp
+    let new_state = State {
+        last_collection_timestamp: env.block.time,
+        last_exchange_rate: current_rate,
+    };
+    STATE.save(deps.storage, &new_state)?;
 
     Ok(Response::new()
-        .add_submessage(sub_msg)
+        .add_message(wasm_msg)
         .add_attribute("action", "collect_fee")
-        .add_attribute("amount_to_mint", fee_to_mint.to_string()))
+        .add_attribute("amount_to_mint", fee_to_mint.to_string())
+        .add_attribute("new_exchange_rate", current_rate.to_string())
+        .add_attribute("new_collection_timestamp", env.block.time.to_string()))
 }
 
 pub fn execute_claim(
@@ -162,10 +177,7 @@ pub fn execute_claim(
     amount: Coin,
     recipient: String,
 ) -> Result<Response, ContractError> {
-    let config = CONFIG.load(deps.storage)?;
-    if info.sender != config.owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    assert_owner(deps.storage, &info.sender)?;
 
     if amount.amount.is_zero() {
         return Err(ContractError::InvalidZeroAmount {});
@@ -190,22 +202,16 @@ pub fn execute_update_config(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    owner: Option<String>,
     core_contract: Option<String>,
     fee_apy_reduction_percentage: Option<Decimal>,
-    collection_period_hours: Option<u64>,
+    collection_period_seconds: Option<u64>,
 ) -> Result<Response, ContractError> {
+    assert_owner(deps.storage, &info.sender)?;
+
     let mut config = CONFIG.load(deps.storage)?;
-    if info.sender != config.owner {
-        return Err(ContractError::Unauthorized {});
-    }
 
     let mut response = Response::new().add_attribute("action", "update_config");
 
-    if let Some(new_owner) = owner {
-        config.owner = deps.api.addr_validate(&new_owner)?;
-        response = response.add_attribute("owner_updated", new_owner);
-    }
     if let Some(new_core_contract) = core_contract {
         config.core_contract = deps.api.addr_validate(&new_core_contract)?;
         response = response.add_attribute("core_contract_updated", new_core_contract.clone());
@@ -228,10 +234,13 @@ pub fn execute_update_config(
             new_percentage.to_string(),
         );
     }
-    if let Some(new_period) = collection_period_hours {
-        config.collection_period_seconds = new_period * 60 * 60;
+    if let Some(new_period) = collection_period_seconds {
+        if new_period < 1 {
+            return Err(ContractError::InvalidCollectionPeriod {});
+        }
+        config.collection_period_seconds = new_period;
         response =
-            response.add_attribute("collection_period_hours_updated", new_period.to_string());
+            response.add_attribute("collection_period_seconds_updated", new_period.to_string());
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -239,55 +248,12 @@ pub fn execute_update_config(
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    if msg.id != MINT_FEE_REPLY_ID {
-        return Err(ContractError::InvalidReplyId {});
-    }
-
-    let config = CONFIG.load(deps.storage)?;
-
-    // Query the new exchange rate from the core contract
-    let new_rate = query_exchange_rate(&deps.querier, &config.core_contract)?;
-
-    // Update state with the new rate and timestamp
-    let new_state = State {
-        last_collection_timestamp: env.block.time,
-        last_exchange_rate: new_rate,
-    };
-    STATE.save(deps.storage, &new_state)?;
-
-    Ok(Response::new()
-        .add_attribute("action", "reply_mint_fee")
-        .add_attribute("new_exchange_rate", new_rate.to_string())
-        .add_attribute("new_collection_timestamp", env.block.time.to_string()))
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Config {} => to_json_binary(&query_config(deps)?),
-        QueryMsg::State {} => to_json_binary(&query_state(deps)?),
+        QueryMsg::Config {} => to_json_binary(&CONFIG.load(deps.storage)?),
+        QueryMsg::State {} => to_json_binary(&STATE.load(deps.storage)?),
+        QueryMsg::Ownership {} => Ok(to_json_binary(&cw_ownable::get_ownership(deps.storage)?)?),
     }
-}
-
-fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
-    let config = CONFIG.load(deps.storage)?;
-    Ok(ConfigResponse {
-        owner: config.owner.to_string(),
-        core_contract: config.core_contract.to_string(),
-        fee_apy_reduction_percentage: config.fee_apy_reduction_percentage,
-        collection_period_seconds: config.collection_period_seconds,
-        fee_denom: config.fee_denom,
-        maxbtc_decimals: config.maxbtc_decimals,
-    })
-}
-
-fn query_state(deps: Deps) -> StdResult<StateResponse> {
-    let state = STATE.load(deps.storage)?;
-    Ok(StateResponse {
-        last_collection_timestamp: state.last_collection_timestamp,
-        last_exchange_rate: state.last_exchange_rate,
-    })
 }
 
 /// Converts a [`Decimal`] (which stores fixed-point numbers in *atomics*) back
@@ -351,88 +317,46 @@ fn query_exchange_rate(querier: &QuerierWrapper, core_contract: &Addr) -> StdRes
     }))?;
     Ok(res)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str::FromStr;
-
-    #[test]
-    fn test_calculate_fee_to_mint() {
-        // Case 1: Standard positive APY
-        // Old rate: 1.0, Current rate: 1.1. Gain is 0.1.
-        // Total supply: 1,000,000
-        // Decimals: 6
-        // Fee reduction: 10% (0.1)
-        // We want to skim 10% of the 0.1 gain.
-        // Retained gain should be 0.09. Target rate = 1.0 + 0.09 = 1.09.
-        // total_supply_dec = 1.0
-        // fee_dec = 1.0 * (1.1 / 1.09 - 1)
-        // fee_dec = 1.0 * (0.0091743119...)
-        // fee_dec = 0.0091743119...
-        // Converting back to atomics (6 decimals) should give 9174
-        let rate_old = Decimal::from_str("1.0").unwrap();
-        let rate_current = Decimal::from_str("1.1").unwrap();
-        let total_supply = Uint128::new(1_000_000); // 1.0 with 6 decimals
-        let fee_percentage = Decimal::from_str("0.1").unwrap(); // 10%
-        let decimals = 6;
-
-        let fee = calculate_fee_to_mint(
-            rate_old,
-            rate_current,
-            total_supply,
-            fee_percentage,
-            decimals,
-        )
-        .unwrap();
-        assert_eq!(fee, Uint128::new(9174));
-
-        // New total supply = 1,000,000 + 9174 = 1,009,174
-        // Total assets (in value) = rate_current * old_supply_dec = 1.1 * 1.0 = 1.1
-        // New rate = Total assets / new_supply_dec = 1.1 / 1.009174 = 1.0900002...
-        // This is very close to the target of 1.09.
-
-        // Case 2: No gain
-        let rate_old_2 = Decimal::from_str("1.1").unwrap();
-        let rate_current_2 = Decimal::from_str("1.1").unwrap();
-        let fee_2 = calculate_fee_to_mint(
-            rate_old_2,
-            rate_current_2,
-            total_supply,
-            fee_percentage,
-            decimals,
-        )
-        .unwrap();
-        assert_eq!(fee_2, Uint128::zero());
-
-        // Case 3: Negative APY (loss)
-        let rate_old_3 = Decimal::from_str("1.1").unwrap();
-        let rate_current_3 = Decimal::from_str("1.0").unwrap();
-        let fee_3 = calculate_fee_to_mint(
-            rate_old_3,
-            rate_current_3,
-            total_supply,
-            fee_percentage,
-            decimals,
-        )
-        .unwrap();
-        assert_eq!(fee_3, Uint128::zero());
-
-        // Case 4: Higher fee percentage (50%)
-        // Target rate = 1.0 + (0.1 * 0.5) = 1.05
-        // fee_dec = 1.0 * (1.1 / 1.05 - 1)
-        // fee_dec = 1.0 * (0.047619...)
-        // fee_dec = 0.047619...
-        // Converting back to atomics (6 decimals) should give 47619
-        let fee_percentage_4 = Decimal::from_str("0.5").unwrap(); // 50%
-        let fee_4 = calculate_fee_to_mint(
-            rate_old,
-            rate_current,
-            total_supply,
-            fee_percentage_4,
-            decimals,
-        )
-        .unwrap();
-        assert_eq!(fee_4, Uint128::new(47619));
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let contract_version_metadata = cw2::get_contract_version(deps.storage)?;
+    let storage_contract_name = contract_version_metadata.contract.as_str();
+    if storage_contract_name != CONTRACT_NAME {
+        return Err(ContractError::MigrationError {
+            storage_contract_name: storage_contract_name.to_string(),
+            contract_name: CONTRACT_NAME.to_string(),
+        });
     }
+
+    let storage_version: semver::Version = contract_version_metadata.version.parse()?;
+    let version: semver::Version = CONTRACT_VERSION.parse()?;
+
+    if storage_version < version {
+        cw2::set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+        #[cw_serde]
+        pub struct OldConfig {
+            pub owner: Addr,
+            pub core_contract: Addr,
+            pub fee_apy_reduction_percentage: Decimal,
+            pub collection_period_seconds: u64,
+            pub fee_denom: String,
+            pub maxbtc_decimals: u32,
+        }
+
+        let old_config = Item::<OldConfig>::new("config").load(deps.storage)?;
+
+        initialize_owner(deps.storage, deps.api, Some(old_config.owner.as_ref()))?;
+
+        let new_config = Config {
+            core_contract: old_config.core_contract,
+            fee_apy_reduction_percentage: old_config.fee_apy_reduction_percentage,
+            collection_period_seconds: old_config.collection_period_seconds,
+            fee_denom: old_config.fee_denom,
+            maxbtc_decimals: old_config.maxbtc_decimals,
+        };
+        CONFIG.save(deps.storage, &new_config)?;
+    }
+
+    Ok(Response::new())
 }

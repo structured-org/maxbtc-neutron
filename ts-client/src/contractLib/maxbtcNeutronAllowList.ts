@@ -55,8 +55,8 @@ export type UpdateOwnershipArgs =
 
 export interface MaxbtcNeutronAllowListSchema {
   responses: ArrayOfString | Boolean | OwnershipForString;
-  query: IsAddressAllowedArgs;
-  execute: UpdateAllowListArgs | UpdateOwnershipArgs;
+  query: AllowListArgs | IsAddressAllowedArgs;
+  execute: AllowArgs | DenyArgs | UpdateZkMeSettingsArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -77,11 +77,25 @@ export interface OwnershipForString {
    */
   pending_owner?: string | null;
 }
+export interface AllowListArgs {
+  limit?: number | null;
+  start_after?: string | null;
+}
 export interface IsAddressAllowedArgs {
   address: string;
 }
-export interface UpdateAllowListArgs {
-  allow_list: string[];
+export interface AllowArgs {
+  addresses: string[];
+}
+export interface DenyArgs {
+  addresses: string[];
+}
+export interface UpdateZkMeSettingsArgs {
+  settings?: ZkMeSettingsUpdate | null;
+}
+export interface ZkMeSettingsUpdate {
+  contract: string;
+  cooperator: string;
 }
 export interface InstantiateMsg {
   owner: string;
@@ -101,7 +115,7 @@ export class Client {
     this.client = client;
     this.contractAddress = contractAddress;
   }
-  mustBeSigningClient() {
+  mustBeSigningClient(): Error {
     return new Error("This client is not a SigningCosmWasmClient");
   }
   static async instantiate(
@@ -112,9 +126,10 @@ export class Client {
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
     const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
@@ -122,19 +137,20 @@ export class Client {
     client: SigningCosmWasmClient,
     sender: string,
     codeId: number,
-    salt: number,
+    salt: Uint8Array,
     initMsg: InstantiateMsg,
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
-    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+    const res = await client.instantiate2(sender, codeId, salt, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
-  queryAllowList = async(): Promise<ArrayOfString> => {
-    return this.client.queryContractSmart(this.contractAddress, { allow_list: {} });
+  queryAllowList = async(args: AllowListArgs): Promise<ArrayOfString> => {
+    return this.client.queryContractSmart(this.contractAddress, { allow_list: args });
   }
   queryIsAddressAllowed = async(args: IsAddressAllowedArgs): Promise<Boolean> => {
     return this.client.queryContractSmart(this.contractAddress, { is_address_allowed: args });
@@ -142,12 +158,24 @@ export class Client {
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
-  updateAllowList = async(sender:string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+  allow = async(sender:string, args: AllowArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_allow_list: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.allowMsg(args), fee || "auto", memo, funds);
   }
+  allowMsg = (args: AllowArgs): { allow: AllowArgs } => { return { allow: args }; }
+  deny = async(sender:string, args: DenyArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.denyMsg(args), fee || "auto", memo, funds);
+  }
+  denyMsg = (args: DenyArgs): { deny: DenyArgs } => { return { deny: args }; }
+  updateZkMeSettings = async(sender:string, args: UpdateZkMeSettingsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateZkMeSettingsMsg(args), fee || "auto", memo, funds);
+  }
+  updateZkMeSettingsMsg = (args: UpdateZkMeSettingsArgs): { update_zk_me_settings: UpdateZkMeSettingsArgs } => { return { update_zk_me_settings: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_ownership: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
   }
+  updateOwnershipMsg = (args: UpdateOwnershipArgs): { update_ownership: UpdateOwnershipArgs } => { return { update_ownership: args }; }
 }

@@ -48,8 +48,8 @@ export type UpdateOwnershipArgs = {
 } | "accept_ownership" | "renounce_ownership";
 export interface MaxbtcNeutronAllowListSchema {
     responses: ArrayOfString | Boolean | OwnershipForString;
-    query: IsAddressAllowedArgs;
-    execute: UpdateAllowListArgs | UpdateOwnershipArgs;
+    query: AllowListArgs | IsAddressAllowedArgs;
+    execute: AllowArgs | DenyArgs | UpdateZkMeSettingsArgs | UpdateOwnershipArgs;
     instantiate?: InstantiateMsg;
     [k: string]: unknown;
 }
@@ -70,11 +70,25 @@ export interface OwnershipForString {
      */
     pending_owner?: string | null;
 }
+export interface AllowListArgs {
+    limit?: number | null;
+    start_after?: string | null;
+}
 export interface IsAddressAllowedArgs {
     address: string;
 }
-export interface UpdateAllowListArgs {
-    allow_list: string[];
+export interface AllowArgs {
+    addresses: string[];
+}
+export interface DenyArgs {
+    addresses: string[];
+}
+export interface UpdateZkMeSettingsArgs {
+    settings?: ZkMeSettingsUpdate | null;
+}
+export interface ZkMeSettingsUpdate {
+    contract: string;
+    cooperator: string;
 }
 export interface InstantiateMsg {
     owner: string;
@@ -84,11 +98,25 @@ export declare class Client {
     contractAddress: string;
     constructor(client: CosmWasmClient | SigningCosmWasmClient, contractAddress: string);
     mustBeSigningClient(): Error;
-    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[]): Promise<InstantiateResult>;
-    queryAllowList: () => Promise<ArrayOfString>;
+    static instantiate(client: SigningCosmWasmClient, sender: string, codeId: number, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    static instantiate2(client: SigningCosmWasmClient, sender: string, codeId: number, salt: Uint8Array, initMsg: InstantiateMsg, label: string, fees: StdFee | 'auto' | number, initCoins?: readonly Coin[], admin?: string): Promise<InstantiateResult>;
+    queryAllowList: (args: AllowListArgs) => Promise<ArrayOfString>;
     queryIsAddressAllowed: (args: IsAddressAllowedArgs) => Promise<Boolean>;
     queryOwnership: () => Promise<OwnershipForString>;
-    updateAllowList: (sender: string, args: UpdateAllowListArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    allow: (sender: string, args: AllowArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    allowMsg: (args: AllowArgs) => {
+        allow: AllowArgs;
+    };
+    deny: (sender: string, args: DenyArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    denyMsg: (args: DenyArgs) => {
+        deny: DenyArgs;
+    };
+    updateZkMeSettings: (sender: string, args: UpdateZkMeSettingsArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateZkMeSettingsMsg: (args: UpdateZkMeSettingsArgs) => {
+        update_zk_me_settings: UpdateZkMeSettingsArgs;
+    };
     updateOwnership: (sender: string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]) => Promise<ExecuteResult>;
+    updateOwnershipMsg: (args: UpdateOwnershipArgs) => {
+        update_ownership: UpdateOwnershipArgs;
+    };
 }

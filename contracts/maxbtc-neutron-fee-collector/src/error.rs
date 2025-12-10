@@ -6,8 +6,8 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("Unauthorized: sender is not the contract owner")]
-    Unauthorized {},
+    #[error("{0}")]
+    OwnershipError(#[from] cw_ownable::OwnershipError),
 
     #[error("Invalid recipient address")]
     InvalidRecipient {},
@@ -21,9 +21,6 @@ pub enum ContractError {
         last_rate: Decimal,
     },
 
-    #[error("Invalid reply ID")]
-    InvalidReplyId {},
-
     #[error("Invalid zero amount")]
     InvalidZeroAmount {},
 
@@ -35,4 +32,22 @@ pub enum ContractError {
 
     #[error("Division by zero error")]
     DivideByZeroError(#[from] DivideByZeroError),
+
+    #[error("Collection period must not be less than one hour")]
+    InvalidCollectionPeriod {},
+
+    #[error("Can't migrate from {storage_contract_name} to {contract_name}")]
+    MigrationError {
+        storage_contract_name: String,
+        contract_name: String,
+    },
+
+    #[error("Semver parsing error: {0}")]
+    SemVer(String),
+}
+
+impl From<semver::Error> for ContractError {
+    fn from(err: semver::Error) -> Self {
+        Self::SemVer(err.to_string())
+    }
 }

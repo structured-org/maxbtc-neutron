@@ -2,6 +2,16 @@ import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult
 import { StdFee } from "@cosmjs/amino";
 import { Coin } from "@cosmjs/amino";
 /**
+ * An implementation of i256 that is using strings for JSON encoding/decoding, such that the full i256 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances out of primitive uint types or `new` to provide big endian bytes:
+ *
+ * ``` # use cosmwasm_std::Int256; let a = Int256::from(258u128); let b = Int256::new([ 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 1u8, 2u8, ]); assert_eq!(a, b); ```
+ */
+export type Int256 = string;
+/**
  * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
  *
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
@@ -45,12 +55,6 @@ export type Timestamp = Uint64;
  */
 export type Uint64 = string;
 /**
- * A fixed-point decimal value with 18 fractional digits, i.e. Decimal(1_000_000_000_000_000_000) == 1.0
- *
- * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
- */
-export type Decimal1 = string;
-/**
  * Actions that can be taken to alter the contract's ownership
  */
 export type UpdateOwnershipArgs =
@@ -64,10 +68,27 @@ export type UpdateOwnershipArgs =
   | "renounce_ownership";
 
 export interface MaxbtcNeutronExchangeRateProviderSchema {
-  responses: Decimal | OwnershipForString;
-  execute: UpdateExchangeRateArgs | UpdateOwnershipArgs;
+  responses: GetAumResponse | GetTwaerResponse | OwnershipForString;
+  execute: UpdateExchangeRateArgs | UpdateAumArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
+}
+/**
+ * Response type for AUM Oracle receiver GetAum queries. **Must** return the AUM in micro-Bitcoin (uwBTC) with precision of `WBTC_DECIMALS`.
+ */
+export interface GetAumResponse {
+  /**
+   * The latest AUM in the AUM Oracle receiver reported by messengers scaled to `WBTC_DECIMALS`.
+   */
+  aum_in_wbtc: Int256;
+  /**
+   * Represents the number of decimals that the `aum_in_wbtc` is represented in. Must always equal to `WBTC_DECIMALS`. It is used to scale the `aum_in_wbtc` to its base BTC value. E.g. `base_aum_in_btc = aum_in_wbtc / 10^decimals`.
+   */
+  decimals: number;
+}
+export interface GetTwaerResponse {
+  published_at: number;
+  twaer: Decimal;
 }
 /**
  * The contract's ownership info
@@ -87,7 +108,11 @@ export interface OwnershipForString {
   pending_owner?: string | null;
 }
 export interface UpdateExchangeRateArgs {
-  rate: Decimal1;
+  rate: Decimal;
+}
+export interface UpdateAumArgs {
+  aum_in_wbtc: Int256;
+  decimals: number;
 }
 export interface InstantiateMsg {
   owner: string;
@@ -107,7 +132,7 @@ export class Client {
     this.client = client;
     this.contractAddress = contractAddress;
   }
-  mustBeSigningClient() {
+  mustBeSigningClient(): Error {
     return new Error("This client is not a SigningCosmWasmClient");
   }
   static async instantiate(
@@ -118,9 +143,10 @@ export class Client {
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
     const res = await client.instantiate(sender, codeId, initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
@@ -128,29 +154,40 @@ export class Client {
     client: SigningCosmWasmClient,
     sender: string,
     codeId: number,
-    salt: number,
+    salt: Uint8Array,
     initMsg: InstantiateMsg,
     label: string,
     fees: StdFee | 'auto' | number,
     initCoins?: readonly Coin[],
+    admin?: string,
   ): Promise<InstantiateResult> {
-    const res = await client.instantiate2(sender, codeId, new Uint8Array([salt]), initMsg, label, fees, {
-      ...(initCoins && initCoins.length && { funds: initCoins }),
+    const res = await client.instantiate2(sender, codeId, salt, initMsg, label, fees, {
+      ...(initCoins && initCoins.length && { funds: initCoins }), ...(admin && { admin: admin }),
     });
     return res;
   }
-  queryExchangeRate = async(): Promise<Decimal> => {
-    return this.client.queryContractSmart(this.contractAddress, { exchange_rate: {} });
+  queryGetTwaer = async(): Promise<GetTwaerResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_twaer: {} });
+  }
+  queryGetAum = async(): Promise<GetAumResponse> => {
+    return this.client.queryContractSmart(this.contractAddress, { get_aum: {} });
   }
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
   updateExchangeRate = async(sender:string, args: UpdateExchangeRateArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_exchange_rate: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.updateExchangeRateMsg(args), fee || "auto", memo, funds);
   }
+  updateExchangeRateMsg = (args: UpdateExchangeRateArgs): { update_exchange_rate: UpdateExchangeRateArgs } => { return { update_exchange_rate: args }; }
+  updateAum = async(sender:string, args: UpdateAumArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.updateAumMsg(args), fee || "auto", memo, funds);
+  }
+  updateAumMsg = (args: UpdateAumArgs): { update_aum: UpdateAumArgs } => { return { update_aum: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
-    return this.client.execute(sender, this.contractAddress, { update_ownership: args }, fee || "auto", memo, funds);
+    return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
   }
+  updateOwnershipMsg = (args: UpdateOwnershipArgs): { update_ownership: UpdateOwnershipArgs } => { return { update_ownership: args }; }
 }
