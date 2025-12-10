@@ -32,6 +32,13 @@ class Client {
     queryOwnership = async () => {
         return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
     };
+    adminExecute = async (sender, args, fee, memo, funds) => {
+        if (!isSigningCosmWasmClient(this.client)) {
+            throw this.mustBeSigningClient();
+        }
+        return this.client.execute(sender, this.contractAddress, this.adminExecuteMsg(args), fee || "auto", memo, funds);
+    };
+    adminExecuteMsg = (args) => { return { admin_execute: args }; };
     updateOwnership = async (sender, args, fee, memo, funds) => {
         if (!isSigningCosmWasmClient(this.client)) {
             throw this.mustBeSigningClient();

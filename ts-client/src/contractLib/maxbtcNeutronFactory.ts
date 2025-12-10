@@ -1,6 +1,5 @@
 import { CosmWasmClient, SigningCosmWasmClient, ExecuteResult, InstantiateResult } from "@cosmjs/cosmwasm-stargate"; 
 import { StdFee } from "@cosmjs/amino";
-import { Coin } from "@cosmjs/amino";
 /**
  * Expiration represents a point in time when some event happens. It can compare with a BlockInfo and will return is_expired() == true once the condition is hit (and for every block in the future)
  */
@@ -48,6 +47,131 @@ export type Uint64 = string;
  * This type is immutable. If you really need to mutate it (Really? Are you sure?), create a mutable copy using `let mut mutable = Addr::to_string()` and operate on that `String` instance.
  */
 export type Addr = string;
+export type CosmosMsgFor_Empty =
+  | {
+      bank: BankMsg;
+    }
+  | {
+      custom: Empty;
+    }
+  | {
+      any: AnyMsg;
+    }
+  | {
+      wasm: WasmMsg;
+    };
+/**
+ * The message types of the bank module.
+ *
+ * See https://github.com/cosmos/cosmos-sdk/blob/v0.40.0/proto/cosmos/bank/v1beta1/tx.proto
+ */
+export type BankMsg =
+  | {
+      send: {
+        amount: Coin[];
+        to_address: string;
+      };
+    }
+  | {
+      burn: {
+        amount: Coin[];
+      };
+    };
+/**
+ * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
+ *
+ * # Examples
+ *
+ * Use `from` to create instances of this and `u128` to get the value out:
+ *
+ * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
+ *
+ * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
+ *
+ * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
+ */
+export type Uint128 = string;
+/**
+ * Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.
+ *
+ * This is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>. See also <https://github.com/CosmWasm/cosmwasm/blob/main/docs/MESSAGE_TYPES.md>.
+ */
+export type Binary = string;
+/**
+ * The message types of the wasm module.
+ *
+ * See https://github.com/CosmWasm/wasmd/blob/v0.14.0/x/wasm/internal/types/tx.proto
+ */
+export type WasmMsg =
+  | {
+      execute: {
+        contract_addr: string;
+        funds: Coin[];
+        /**
+         * msg is the json-encoded ExecuteMsg struct (as raw Binary)
+         */
+        msg: Binary;
+      };
+    }
+  | {
+      instantiate: {
+        admin?: string | null;
+        code_id: number;
+        funds: Coin[];
+        /**
+         * A human-readable label for the contract.
+         *
+         * Valid values should: - not be empty - not be bigger than 128 bytes (or some chain-specific limit) - not start / end with whitespace
+         */
+        label: string;
+        /**
+         * msg is the JSON-encoded InstantiateMsg struct (as raw Binary)
+         */
+        msg: Binary;
+      };
+    }
+  | {
+      instantiate2: {
+        admin?: string | null;
+        code_id: number;
+        funds: Coin[];
+        /**
+         * A human-readable label for the contract.
+         *
+         * Valid values should: - not be empty - not be bigger than 128 bytes (or some chain-specific limit) - not start / end with whitespace
+         */
+        label: string;
+        /**
+         * msg is the JSON-encoded InstantiateMsg struct (as raw Binary)
+         */
+        msg: Binary;
+        salt: Binary;
+      };
+    }
+  | {
+      migrate: {
+        contract_addr: string;
+        /**
+         * msg is the json-encoded MigrateMsg struct that will be passed to the new code
+         */
+        msg: Binary;
+        /**
+         * the code_id of the new logic to place in the given contract
+         */
+        new_code_id: number;
+      };
+    }
+  | {
+      update_admin: {
+        admin: string;
+        contract_addr: string;
+      };
+    }
+  | {
+      clear_admin: {
+        contract_addr: string;
+      };
+    };
 /**
  * Actions that can be taken to alter the contract's ownership
  */
@@ -66,24 +190,10 @@ export type UpdateOwnershipArgs =
  * The greatest possible value that can be represented is 340282366920938463463.374607431768211455 (which is (2^128 - 1) / 10^18)
  */
 export type Decimal = string;
-/**
- * A thin wrapper around u128 that is using strings for JSON encoding/decoding, such that the full u128 range can be used for clients that convert JSON numbers to floats, like JavaScript and jq.
- *
- * # Examples
- *
- * Use `from` to create instances of this and `u128` to get the value out:
- *
- * ``` # use cosmwasm_std::Uint128; let a = Uint128::from(123u128); assert_eq!(a.u128(), 123);
- *
- * let b = Uint128::from(42u64); assert_eq!(b.u128(), 42);
- *
- * let c = Uint128::from(70u32); assert_eq!(c.u128(), 70); ```
- */
-export type Uint128 = string;
 
 export interface MaxbtcNeutronFactorySchema {
   responses: OwnershipForString | State;
-  execute: UpdateOwnershipArgs;
+  execute: AdminExecuteArgs | UpdateOwnershipArgs;
   instantiate?: InstantiateMsg;
   [k: string]: unknown;
 }
@@ -113,6 +223,26 @@ export interface State {
   waitosaur_holder_contract: Addr;
   waitosaur_observer_contract: Addr;
   withdrawal_manager_contract: Addr;
+}
+export interface AdminExecuteArgs {
+  msgs: CosmosMsgFor_Empty[];
+}
+export interface Coin {
+  amount: Uint128;
+  denom: string;
+}
+/**
+ * An empty struct that serves as a placeholder in different places, such as contracts that don't set a custom message.
+ *
+ * It is designed to be expressible in correct JSON and JSON Schema but contains no meaningful data. Previously we used enums without cases, but those cannot represented as valid JSON Schema (https://github.com/CosmWasm/cosmwasm/issues/451)
+ */
+export interface Empty {}
+/**
+ * A message encoded the same way as a protobuf [Any](https://github.com/protocolbuffers/protobuf/blob/master/src/google/protobuf/any.proto). This is the same structure as messages in `TxBody` from [ADR-020](https://github.com/cosmos/cosmos-sdk/blob/master/docs/architecture/adr-020-protobuf-transaction-encoding.md)
+ */
+export interface AnyMsg {
+  type_url: string;
+  value: Binary;
 }
 /**
  * InstantiateMsg configures the contract on initialization.
@@ -246,6 +376,11 @@ export class Client {
   queryOwnership = async(): Promise<OwnershipForString> => {
     return this.client.queryContractSmart(this.contractAddress, { ownership: {} });
   }
+  adminExecute = async(sender:string, args: AdminExecuteArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
+          if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
+    return this.client.execute(sender, this.contractAddress, this.adminExecuteMsg(args), fee || "auto", memo, funds);
+  }
+  adminExecuteMsg = (args: AdminExecuteArgs): { admin_execute: AdminExecuteArgs } => { return { admin_execute: args }; }
   updateOwnership = async(sender:string, args: UpdateOwnershipArgs, fee?: number | StdFee | "auto", memo?: string, funds?: Coin[]): Promise<ExecuteResult> =>  {
           if (!isSigningCosmWasmClient(this.client)) { throw this.mustBeSigningClient(); }
     return this.client.execute(sender, this.contractAddress, this.updateOwnershipMsg(args), fee || "auto", memo, funds);
