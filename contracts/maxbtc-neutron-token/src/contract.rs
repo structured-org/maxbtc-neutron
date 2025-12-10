@@ -139,7 +139,6 @@ pub(crate) fn execute_mint(
     recipient: String,
 ) -> Result<Response, ContractError> {
     cw_ownable::assert_owner(deps.storage, &info.sender)?;
-    let cfg = CONFIG.load(deps.storage)?;
 
     // Mint the maxBTC to the recipient
     let mint_msg = create_tokenfactory_mint_msg(&env.clone(), recipient.clone(), amount.clone())?;
@@ -150,8 +149,8 @@ pub(crate) fn execute_mint(
         .add_attribute("action", "mint")
         .add_attribute("sender", info.sender)
         .add_attribute("recipient", recipient)
-        .add_attribute("amount", amount.to_string())
-        .add_attribute("denom", cfg.denom))
+        .add_attribute("amount", amount.amount.to_string())
+        .add_attribute("denom", amount.denom))
 }
 
 pub(crate) fn execute_burn(
