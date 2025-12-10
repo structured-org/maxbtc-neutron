@@ -19,12 +19,6 @@ pub enum ContractError {
     #[error("Already Unlocked")]
     AlreadyUnlocked {},
 
-    #[error("No data available in the target contract")]
-    NoDataInContract {},
-
-    #[error("No asset found in the published data")]
-    NoAssetFound {},
-
     #[error("Insufficient asset amount to unlock")]
     InsufficientAssetAmount {},
 
