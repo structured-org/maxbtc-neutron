@@ -196,6 +196,22 @@ fn execute_tick_withdraw_pending(deps: DepsMut) -> Result<Response, ContractErro
 
             msgs.push(unlock_msg);
 
+            let maxbtc_denom = deps.querier.query_wasm_smart::<String>(
+                &cfg.token_contract,
+                &TokenQueryMsg::GetDenom { subdenom: None },
+            )?;
+
+            // Burn the maxBTC from user
+            let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: cfg.token_contract.to_string(),
+                msg: to_json_binary(&TokenExecuteMsg::Burn {})?,
+                funds: vec![Coin {
+                    denom: maxbtc_denom,
+                    amount: withdrawing_batch.maxbtc_burned,
+                }],
+            });
+            msgs.push(burn_msg);
+
             WITHDRAWING_BATCH.save(deps.storage, &Some(withdrawing_batch))?;
             FSM.go_to(deps.storage, ContractState::WithdrawNeutron)?;
         }
@@ -643,26 +659,15 @@ pub(crate) fn execute_withdraw(
     )?;
 
     // Input funds validation happens here
-    let burned_amount = cw_utils::must_pay(&info, &maxbtc_denom.clone())?;
-
-    // Burn the maxBTC from user
-    let burn_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-        contract_addr: cfg.token_contract.to_string(),
-        msg: to_json_binary(&TokenExecuteMsg::Burn {})?,
-        funds: vec![Coin {
-            denom: maxbtc_denom,
-            amount: burned_amount,
-        }],
-    });
-    msgs.push(burn_msg);
+    let amount_to_burn = cw_utils::must_pay(&info, &maxbtc_denom.clone())?;
 
     // Update the maxbtc_burned amount in the active batch
     let mut active_batch = ACTIVE_BATCH.load(deps.storage)?;
-    active_batch.maxbtc_burned += burned_amount;
+    active_batch.maxbtc_burned += amount_to_burn;
     ACTIVE_BATCH.save(deps.storage, &active_batch.clone())?;
 
     // Mint the redemption tokens (1:1 maxBTC burned)
-    let minted_redemption = burned_amount;
+    let minted_redemption = amount_to_burn;
 
     let redemption_subdenom = format!("redemption/batch/{}", active_batch.batch_id);
     let redemption_denom_full = deps.querier.query_wasm_smart::<String>(
@@ -712,7 +717,7 @@ pub(crate) fn execute_withdraw(
         .add_attribute("action", "withdraw")
         .add_attribute("sender", info.sender)
         .add_attribute("batch_id", active_batch.batch_id.to_string())
-        .add_attribute("withdraw_amount", burned_amount.to_string());
+        .add_attribute("withdraw_amount", amount_to_burn.to_string());
 
     Ok(resp)
 }
