@@ -717,7 +717,8 @@ describe('Core', () => {
           ?.amount || '0',
       );
 
-      expect(maxBtcSupply).toEqual(294019);
+      // Tokens are not burned immediately after withdraw - burn happens later in tick
+      expect(maxBtcSupply).toEqual(394019);
     });
 
     it('verify redemption token', async () => {
@@ -772,6 +773,16 @@ describe('Core', () => {
           collector_historical_balance: '0',
         },
       ]);
+
+      // First withdrawal is covered from deposits, burn does NOT happen in this tick
+      const maxBtcSupplyAfterTick = Number(
+        (
+          await context.neutronClient.CosmosBankV1Beta1.query.queryTotalSupply()
+        ).data.supply.find((supply) => supply.denom.includes('maxbtc'))
+          ?.amount || '0',
+      );
+      // Supply remains unchanged as burn does not happen for withdrawals covered from deposits
+      expect(maxBtcSupplyAfterTick).toEqual(394019);
     });
     it('try to tick partially withdraw and go to ticks cycle', async () => {
       const {
@@ -895,6 +906,17 @@ describe('Core', () => {
 
       let coreState = await coreContractClient.queryContractState();
       expect(coreState).toEqual('withdraw_neutron');
+
+      // After this tick (withdraw_pending -> withdraw_neutron), second withdrawal (120000) should be burned
+      const maxBtcSupplyAfterBurn = Number(
+        (
+          await context.neutronClient.CosmosBankV1Beta1.query.queryTotalSupply()
+        ).data.supply.find((supply) => supply.denom.includes('maxbtc'))
+          ?.amount || '0',
+      );
+      // Original supply was 394019, first withdrawal (100000) was NOT burned (covered from deposits)
+      // Only second withdrawal (120000) is burned here: 394019 - 120000 = 274019
+      expect(maxBtcSupplyAfterBurn).toEqual(274019);
 
       const withdrawingBatch = await coreContractClient.queryWithdrawingBatch();
       expect(withdrawingBatch).toEqual({
