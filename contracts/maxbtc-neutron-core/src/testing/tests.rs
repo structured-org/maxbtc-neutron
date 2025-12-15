@@ -87,14 +87,6 @@ fn test_withdraw_success() {
         res.messages,
         vec![
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.token_contract.to_string(),
-            msg: to_json_binary(&TokenExecuteMsg::Burn {}).unwrap(),
-            funds: vec![Coin {
-                denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string(),
-                amount: withdraw_amount,
-                }],
-            })),
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: cfg.token_contract.to_string(),
                 msg: to_json_binary(&TokenExecuteMsg::CreateRedemptionToken {
                     redemption_subdenom: "redemption/batch/1".to_string(),
@@ -179,14 +171,6 @@ fn test_withdraw_no_denom_creation() {
     assert_eq!(
         res.messages,
         vec![
-            SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: cfg.token_contract.to_string(),
-            msg: to_json_binary(&TokenExecuteMsg::Burn {}).unwrap(),
-            funds: vec![Coin {
-                denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string(),
-                amount: withdraw_amount,
-                }],
-            })),
             SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                 contract_addr: cfg.token_contract.to_string(),
                 msg: to_json_binary(&TokenExecuteMsg::Mint {
@@ -697,6 +681,14 @@ fn test_withdraw_pending_tick_collect_ceffu_amount() {
                         .to_string(),
                 msg: to_json_binary(&WaitosaurHolderExecuteMsg::Unlock {}).unwrap(),
                 funds: vec![],
+            }))
+            .add_message(CosmosMsg::Wasm(WasmMsg::Execute {
+                contract_addr: "cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw".to_string(),
+                msg: to_json_binary(&TokenExecuteMsg::Burn {}).unwrap(),
+                funds: vec![Coin {
+                    denom: "factory/cosmwasm1sc3nrdnvngw79j0rkwm5zyaa46r6546h2ypz8skfnvnhpanmg2fsryrwsw/maxbtc".to_string(),
+                    amount: Uint128::new(200_000u128),
+                }],
             }))
             .add_attribute("action", "tick")
             .add_attribute("stage", "withdraw_pending")
