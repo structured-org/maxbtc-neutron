@@ -1228,9 +1228,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "base64ct"
-version = "1.8.0"
+version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
+checksum = "bb97d56060ee67d285efb8001fec9d2a4c710c32efd2e14b5cbb5ba71930fc2d"
 
 [[package]]
 name = "bech32"
@@ -4069,23 +4069,18 @@ dependencies = [
 
 [[package]]
 name = "neutron-sdk"
-version = "0.10.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fb513aae0c82b3185228e96664d8312e79c3aa763f6ebdc70cf4b8d513d533"
+checksum = "583150155911cb93ef38108259bcfdf19b85b75ef9e98dcd88927fcf24a809b3"
 dependencies = [
  "bech32 0.9.1",
  "cosmos-sdk-proto 0.20.0",
  "cosmwasm-schema 1.5.11",
  "cosmwasm-std 1.5.11",
- "prost 0.12.6",
- "prost-types",
  "protobuf",
  "schemars",
  "serde",
  "serde-json-wasm 1.0.1",
- "serde_json",
- "speedate",
- "tendermint-proto 0.34.1",
  "thiserror 1.0.69",
 ]
 
