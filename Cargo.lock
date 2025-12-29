@@ -3887,9 +3887,7 @@ name = "maxbtc-migrate-execute"
 version = "0.1.0"
 dependencies = [
  "cosmwasm-schema 2.3.0",
- "cosmwasm-std 2.3.0",
- "cw-storage-plus",
- "cw2",
+ "cosmwasm-std 1.5.11",
  "neutron-sdk",
  "schemars",
  "serde",
@@ -4017,8 +4015,7 @@ dependencies = [
 [[package]]
 name = "neutron-sdk"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26fb513aae0c82b3185228e96664d8312e79c3aa763f6ebdc70cf4b8d513d533"
+source = "git+https://github.com/neutron-org/neutron-sdk?branch=feat%2Fproposal-votes#2dfca1734dfc4cfba478b3067417648733d66cd9"
 dependencies = [
  "bech32 0.9.1",
  "cosmos-sdk-proto 0.20.0",

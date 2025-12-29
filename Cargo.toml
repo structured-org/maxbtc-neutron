@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-  "contracts/*",
-  "forwarder_executor"
-]
+members = ["contracts/*", "forwarder_executor"]
 
 [workspace.dependencies]
 cosmwasm-schema = "2.2.0"

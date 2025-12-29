@@ -1,44 +1,42 @@
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_json_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Response, StdError,
+use crate::{
+    error::ContractResult,
+    msg::{ExecuteMsg, MigrateMsg, QueryMsg},
 };
-use neutron_sdk::bindings::msg::NeutronMsg;
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response};
+use neutron_sdk::bindings::{msg::NeutronMsg, query::NeutronQuery};
 
-use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::msg::InstantiateMsg;
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
 pub fn instantiate(
     _deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
     _msg: InstantiateMsg,
-) -> Result<Response, StdError> {
-    Ok(Response::new())
+) -> ContractResult<Response<NeutronMsg>> {
+    unimplemented!()
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
+pub fn query(_deps: Deps<NeutronQuery>, _env: Env, _msg: QueryMsg) -> ContractResult<Binary> {
+    unimplemented!();
+}
+
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
 pub fn execute(
-    _deps: DepsMut,
+    _deps: DepsMut<NeutronQuery>,
     _env: Env,
     _info: MessageInfo,
     _msg: ExecuteMsg,
-) -> Result<Response, StdError> {
-    Ok(Response::new())
+) -> ContractResult<Response<NeutronMsg>> {
+    unimplemented!();
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, StdError> {
-    Ok(to_json_binary(&())?)
-}
-
-#[cfg_attr(not(feature = "library"), entry_point)]
+#[cfg_attr(not(feature = "library"), cosmwasm_std::entry_point)]
 pub fn migrate(
-    _deps: DepsMut,
+    _deps: DepsMut<NeutronQuery>,
     _env: Env,
-    _info: MessageInfo,
     msg: MigrateMsg,
-) -> Result<Response<NeutronMsg>, StdError> {
-    let res = Response::new();
-    Ok(res.add_messages(msg.msgs.into_iter().map(CosmosMsg::Custom)))
+) -> ContractResult<Response<NeutronMsg>> {
+    Ok(Response::new().add_messages(msg.msgs))
 }
