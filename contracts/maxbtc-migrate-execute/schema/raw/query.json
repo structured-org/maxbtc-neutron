@@ -5,11 +5,32 @@
     {
       "type": "object",
       "required": [
-        "get_twaer"
+        "allow_list"
       ],
       "properties": {
-        "get_twaer": {
+        "allow_list": {
           "type": "object",
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "is_address_allowed"
+      ],
+      "properties": {
+        "is_address_allowed": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "type": "string"
+            }
+          },
           "additionalProperties": false
         }
       },
