@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["contracts/*"]
+members = ["contracts/maxbtc-migrate-execute"]
 
 [workspace.dependencies]
 cosmwasm-schema = "2.2.0"
