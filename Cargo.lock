@@ -3942,6 +3942,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "maxbtc-neutron-apy-calculator"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema 2.2.1",
+ "cosmwasm-std 2.2.1",
+ "cw-ownable",
+ "cw-storage-plus",
+ "cw-utils",
+ "cw2",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "maxbtc-neutron-core"
 version = "0.1.0"
 dependencies = [

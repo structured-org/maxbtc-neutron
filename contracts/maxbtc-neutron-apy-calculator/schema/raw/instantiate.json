@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InstantiateMsg",
+  "type": "object",
+  "required": [
+    "core_contract",
+    "owner",
+    "period_timeout",
+    "periods_to_keep"
+  ],
+  "properties": {
+    "core_contract": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "period_timeout": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "periods_to_keep": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  },
+  "additionalProperties": false
+}

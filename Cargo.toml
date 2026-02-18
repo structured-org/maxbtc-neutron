@@ -20,6 +20,8 @@ schemars = "0.8.16"
 serde = { version = "1.0.219", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.12" }
 neutron-std = { git = "https://github.com/neutron-org/neutron-std", branch = "feat/respect-gogoproto-nullable" }
+cw-ownable = { version = "2.1.0", default-features = false }
+cw-utils = { version = "2.0.0", default-features = false }
 
 [profile.release]
 opt-level = 3
